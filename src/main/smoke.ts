@@ -33,7 +33,10 @@ import {
   GROWTH_STAGE_LABELS,
   GROWTH_STAGE_PROGRESS,
   deriveGrowthStage,
-  growthLook
+  describeSize,
+  growthLook,
+  readNumber,
+  sizeScaleFor
 } from '../core/growth'
 import type { GrowthStage } from '../core/growth'
 import {
@@ -1399,7 +1402,17 @@ export function runSmoke(outFile: string): number {
           !deriveGrowthStage({ ...base, phase: 'blooming' }).reason.includes('blooming'),
         deriveGrowthStage({ ...base, phase: 'blooming' }).reason
       )
-      check('缓苗期画成幼苗（根没缓过来、叶面积小）', deriveGrowthStage({ ...base, phase: 'recovering' }).stage === 'sprout')
+      // 缓苗期有自己的阶段。第一版把它映射成「幼苗」，结果一株成熟的朱顶红
+      // 只要标了缓苗期就被画成两像素的嫩芽 —— 缓苗是临时状态，不是「这株还小」
+      check(
+        '缓苗期不是幼苗（不能画成小苗）',
+        deriveGrowthStage({ ...base, phase: 'recovering' }).stage === 'recovering',
+        deriveGrowthStage({ ...base, phase: 'recovering' }).stage
+      )
+      check('缓苗中保持成株高度', growthLook('recovering').stem >= growthLook('growing').stem)
+      check('缓苗中比幼苗高得多', growthLook('recovering').stem > growthLook('sprout').stem + 2)
+      check('缓苗中是叶少而不是掉光', growthLook('recovering').leaves <= 1 && !growthLook('recovering').bare)
+      check('缓苗中比「有状况」气色好', growthLook('recovering').wither < growthLook('sick').wither)
 
       check('当月开花 → 开花', deriveGrowthStage({ ...base, bloomMonths: [5, 6, 7] }).stage === 'blooming')
       check('下月开花 → 现蕾', deriveGrowthStage({ ...base, bloomMonths: [7] }).stage === 'budding')
@@ -1420,7 +1433,7 @@ export function runSmoke(outFile: string): number {
       check('每个阶段都有中文名', Object.values(GROWTH_STAGE_LABELS).every((s) => s.length > 0))
 
       // 渲染参数：阶段之间必须真的有区别，否则花园里看不出变化
-      const stages: GrowthStage[] = ['seed', 'sprout', 'growing', 'budding', 'blooming', 'dormant', 'sick', 'withered']
+      const stages: GrowthStage[] = ['seed', 'sprout', 'growing', 'budding', 'blooming', 'dormant', 'sick', 'recovering', 'withered']
       check('每个阶段都能给出渲染参数', stages.every((s) => growthLook(s) !== undefined))
       check('开花阶段有花，生长期没有', growthLook('blooming').flower === 'open' && growthLook('growing').flower === 'none')
       check('现蕾阶段是花苞不是开花', growthLook('budding').flower === 'bud')
@@ -1429,6 +1442,31 @@ export function runSmoke(outFile: string): number {
       check('生长阶段比幼苗高', growthLook('growing').stem > growthLook('sprout').stem)
       check('开花阶段最高', growthLook('blooming').stem >= growthLook('growing').stem)
       check('进度值在 0~1 之间', stages.every((s) => GROWTH_STAGE_PROGRESS[s] >= 0 && GROWTH_STAGE_PROGRESS[s] <= 1))
+
+      // ---- 尺寸：花园里得看出大小差别 ----
+      //
+      // 第一版所有植物画成一样大：量了一下九种株型在开花阶段
+      // 纵向只差 9~15 格，一株两米的乔木和一个十厘米的多肉看起来差不多，
+      // 而物种模板里明明有「成株高度」这个字段。
+      check('小于下限按下限算', sizeScaleFor(5) === sizeScaleFor(10))
+      check('大于上限按上限算', sizeScaleFor(1000) === sizeScaleFor(500))
+      check('越大的植物比例越大', sizeScaleFor(20) < sizeScaleFor(120) && sizeScaleFor(120) < sizeScaleFor(400))
+      check('比例落在可用区间', [5, 30, 100, 300, 1000].every((cm) => sizeScaleFor(cm) >= 0.4 && sizeScaleFor(cm) <= 1.05))
+      check(
+        '12cm 的多肉明显小于 600cm 的乔木',
+        sizeScaleFor(12) < sizeScaleFor(600) - 0.3,
+        `${sizeScaleFor(12).toFixed(2)} vs ${sizeScaleFor(600).toFixed(2)}`
+      )
+      check('没填高度取中等值', sizeScaleFor(null) > 0.6 && sizeScaleFor(null) < 0.9)
+      check('高度为 0 或负数按没填处理', sizeScaleFor(0) === sizeScaleFor(null) && sizeScaleFor(-5) === sizeScaleFor(null))
+      check('字符串数字也认（导入的数据常见）', sizeScaleFor(readNumber('150')) === sizeScaleFor(150))
+      check('读不出来的值按没填处理', sizeScaleFor('大概一米' as unknown as number) === sizeScaleFor(null))
+      check('readNumber 认数字', readNumber(42) === 42 && readNumber('42.5') === 42.5)
+      check('readNumber 认不出返回 null', readNumber('') === null && readNumber(null) === null && readNumber({}) === null)
+      check('尺寸说明：厘米', describeSize(35) === '成株 35 cm')
+      check('尺寸说明：米', describeSize(200) === '成株 2 m')
+      check('尺寸说明：非整数米', describeSize(150) === '成株 1.5 m')
+      check('尺寸说明：未知', describeSize(null) === '成株高度未知')
     }
 
     // --- 像素精灵 ---
@@ -1446,7 +1484,7 @@ export function runSmoke(outFile: string): number {
         check('颜色混合：中点是灰', Math.abs(v - 128) <= 1, mid)
       }
 
-      const stages: GrowthStage[] = ['seed', 'sprout', 'growing', 'budding', 'blooming', 'dormant', 'sick', 'withered']
+      const stages: GrowthStage[] = ['seed', 'sprout', 'growing', 'budding', 'blooming', 'dormant', 'sick', 'recovering', 'withered']
       let allOk = true
       let badCase = ''
       const pixelCounts: Record<string, number> = {}

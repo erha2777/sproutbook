@@ -17,8 +17,11 @@ import {
   GROWTH_SOURCE_LABELS,
   GROWTH_STAGE_LABELS,
   deriveGrowthStage,
+  describeSize,
   growthLook,
-  readMonthSet
+  readMonthSet,
+  readNumber,
+  sizeScaleFor
 } from '@core/growth'
 import { CARE_ACTION_ICONS, CARE_PHASE_ICONS, CARE_PHASE_LABELS, dueDescription, urgencyOf } from '@core/care'
 import { flowerColorForSpecies } from '@core/sprite'
@@ -28,6 +31,11 @@ import { PlantSprite } from '../components/PlantSprite'
 import { Badge, Button, EmptyState, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 import { PlantEditorModal } from './PlantEditor'
 
+
+/** 地块里精灵的最大边长（比例 1.0 时）。比格子略小，留出边距。 */
+const PLOT_SPRITE_MAX = 78
+/** 详情面板里精灵的最大边长。 */
+const DETAIL_SPRITE_MAX = 108
 
 export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactNode {
   const toast = useToast()
@@ -113,7 +121,9 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
         bloomMonths: readMonthSet(attrs.bloom_months),
         dormancyMonths: readMonthSet(attrs.dormancy_months),
         // 物种填了花色就用真的，没填退回按名字散列
-        flowerColor: flowerColorForSpecies(attrs as Record<string, unknown>, plant.species?.commonName)
+        flowerColor: flowerColorForSpecies(attrs as Record<string, unknown>, plant.species?.commonName),
+        // 成株高度决定花园里的显示比例 —— 乔木和多肉不该一样大
+        matureHeight: readNumber(attrs.mature_height)
       }
     },
     [speciesById]
@@ -246,12 +256,15 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                     onClick={() => setSelected(selected === plant.id ? null : plant.id)}
                     title={`${plant.nickname} · ${GROWTH_STAGE_LABELS[result.stage]}`}
                   >
-                    <PlantSprite
-                      habit={g.habit}
-                      look={growthLook(result.stage)}
-                      flowerColor={g.flowerColor}
-                      size={58}
-                    />
+                    {/* 高度固定、底部对齐：格子整齐，尺寸又能读出大小差别 */}
+                    <div className="plot-stage-area">
+                      <PlantSprite
+                        habit={g.habit}
+                        look={growthLook(result.stage)}
+                        flowerColor={g.flowerColor}
+                        size={Math.round(PLOT_SPRITE_MAX * sizeScaleFor(g.matureHeight))}
+                      />
+                    </div>
                     <div className="plot-name ellipsis">{plant.nickname}</div>
                     <div className="plot-stage">{GROWTH_STAGE_LABELS[result.stage]}</div>
                     {task ? (
@@ -301,12 +314,15 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                     {selectedPlant.nickname}
                   </SectionTitle>
                   <div className="row" style={{ alignItems: 'flex-start' }}>
-                    <PlantSprite
-                      habit={g.habit}
-                      look={growthLook(result.stage)}
-                      flowerColor={g.flowerColor}
-                      size={96}
-                    />
+                    <div className="detail-sprite-area">
+                      <PlantSprite
+                        habit={g.habit}
+                        look={growthLook(result.stage)}
+                        flowerColor={g.flowerColor}
+                        size={Math.round(DETAIL_SPRITE_MAX * sizeScaleFor(g.matureHeight))}
+                        title={`${selectedPlant.nickname} · ${describeSize(g.matureHeight)}`}
+                      />
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="row tight" style={{ flexWrap: 'wrap' }}>
                         <Badge tone="ok">🌱 {GROWTH_STAGE_LABELS[result.stage]}</Badge>
@@ -317,6 +333,8 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                       <div className="small muted" style={{ marginTop: 4 }}>
                         {selectedPlant.species?.commonName ?? '未关联物种'}
                         {g.habit ? ` · ${g.habit}` : ''}
+                        {/* 把尺寸的依据也写出来，否则「为什么这株画得大」全靠猜 */}
+                        {` · ${describeSize(g.matureHeight)}`}
                         {selectedPlant.envName ? ` · ${selectedPlant.envName}` : ''}
                         {` · ${PLANT_STATUS_ICONS[selectedPlant.status]} ${PLANT_STATUS_LABELS[selectedPlant.status]}`}
                       </div>

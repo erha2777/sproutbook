@@ -21,12 +21,13 @@ import { CARE_PHASE_LABELS } from './care'
 
 export type GrowthStage =
   | 'seed' // 播种 / 刚埋下
-  | 'sprout' // 幼苗 / 缓苗
+  | 'sprout' // 幼苗
   | 'growing' // 生长
   | 'budding' // 现蕾
   | 'blooming' // 开花
   | 'dormant' // 休眠
   | 'sick' // 有状况
+  | 'recovering' // 缓苗中
   | 'withered' // 枯死
 
 export const GROWTH_STAGE_LABELS: Record<GrowthStage, string> = {
@@ -37,6 +38,7 @@ export const GROWTH_STAGE_LABELS: Record<GrowthStage, string> = {
   blooming: '开花',
   dormant: '休眠',
   sick: '有状况',
+  recovering: '缓苗中',
   withered: '枯死'
 }
 
@@ -91,14 +93,20 @@ function daysSince(iso: string | null | undefined, today: string): number | null
   return Number.isFinite(diff) ? Math.round(diff) : null
 }
 
-/** 物候阶段 → 生长阶段的直接映射。人标了就以人的为准。 */
+/**
+ * 物候阶段 → 生长阶段的直接映射。人标了就以人的为准。
+ *
+ * 注意「缓苗期」有自己的阶段，**不是幼苗**。
+ * 第一版把它映射成 sprout，结果一株成熟的朱顶红只要标了缓苗期，
+ * 在花园里就被画成两像素的嫩芽 —— 但它球体还是那么大、根系还在，
+ * 只是掉了叶子。缓苗是**临时状态**，不是「这株还小」。
+ */
 const PHASE_TO_STAGE: Record<CarePhase, GrowthStage> = {
   growing: 'growing',
   budding: 'budding',
   blooming: 'blooming',
   dormant: 'dormant',
-  // 缓苗期的植株状态接近幼苗：根没缓过来、叶面积小，画小一点才符合实际
-  recovering: 'sprout'
+  recovering: 'recovering'
 }
 
 export interface GrowthInput {
@@ -208,6 +216,12 @@ export function growthLook(stage: GrowthStage): GrowthLook {
       return { stem: 4, leaves: 0, flower: 'none', wither: 0.25, bare: true }
     case 'sick':
       return { stem: 5, leaves: 2, flower: 'none', wither: 0.45, bare: false }
+    /*
+     * 缓苗中：**保持成株高度**，只是叶子稀少、颜色偏淡。
+     * 它不该被画小 —— 缓苗说明这株受了伤，不说明它还小。
+     */
+    case 'recovering':
+      return { stem: 7, leaves: 1, flower: 'none', wither: 0.15, bare: false }
     case 'withered':
       return { stem: 3, leaves: 0, flower: 'none', wither: 1, bare: true }
   }
@@ -222,5 +236,58 @@ export const GROWTH_STAGE_PROGRESS: Record<GrowthStage, number> = {
   blooming: 1,
   dormant: 0.3,
   sick: 0.35,
+  // 缓苗是「受伤后恢复」，不是没长大 —— 进度按成株算
+  recovering: 0.6,
   withered: 0
+}
+
+// ---------------------------------------------------------------------------
+// 尺寸
+// ---------------------------------------------------------------------------
+
+/** 从物种属性里读一个数字。属性值可能是字符串（导入/AI 补全之后很常见）。 */
+export function readNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'string') {
+    const text = value.trim()
+    // 空串必须先挡掉：Number('') 是 0，会被当成「高度 0」而不是「没填」
+    if (text === '') return null
+    const n = Number(text)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
+/**
+ * 物种大小 → 花园里的显示比例。
+ *
+ * 起因：第一版所有植物都画成一样大。量了一下，九种株型在开花阶段
+ * 纵向只差 9~15 格 —— 一株两米的乔木和一个十厘米的多肉看起来差不多，
+ * 而物种模板里明明有「成株高度」这个字段，花园根本没读。
+ * 真实高度差着几十倍却画成一样大，这个视图就失去意义了。
+ *
+ * 用**对数刻度**：10cm 到 20cm 的视觉差别，比 200cm 到 300cm 明显得多。
+ * 线性刻度会让小草全挤在底部、大树全顶格，中间一片空白。
+ */
+export function sizeScaleFor(matureHeightCm: number | null | undefined): number {
+  const MIN_CM = 10
+  const MAX_CM = 500
+  const MIN_SCALE = 0.5
+  const MAX_SCALE = 1
+
+  const cm = readNumber(matureHeightCm)
+  // 没填就取中等：既不会让整片花园一个尺寸，也不会因为缺数据就画得特别小
+  if (cm === null || cm <= 0) return 0.78
+
+  const clamped = Math.min(MAX_CM, Math.max(MIN_CM, cm))
+  const t = Math.log(clamped / MIN_CM) / Math.log(MAX_CM / MIN_CM)
+  return MIN_SCALE + (MAX_SCALE - MIN_SCALE) * t
+}
+
+/** 给界面看的一句话说明。 */
+export function describeSize(cm: number | null | undefined): string {
+  const v = readNumber(cm)
+  if (v === null || v <= 0) return '成株高度未知'
+  const text = v >= 100 ? `${(v / 100).toFixed(v % 100 === 0 ? 0 : 1)} m` : `${Math.round(v)} cm`
+  return `成株 ${text}`
 }

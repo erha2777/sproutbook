@@ -1168,6 +1168,19 @@ img {
   box-shadow: inset 0 0 0 2px var(--leaf-dark);
   background: linear-gradient(#e8f8c8, #bce08a);
 }
+/*
+ * 精灵的舞台：高度固定、底部对齐。
+ *
+ * 高度固定是为了格子整齐；底部对齐是因为植物长在土上，
+ * 大小应该往上长而不是居中缩放。两者合起来，
+ * 「乔木比多肉大」才读得出来 —— 否则每格被内容撑成不同高度，一屏就乱了。
+ */
+.plot-stage-area {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 82px;
+}
 .plot-name {
   max-width: 100%;
   font-size: 12px;
@@ -1196,6 +1209,15 @@ img {
 }
 .plot-task.due {
   background: #b8860b;
+}
+
+/* 详情面板里的精灵也一样：底部对齐，高度随物种大小变 */
+.detail-sprite-area {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 116px;
+  min-height: 112px;
 }
 
 /* ---------- 表格 ---------- */
