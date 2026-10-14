@@ -190,12 +190,6 @@ export function addImage(
   return mapImage(row)
 }
 
-/** 按 id 取一张图。识图要把图片读出来发给模型，所以需要这个。 */
-export function getImage(db: Db, id: number): ImageRecord | null {
-  const row = db.get<ImageRow>('SELECT * FROM images WHERE id = ?', id)
-  return row ? mapImage(row) : null
-}
-
 export function deleteImage(db: Db, id: number): ImageRecord | null {
   const row = db.get<ImageRow>('SELECT * FROM images WHERE id = ?', id)
   if (!row) return null
@@ -250,16 +244,4 @@ export function setSetting(db: Db, key: string, value: unknown): void {
     key,
     JSON.stringify(value)
   )
-}
-
-export function allSettings(db: Db): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  for (const row of db.all<{ key: string; value: string }>('SELECT key, value FROM settings')) {
-    try {
-      out[row.key] = JSON.parse(row.value)
-    } catch {
-      out[row.key] = row.value
-    }
-  }
-  return out
 }

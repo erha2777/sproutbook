@@ -39,17 +39,14 @@ import {
 } from '../../core/weather'
 import type { DailyTemp, WeatherRisk, WeatherRiskInput } from '../../core/weather'
 
-const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search'
 
 /** 强制刷新（用户点「重新获取」）的最小间隔。防止连点烧掉免费额度。 */
 const FORCE_COOLDOWN_MS = 60 * 1000
 
 /** 缓存多久。预报一天更新几次就够，没必要每次开页面都请求。 */
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000
-const TIMEOUT_MS = 8000
 
 const CACHE_KEY = 'weather.forecastCache'
-const GEOCODE_KEY = 'weather.geocodeCache'
 
 export interface GeoPoint {
   latitude: number
@@ -77,66 +74,6 @@ export interface ForecastResult {
 interface CacheEntry extends ForecastResult {
   key: string
   at: number
-}
-
-/** 带超时的 fetch。超时和网络错误都当成「没有」处理，不往上抛。 */
-async function fetchJson<T>(url: string): Promise<T | null> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' }
-    })
-    if (!response.ok) return null
-    return (await response.json()) as T
-  } catch {
-    // 断网、DNS 失败、超时、证书问题 —— 全部安静地当作没有数据
-    return null
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-/**
- * 城市名 → 经纬度。
- *
- * 解析结果会缓存进设置表：城市不会变，没必要每次开页面都查一遍。
- * 用户手动填了经纬度时**根本不会走到这里**。
- */
-export async function geocode(db: Db, city: string, province?: string | null): Promise<GeoPoint | null> {
-  const name = city.trim()
-  if (!name) return null
-
-  const cache = getSetting<Record<string, GeoPoint>>(db, GEOCODE_KEY, {})
-  const cacheKey = `${province ?? ''}|${name}`
-  const hit = cache[cacheKey]
-  if (hit) return hit
-
-  const url = `${GEOCODE_URL}?name=${encodeURIComponent(name)}&count=5&language=zh&format=json`
-  const data = await fetchJson<{
-    results?: Array<{ latitude: number; longitude: number; name: string; admin1?: string; country?: string }>
-  }>(url)
-  if (!data?.results?.length) return null
-
-  /*
-   * 有省份就优先选省份对得上的那个。
-   * 「岳阳」这类地名在国内有重名，光按第一个结果取会指到别的省去 ——
-   * 而用户是填了省份的，那就该用上。
-   */
-  const wantProvince = (province ?? '').trim()
-  const pick =
-    (wantProvince ? data.results.find((r) => (r.admin1 ?? '').includes(wantProvince) || wantProvince.includes(r.admin1 ?? '')) : null) ??
-    data.results[0]
-
-  const point: GeoPoint = {
-    latitude: pick.latitude,
-    longitude: pick.longitude,
-    label: [pick.country, pick.admin1, pick.name].filter(Boolean).join(' · ')
-  }
-  cache[cacheKey] = point
-  setSetting(db, GEOCODE_KEY, cache)
-  return point
 }
 
 /**

@@ -28,7 +28,6 @@ export const QWEATHER_HOST_KEY = 'weather.qweatherHost'
 export const GEOCODE_CACHE_KEY = 'weather.geocodeCache'
 /** 当天向数据源发了几次请求。和风免费额度有限，这个数字要给用户看见 */
 export const USAGE_KEY = 'weather.usage'
-export const QWEATHER_KEY_KEY = 'weather.provider'
 export const SELECTED_PROVIDER_KEY = 'weather.providerId'
 
 const TIMEOUT_MS = 9000
