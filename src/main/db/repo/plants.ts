@@ -178,9 +178,27 @@ export function savePlant(db: Db, input: SavePlantInput): SavePlantResult {
       return { plant: id ? getPlant(db, id) : null, errors: { nickname: '昵称 是必填项' } }
     }
 
-    const speciesId = input.speciesId !== undefined ? input.speciesId : (existingRow?.species_id ?? null)
-    const envId = input.envId !== undefined ? input.envId : (existingRow?.env_id ?? null)
-    const status = input.status ?? ((existingRow?.status as PlantStatus | undefined) ?? 'growing')
+    /*
+     * 取值优先级：显式参数 → 模板字段写进列的值 → 数据库里的原值。
+     *
+     * 「所属物种 / 养护位置 / 状态」现在是模板字段（relation / select），
+     * 值经 splitAttributes 落到 columns 里。如果这里只看 input.*，
+     * 用户在表单里改这三项就会被无声忽略 —— 所以必须把 col 也纳入。
+     * 显式参数保留是为了向后兼容（例如从物种库「添加一株」时预置物种）。
+     */
+    const fromCol = (key: string): unknown => (key in col ? col[key] : undefined)
+
+    const speciesId =
+      input.speciesId !== undefined
+        ? input.speciesId
+        : ((fromCol('species_id') as number | null | undefined) ?? existingRow?.species_id ?? null)
+    const envId =
+      input.envId !== undefined
+        ? input.envId
+        : ((fromCol('env_id') as number | null | undefined) ?? existingRow?.env_id ?? null)
+    const status =
+      input.status ??
+      ((fromCol('status') as PlantStatus | undefined) ?? (existingRow?.status as PlantStatus | undefined) ?? 'growing')
     const acquiredAt = (col.acquired_at as string | undefined) ?? existingRow?.acquired_at ?? null
     const potSize = (col.pot_size as string | undefined) ?? existingRow?.pot_size ?? null
     const notes = input.notes !== undefined ? input.notes : (existingRow?.notes ?? null)

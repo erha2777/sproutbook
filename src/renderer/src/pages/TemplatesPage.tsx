@@ -11,7 +11,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { FieldDefinition, FieldOwner, FieldType } from '@core/types'
+import type { FieldDefinition, FieldOwner, FieldType, RelationTarget } from '@core/types'
+import { RELATION_TARGETS } from '@core/types'
 import { FIELD_TYPES } from '@core/fieldTypes'
 import type { FieldUsageSummary } from '@shared/api'
 import { Badge, Button, EmptyState, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextArea, TextInput, cx, useToast } from '../components/ui'
@@ -245,9 +246,11 @@ function FieldEditorModal({
   const [helpText, setHelpText] = useState(field?.helpText ?? '')
   const [isRequired, setIsRequired] = useState(field?.isRequired ?? false)
   const [isSafety, setIsSafety] = useState(field?.isSafety ?? false)
+  const [relationTarget, setRelationTargetState] = useState<RelationTarget>(field?.relationTarget ?? 'environments')
   const [saving, setSaving] = useState(false)
 
   const needsOptions = type === 'select' || type === 'multiselect'
+  const needsRelation = type === 'relation'
   const groups = useMemo(() => {
     const set = new Set(existing.map((f) => f.groupName))
     set.add('基础')
@@ -282,7 +285,8 @@ function FieldEditorModal({
           options,
           helpText: helpText.trim() || null,
           isRequired,
-          isSafety
+          isSafety,
+          relationTarget: needsRelation ? relationTarget : null
         })
         toast.push('字段已更新', 'success')
       } else {
@@ -296,7 +300,8 @@ function FieldEditorModal({
           options,
           helpText: helpText.trim() || null,
           isRequired,
-          isSafety
+          isSafety,
+          relationTarget: needsRelation ? relationTarget : null
         })
         toast.push('字段已创建', 'success')
       }
@@ -376,6 +381,16 @@ function FieldEditorModal({
           {needsOptions ? (
             <Field label="可选项" wide help="每行一个选项。">
               <TextArea value={optionsText} onChange={setOptionsText} rows={5} placeholder={'无毒\n微毒\n有毒\n剧毒'} />
+            </Field>
+          ) : null}
+
+          {needsRelation ? (
+            <Field label="关联到" wide help="字段值会存对方记录的 ID。例如「养护位置」关联到位置档案。">
+              <SelectInput
+                value={relationTarget}
+                onChange={(v) => setRelationTargetState(v as RelationTarget)}
+                options={RELATION_TARGETS.map((t) => ({ value: t.value, label: t.label }))}
+              />
             </Field>
           ) : null}
         </div>

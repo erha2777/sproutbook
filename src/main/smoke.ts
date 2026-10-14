@@ -14,9 +14,9 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Db } from './db/connection'
-import { LATEST_VERSION } from './db/schema'
+import { LATEST_VERSION, MIGRATIONS } from './db/schema'
 import { currentVersion, migrate, rebuildAttrIndex } from './db/migrate'
-import { seedAll } from './db/seed'
+import { seedAll, seedFieldDefinitions } from './db/seed'
 import { backupDatabase } from './db/backup'
 import { loadFieldDefinitions } from './db/repo/common'
 import { createField, deleteField, fieldUsage, setFieldArchived } from './db/repo/fields'
@@ -290,6 +290,90 @@ export function runSmoke(outFile: string): number {
     const backupPath = backupDatabase(db, dbFile, backupDir, 5, 'smoke')
     check('备份文件已生成', Boolean(backupPath) && existsSync(backupPath as string))
     check('备份目录可读', readdirSync(backupDir).length >= 1)
+
+    // --- 老版本升级路径（每个已有用户都要走这一步，必须单独验证）---
+    //
+    // 前面的检查都是「空库 → 最新版」。这条走的是另一条路：
+    // 手工造一个只应用了 v1 的库（约等于老用户机器上的库），
+    // 再跑完整迁移，确认结构补上了、数据还在。
+    {
+      const oldFile = join(workDir, 'legacy.db')
+      const oldDb = new Db(oldFile)
+      oldDb.exec(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          version INTEGER PRIMARY KEY, name TEXT NOT NULL,
+          applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `)
+      oldDb.exec(MIGRATIONS[0].sql)
+      oldDb.run('INSERT INTO schema_migrations (version, name) VALUES (?, ?)', MIGRATIONS[0].version, MIGRATIONS[0].name)
+
+      // v1 时代的模板里没有 relation_target 列，所以只能绕开 insertFieldDefinition 手写
+      oldDb.run(
+        `INSERT INTO field_definitions (owner_kind, key, label, group_name, type, is_system, is_required, column_name, sort_order)
+         VALUES ('plant','nickname','昵称','基础','text',1,1,'nickname',0),
+                ('plant','pot_size','盆径','基础','text',0,0,NULL,1)`
+      )
+      oldDb.run(
+        `INSERT INTO species (common_name, family, attributes_json) VALUES ('老数据月季','蔷薇科','{"pot_size":"20cm"}')`
+      )
+      const legacySpeciesId = Number(oldDb.scalar<number>('SELECT id FROM species LIMIT 1'))
+      oldDb.run(
+        `INSERT INTO plants (species_id, nickname, env_id, status, attributes_json)
+         VALUES (?, '老植株', NULL, 'dormant', '{}')`,
+        legacySpeciesId
+      )
+
+      const legacyReport = migrate(oldDb)
+      check(
+        '可从 v1 数据库升级到最新版本',
+        legacyReport.ok && legacyReport.to === LATEST_VERSION,
+        legacyReport.error ?? `to=${legacyReport.to}`
+      )
+      check('升级后新增了 relation_target 列', oldDb.get('SELECT relation_target FROM field_definitions LIMIT 1') !== undefined)
+      check(
+        '升级后老植株数据完好',
+        oldDb.get<{ nickname: string; status: string }>('SELECT nickname, status FROM plants LIMIT 1')?.nickname === '老植株'
+      )
+      check(
+        '升级后老物种数据完好',
+        oldDb.get<{ common_name: string }>('SELECT common_name FROM species LIMIT 1')?.common_name === '老数据月季'
+      )
+
+      // 升级后再补种模板：老库里缺的 relation 字段应该被补上
+      seedFieldDefinitions(oldDb)
+      const legacyDefs = loadFieldDefinitions(oldDb, 'plant')
+      const wanted = ['species_id', 'env_id', 'status']
+      check(
+        '升级后模板补上了 所属物种 / 养护位置 / 状态',
+        wanted.every((k) => legacyDefs.some((d) => d.key === k)),
+        legacyDefs.map((d) => d.key).join(',')
+      )
+      check(
+        '补上的字段带正确的 relation 目标',
+        legacyDefs.find((d) => d.key === 'env_id')?.relationTarget === 'environments' &&
+          legacyDefs.find((d) => d.key === 'species_id')?.relationTarget === 'species'
+      )
+      check(
+        '补上的字段映射到正确的数据库列',
+        legacyDefs.find((d) => d.key === 'env_id')?.columnName === 'env_id' &&
+          legacyDefs.find((d) => d.key === 'status')?.columnName === 'status'
+      )
+
+      // 排序不能有并列：并列只能靠 id 兜底，结果不确定
+      const orders = legacyDefs.map((d) => d.sortOrder)
+      check(
+        '升级后字段排序无并列',
+        new Set(orders).size === orders.length,
+        `orders=${orders.join(',')}`
+      )
+      check(
+        '升级后没有重复的字段标识',
+        new Set(legacyDefs.map((d) => d.key)).size === legacyDefs.length
+      )
+
+      oldDb.close()
+    }
 
     // --- 版本一致性 ---
     check('迁移版本与代码一致', currentVersion(db) === LATEST_VERSION, `${currentVersion(db)} / ${LATEST_VERSION}`)

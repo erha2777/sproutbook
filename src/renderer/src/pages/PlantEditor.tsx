@@ -5,14 +5,14 @@
  * 物种级的百科信息在物种库统一维护，避免同一物种养多株时重复劳动。
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Environment, FieldDefinition, PlantStatus } from '@core/types'
 import type { PlantListItem, SpeciesListItem } from '@shared/api'
-import { PLANT_STATUS_OPTIONS } from '../lib/util'
-import { Badge, Button, Field, Modal, Notice, Panel, SelectInput, TextInput, useToast } from '../components/ui'
+import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS } from '../lib/util'
+import { Badge, Button, Field, Modal, Notice, Panel, TextInput, useToast } from '../components/ui'
 import { DynamicForm } from '../components/DynamicForm'
-import type { FormValues } from '../components/DynamicForm'
+import type { FieldContext, FormValues } from '../components/DynamicForm'
 import { ImageStrip } from '../components/ImageStrip'
 
 export interface PlantEditorModalProps {
@@ -43,18 +43,43 @@ export function PlantEditorModal({
   const [savedId, setSavedId] = useState<number | null>(plant?.id ?? null)
 
   /**
-   * 从表单值里取「可选关联」字段。
+   * 「所属物种 / 养护位置 / 状态」现在是**模板字段**（relation / select），
+   * 和其它字段一样由 DynamicForm 渲染，值也走同一套 values。
    *
-   * ⚠️ 这里不能用 `values.__envId ?? plant?.envId`。
-   * 用户选「（未分配）」时 `values.__envId` 是 `null`，而 `??` 把 null 当作
-   * 「未设置」，于是回退到原来的值 —— 结果就是**养护位置/所属物种清不掉**。
-   * 必须用「键是否存在」来判断，才能区分「没动过」和「显式清空」。
+   * 这里保留从 values 读取是为了两处仍然需要它们的逻辑：
+   *  - speciesId：未关联物种时显示「就地新建物种」面板
+   *  - 其余字段只负责展示，实际落库由 values → 列 的映射完成
+   *
+   * 注意不能用 `values.env_id ?? plant?.envId`：用户显式清空时值是 null，
+   * `??` 会把它当成「没设置」而回退到原值，导致清不掉。
    */
   const pick = <T,>(key: string, fallback: T): T => (key in values ? (values[key] as T) : fallback)
 
-  const speciesId = pick<number | null>('__speciesId', plant?.speciesId ?? presetSpeciesId ?? null)
-  const envId = pick<number | null>('__envId', plant?.envId ?? null)
-  const status = pick<PlantStatus>('__status', (plant?.status ?? 'growing') as PlantStatus)
+  const speciesId = pick<number | null>('species_id', plant?.speciesId ?? presetSpeciesId ?? null)
+
+  /**
+   * 模板字段的候选项。
+   * relation 类型自己不知道「养护位置有哪些」，select 也不知道 growing 该显示成什么，
+   * 这些语义只有渲染层掌握，所以在这里注入。
+   */
+  const fieldContext: FieldContext = useMemo(
+    () => ({
+      relations: {
+        environments: environments.map((e) => ({ id: e.id, label: e.name })),
+        species: speciesList.map((s) => ({
+          id: s.id,
+          label: s.scientificName ? `${s.commonName}（${s.scientificName}）` : s.commonName
+        }))
+      },
+      labels: Object.fromEntries(
+        (Object.keys(PLANT_STATUS_LABELS) as PlantStatus[]).map((k) => [
+          k,
+          `${PLANT_STATUS_ICONS[k]} ${PLANT_STATUS_LABELS[k]}`
+        ])
+      )
+    }),
+    [environments, speciesList]
+  )
 
   useEffect(() => {
     void (async () => {
@@ -70,12 +95,18 @@ export function PlantEditorModal({
         if (plant) {
           Object.assign(initial, plant.attributes)
           initial.nickname = plant.nickname
+          // 系统列不写在 attributes 里，必须逐个补上
+          initial.species_id = plant.speciesId
+          initial.env_id = plant.envId
+          initial.status = plant.status
           if (plant.acquiredAt) initial.acquired_at = plant.acquiredAt
           if (plant.potSize) initial.pot_size = plant.potSize
         } else {
           for (const def of fieldDefs) {
             if (def.defaultValue !== null && def.defaultValue !== undefined) initial[def.key] = def.defaultValue
           }
+          if (presetSpeciesId) initial.species_id = presetSpeciesId
+          if (!('status' in initial)) initial.status = 'growing'
         }
         setValues(initial)
       } catch (error) {
@@ -104,7 +135,7 @@ export function PlantEditorModal({
         return
       }
       setSpeciesList((prev) => [result.species, ...prev])
-      setValue('__speciesId', result.species.id)
+      setValue('species_id', result.species.id)
       setSpeciesQuery('')
       toast.push(`已创建物种「${name}」，可稍后到物种库补充详细信息`, 'success')
     } catch (error) {
@@ -117,11 +148,9 @@ export function PlantEditorModal({
     try {
       const result = await window.api.plants.save({
         id: plant?.id,
-        speciesId,
-        envId,
-        status,
-        // 不传 notes：备注统一走模板字段 plant_notes，
-        // 这里传 undefined 会让主进程保留原有值，不会丢数据。
+        // speciesId / envId / status 不再单独传：它们已是模板字段，
+        // 统一走 values → splitAttributes → 列 的路径，避免两条写入路径打架。
+        // 备注同理，走模板字段 plant_notes。
         nickname: typeof values.nickname === 'string' ? values.nickname : '',
         values
       })
@@ -181,6 +210,11 @@ export function PlantEditorModal({
       }
     >
       <div className="content-inner">
+        {/*
+          只有「昵称」在这里单独渲染（它是必填的第一项，且校验错误要单独显示）。
+          「所属物种 / 养护位置 / 状态」以及盆径、日期、备注全部由模板驱动渲染 ——
+          这样它们才能像其它字段一样调整位置、改标签、换分组。
+        */}
         <div className="form-grid">
           <Field label="昵称" required error={errors.nickname}>
             <TextInput
@@ -188,35 +222,6 @@ export function PlantEditorModal({
               onChange={(v) => setValue('nickname', v)}
               placeholder="例如：阳台那盆月季"
               invalid={Boolean(errors.nickname)}
-            />
-          </Field>
-
-          <Field label="所属物种" help="物种信息在物种库统一维护，多株同类可共用。">
-            <SelectInput
-              value={speciesId ? String(speciesId) : ''}
-              onChange={(v) => setValue('__speciesId', v ? Number(v) : null)}
-              placeholder="（未关联）"
-              options={speciesList.map((s) => ({
-                value: String(s.id),
-                label: s.scientificName ? `${s.commonName}（${s.scientificName}）` : s.commonName
-              }))}
-            />
-          </Field>
-
-          <Field label="养护位置" help="位置档案决定了将来的光照匹配与霜冻预警。">
-            <SelectInput
-              value={envId ? String(envId) : ''}
-              onChange={(v) => setValue('__envId', v ? Number(v) : null)}
-              placeholder="（未分配）"
-              options={environments.map((e) => ({ value: String(e.id), label: e.name }))}
-            />
-          </Field>
-
-          <Field label="状态">
-            <SelectInput
-              value={status}
-              onChange={(v) => setValue('__status', v as PlantStatus)}
-              options={PLANT_STATUS_OPTIONS}
             />
           </Field>
         </div>
@@ -260,6 +265,7 @@ export function PlantEditorModal({
           values={values}
           errors={errors}
           onChange={setValue}
+          context={fieldContext}
         />
 
         <div className="section-title">

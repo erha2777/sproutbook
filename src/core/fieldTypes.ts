@@ -27,7 +27,8 @@ export const FIELD_TYPES: FieldTypeMeta[] = [
   { type: 'hours_range', label: '数值区间', multiValued: false, hint: '如光照 6~8 小时' },
   { type: 'date', label: '日期', multiValued: false, hint: 'YYYY-MM-DD' },
   { type: 'image', label: '图片', multiValued: false, hint: '本地图片路径' },
-  { type: 'link', label: '链接', multiValued: false, hint: '外部网址' }
+  { type: 'link', label: '链接', multiValued: false, hint: '外部网址' },
+  { type: 'relation', label: '关联', multiValued: false, hint: '关联到养护位置、物种库等另一个实体' }
 ]
 
 export function fieldTypeMeta(type: FieldType): FieldTypeMeta | undefined {
@@ -181,6 +182,13 @@ export function coerceFieldValue(def: Pick<FieldDefinition, 'type' | 'options' |
       const s = String(raw).trim()
       if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return { ok: false, error: `${def.label} 需要 YYYY-MM-DD 格式` }
       return { ok: true, value: s }
+    }
+
+    case 'relation': {
+      // 存的是目标记录的主键。空值表示「未关联」，是合法状态。
+      const n = typeof raw === 'number' ? raw : Number(String(raw).trim())
+      if (!Number.isFinite(n)) return { ok: false, error: `${def.label} 需要一个有效的关联项` }
+      return { ok: true, value: Math.trunc(n) }
     }
 
     default:

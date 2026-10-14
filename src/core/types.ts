@@ -25,6 +25,23 @@ export type FieldType =
   | 'date'
   | 'image'
   | 'link'
+  /**
+   * 关联到另一个实体（值存对方的主键）。
+   *
+   * 有了它，「所属物种」「养护位置」这类字段才能和其它字段一样进模板 ——
+   * 否则只能硬编码在表单里，用户无法调整位置、改标签、换分组。
+   * 目标表由 relationTarget 指定。
+   */
+  | 'relation'
+
+/** relation 字段可以指向的目标。加新目标时，渲染层的选项来源也要一起补。 */
+export type RelationTarget = 'environments' | 'species' | 'recipes'
+
+export const RELATION_TARGETS: Array<{ value: RelationTarget; label: string }> = [
+  { value: 'environments', label: '养护位置' },
+  { value: 'species', label: '物种库' },
+  { value: 'recipes', label: '配方' }
+]
 
 /** 月份区间。from > to 表示跨年（如 11 月 ~ 次年 2 月）。 */
 export interface MonthRange {
@@ -61,6 +78,8 @@ export interface FieldDefinition {
   isSafety: boolean
   /** 若非空，值存放在该数据库列上而不是 attributes_json。 */
   columnName: string | null
+  /** 仅 type='relation' 时有意义：指向哪张表。 */
+  relationTarget: RelationTarget | null
   sortOrder: number
   archivedAt: string | null
 }
@@ -77,6 +96,7 @@ export interface FieldDefinitionPatch {
   helpText?: string | null
   isRequired?: boolean
   isSafety?: boolean
+  relationTarget?: RelationTarget | null
   sortOrder?: number
   archivedAt?: string | null
 }
@@ -94,6 +114,7 @@ export interface NewFieldDefinition {
   helpText?: string | null
   isRequired?: boolean
   isSafety?: boolean
+  relationTarget?: RelationTarget | null
 }
 
 // ---------------------------------------------------------------------------

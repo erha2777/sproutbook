@@ -11,15 +11,31 @@ import { CheckChips, Checkbox, Field, MonthRangeInput, NumberRangeInput, SelectI
 
 export type FormValues = Record<string, unknown>
 
+/**
+ * 渲染字段时需要的外部上下文。
+ *
+ * 模板字段是「数据」，但有些字段的候选项来自别处：
+ *  - relation 字段需要目标实体的列表（养护位置、物种库…）
+ *  - select 的选项有时存的是键（如 growing），需要映射成给人看的文字
+ * 这些不适合塞进 field_definitions，所以由调用方按需传入。
+ */
+export interface FieldContext {
+  /** 按 relationTarget 索引的可选项 */
+  relations?: Record<string, Array<{ id: number; label: string }>>
+  /** 值 → 显示名。只影响显示，不影响存储 */
+  labels?: Record<string, string>
+}
+
 interface FieldValueInputProps {
   def: FieldDefinition
   value: unknown
   onChange: (value: unknown) => void
   disabled?: boolean
   invalid?: boolean
+  context?: FieldContext
 }
 
-function FieldValueInput({ def, value, onChange, disabled, invalid }: FieldValueInputProps): ReactNode {
+function FieldValueInput({ def, value, onChange, disabled, invalid, context }: FieldValueInputProps): ReactNode {
   switch (def.type) {
     case 'longtext':
       return (
@@ -65,9 +81,24 @@ function FieldValueInput({ def, value, onChange, disabled, invalid }: FieldValue
           placeholder="（未设置）"
           invalid={invalid}
           disabled={disabled}
-          options={(def.options ?? []).map((o) => ({ value: o, label: o }))}
+          // 选项可能存的是键（growing），按 labels 映射成给人看的文字
+          options={(def.options ?? []).map((o) => ({ value: o, label: context?.labels?.[o] ?? o }))}
         />
       )
+
+    case 'relation': {
+      const options = (def.relationTarget ? context?.relations?.[def.relationTarget] : undefined) ?? []
+      return (
+        <SelectInput
+          value={value === null || value === undefined ? '' : String(value)}
+          onChange={(v) => onChange(v === '' ? null : Number(v))}
+          placeholder={options.length === 0 ? '（暂无可选项）' : '（未关联）'}
+          invalid={invalid}
+          disabled={disabled || options.length === 0}
+          options={options.map((o) => ({ value: String(o.id), label: o.label }))}
+        />
+      )
+    }
 
     case 'multiselect':
       return (
@@ -160,6 +191,8 @@ export interface DynamicFormProps {
   excludeKeys?: string[]
   /** 只渲染该分组内的字段；不传则渲染全部分组 */
   onlyGroups?: string[]
+  /** relation 候选列表与 select 显示名映射 */
+  context?: FieldContext
 }
 
 export function DynamicForm({
@@ -169,7 +202,8 @@ export function DynamicForm({
   onChange,
   disabled,
   excludeKeys = [],
-  onlyGroups
+  onlyGroups,
+  context
 }: DynamicFormProps): ReactNode {
   const active = defs.filter((d) => !d.archivedAt && !excludeKeys.includes(d.key))
 
@@ -221,6 +255,7 @@ export function DynamicForm({
                   onChange={(v) => onChange(def.key, v)}
                   disabled={disabled}
                   invalid={Boolean(errors[def.key])}
+                  context={context}
                 />
               </Field>
             ))}

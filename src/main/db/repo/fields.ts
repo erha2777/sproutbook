@@ -76,6 +76,9 @@ export function updateField(db: Db, id: number, patch: FieldDefinitionPatch): Fi
     if (patch.helpText !== undefined) db.run('UPDATE field_definitions SET help_text = ? WHERE id = ?', patch.helpText, id)
     if (patch.isRequired !== undefined) db.run('UPDATE field_definitions SET is_required = ? WHERE id = ?', patch.isRequired ? 1 : 0, id)
     if (patch.isSafety !== undefined) db.run('UPDATE field_definitions SET is_safety = ? WHERE id = ?', patch.isSafety ? 1 : 0, id)
+    if (patch.relationTarget !== undefined) {
+      db.run('UPDATE field_definitions SET relation_target = ? WHERE id = ?', patch.relationTarget ?? null, id)
+    }
     if (patch.sortOrder !== undefined) db.run('UPDATE field_definitions SET sort_order = ? WHERE id = ?', patch.sortOrder, id)
     if (patch.archivedAt !== undefined) {
       db.run('UPDATE field_definitions SET archived_at = ? WHERE id = ?', patch.archivedAt, id)

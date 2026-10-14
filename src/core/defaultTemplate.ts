@@ -211,8 +211,41 @@ const speciesFields: Seed[] = [
   { key: 'notes', label: '备注', groupName: '其他', type: 'longtext' }
 ]
 
+/**
+ * 植株信息模板。
+ *
+ * 这里刻意把「所属物种 / 养护位置 / 状态」也做成模板字段（以前它们硬编码在表单里）。
+ * 理由：它们和「昵称」「入手日期」一样都是**列支撑的系统字段**，
+ * 只让一部分进模板、另一部分写死，用户就没法统一调整位置、标签和分组 ——
+ * 那与「字段是数据不是代码」的设计自相矛盾。
+ */
 const plantFields: Seed[] = [
   { key: 'nickname', label: '昵称', groupName: '基础', type: 'text', isRequired: true, helpText: '例如「阳台那盆月季」。' },
+  {
+    key: 'species_id',
+    label: '所属物种',
+    groupName: '基础',
+    type: 'relation',
+    relationTarget: 'species',
+    helpText: '物种信息在物种库统一维护，多株同类可共用。'
+  },
+  {
+    key: 'env_id',
+    label: '养护位置',
+    groupName: '基础',
+    type: 'relation',
+    relationTarget: 'environments',
+    helpText: '位置档案决定了光照匹配与霜冻预警。可在「设置 → 养护位置」里维护。'
+  },
+  {
+    key: 'status',
+    label: '状态',
+    groupName: '基础',
+    type: 'select',
+    // 选项是存储值（英文键）；显示名由渲染层映射，见 lib/util.ts 的 PLANT_STATUS_LABELS
+    options: ['growing', 'dormant', 'sick', 'dead', 'gifted'],
+    helpText: '决定花园里那一株显示成什么样子。'
+  },
   { key: 'acquired_at', label: '入手 / 播种日期', groupName: '基础', type: 'date', helpText: '生长进度与养护计划的时间基准。' },
   { key: 'pot_size', label: '盆径', groupName: '基础', type: 'text' },
   { key: 'plant_notes', label: '备注', groupName: '其他', type: 'longtext' }
@@ -230,6 +263,9 @@ export const SYSTEM_COLUMNS: Record<string, string> = {
   genus: 'genus',
   aliases: 'aliases_json',
   nickname: 'nickname',
+  species_id: 'species_id',
+  env_id: 'env_id',
+  status: 'status',
   acquired_at: 'acquired_at'
 }
 

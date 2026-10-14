@@ -257,6 +257,16 @@ CREATE TABLE ai_runs (
 CREATE INDEX idx_ai_runs_kind ON ai_runs(kind, created_at);
 `
 
-export const MIGRATIONS: Migration[] = [{ version: 1, name: 'init', sql: V1_INIT }]
+const V2_RELATION_FIELDS = /* sql */ `
+-- 「所属物种」「养护位置」这类字段原本硬编码在表单里，无法像其它字段一样
+-- 调整位置 / 改标签 / 换分组 —— 与「字段是数据不是代码」的设计自相矛盾。
+-- 新增 relation 类型让它们进模板；目标表存在这一列里。
+ALTER TABLE field_definitions ADD COLUMN relation_target TEXT;
+`
+
+export const MIGRATIONS: Migration[] = [
+  { version: 1, name: 'init', sql: V1_INIT },
+  { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS }
+]
 
 export const LATEST_VERSION = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0)

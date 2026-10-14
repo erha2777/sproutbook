@@ -14,8 +14,25 @@ export function seedFieldDefinitions(db: Db): { inserted: number; skipped: numbe
   let skipped = 0
 
   db.transaction(() => {
-    const counters: Record<string, number> = { species: 0, plant: 0 }
+    /**
+     * 新字段插到哪里。
+     *
+     * 两个坑：
+     *  1. 不能用「插入计数」当序号 —— 给已有库补字段时，被跳过的老字段不占号，
+     *     新字段会拿到 0、1、2 撞上老字段，排序只能靠 id 兜底（那是巧合不是设计）。
+     *  2. 也不能简单地追加到末尾 —— 升级用户会看到「所属物种 / 养护位置 / 状态」
+     *     被排到「备注」后面，而这些恰恰是最常用的字段。
+     *
+     * 做法：按字段在模板里的规范序号插入，并把该位置及其后的已有字段整体后移一格。
+     * 这样新字段落在正确位置，已有字段的**相对次序保持不变**，也没有并列。
+     */
+    const canonicalIndex: Record<string, number> = { species: 0, plant: 0 }
+
     for (const def of defs) {
+      // 规范序号对「插入的」和「跳过的」都要推进，否则序号会整体前移
+      const wanted = canonicalIndex[def.ownerKind] ?? 0
+      canonicalIndex[def.ownerKind] = wanted + 1
+
       const existing = db.get<{ id: number }>(
         'SELECT id FROM field_definitions WHERE owner_kind = ? AND key = ?',
         def.ownerKind,
@@ -25,9 +42,15 @@ export function seedFieldDefinitions(db: Db): { inserted: number; skipped: numbe
         skipped++
         continue
       }
-      const order = counters[def.ownerKind] ?? 0
-      counters[def.ownerKind] = order + 1
-      insertFieldDefinition(db, def, order)
+
+      // 让位：把该位置及其后的字段整体后移一格
+      db.run(
+        'UPDATE field_definitions SET sort_order = sort_order + 1 WHERE owner_kind = ? AND sort_order >= ?',
+        def.ownerKind,
+        wanted
+      )
+
+      insertFieldDefinition(db, def, wanted)
       inserted++
     }
   })
@@ -41,8 +64,8 @@ export function insertFieldDefinition(db: Db, def: NewFieldDefinition, sortOrder
   const r = db.run(
     `INSERT INTO field_definitions
        (owner_kind, key, label, label_en, group_name, type, unit, options_json, default_json,
-        help_text, is_system, is_required, is_safety, column_name, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        help_text, is_system, is_required, is_safety, column_name, relation_target, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     def.ownerKind,
     def.key,
     def.label,
@@ -57,6 +80,7 @@ export function insertFieldDefinition(db: Db, def: NewFieldDefinition, sortOrder
     def.isRequired ? 1 : 0,
     def.isSafety ? 1 : 0,
     columnName,
+    def.relationTarget ?? null,
     sortOrder
   )
   return Number(r.lastInsertRowid)

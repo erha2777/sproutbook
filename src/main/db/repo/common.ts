@@ -26,6 +26,7 @@ export interface FieldDefinitionRow {
   is_required: number
   is_safety: number
   column_name: string | null
+  relation_target: string | null
   sort_order: number
   archived_at: string | null
 }
@@ -56,6 +57,7 @@ export function mapFieldDefinition(row: FieldDefinitionRow): FieldDefinition {
     isRequired: row.is_required === 1,
     isSafety: row.is_safety === 1,
     columnName: row.column_name,
+    relationTarget: (row.relation_target as FieldDefinition['relationTarget']) ?? null,
     sortOrder: row.sort_order,
     archivedAt: row.archived_at
   }
