@@ -475,6 +475,40 @@ export interface DailyFetch {
   fallbackReason: string | null
 }
 
+/**
+ * 为什么这次用不上和风？——**纯函数，可以脱机自检**。
+ *
+ * 抽出来是因为这段判断原本埋在联网的 fetchDaily 里，自检碰不到它。
+ * 而它决定的正是「界面要不要告诉用户换源了」——
+ * 一段只有真联网才跑得到的逻辑，等于没有回归保护。
+ *
+ * @param qweatherData 真的请求过和风时的响应体；没请求就传 undefined
+ * @returns null 表示和风可用（或用户本来就没选它），否则是给用户看的原因
+ */
+export function qweatherSkipReason(
+  config: WeatherConfig,
+  geo: Pick<GeoResult, 'provider' | 'locationId'>,
+  qweatherData?: { code?: string; daily?: unknown[] } | null
+): string | null {
+  const tried = geo.provider === 'qweather' && config.qweatherReady && Boolean(geo.locationId)
+
+  if (tried) {
+    // 走到这里说明请求过了但没拿到可用数据
+    if (qweatherData?.code === '200' && qweatherData.daily?.length) return null
+    /*
+     * code === '200' 但没有逐日数据：**不能说「和风返回 200」** ——
+     * 那读起来像成功，用户根本不知道出了什么事。
+     * 200 只代表请求通了，不代表里面有东西。
+     */
+    if (qweatherData?.code === '200') return '和风请求成功，但返回的数据里没有可用的逐日预报'
+    return qweatherData?.code ? `和风返回 ${qweatherData.code}` : '和风没有返回可用的数据'
+  }
+
+  // 压根没尝试 —— 只有用户选了和风才需要解释
+  if (config.provider !== 'qweather') return null
+  return geo.locationId ? '和风配置不完整' : '这个地点没有和风的 locationId（多半是手填的经纬度）'
+}
+
 export async function fetchDaily(
   config: WeatherConfig,
   geo: GeoResult,
@@ -501,9 +535,9 @@ export async function fetchDaily(
      * 和风失败了就往下走 Open-Meteo，别让用户这次什么都看不到。
      * 但**要记住为什么** —— 界面上得说出来，不能假装什么都没发生。
      */
-    fallbackReason = data?.code ? `和风返回 ${data.code}` : '和风没有返回可用的数据'
+    fallbackReason = qweatherSkipReason(config, geo, data)
   } else if (config.provider === 'qweather') {
-    fallbackReason = geo.locationId ? '和风配置不完整' : '这个地点没有和风的 locationId（多半是手填的经纬度）'
+    fallbackReason = qweatherSkipReason(config, geo)
   }
 
   const data = await fetchJson<{

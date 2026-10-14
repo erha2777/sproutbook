@@ -21,7 +21,13 @@ import { seedAll, seedFieldDefinitions } from './db/seed'
 import { backupDatabase } from './db/backup'
 import { loadFieldDefinitions } from './db/repo/common'
 import { assessPlantsWeather } from './services/weather'
-import { GEOCODE_CACHE_KEY, lookupLocation, readWeatherConfig, saveWeatherConfig } from './services/weather-providers'
+import {
+  GEOCODE_CACHE_KEY,
+  lookupLocation,
+  qweatherSkipReason,
+  readWeatherConfig,
+  saveWeatherConfig
+} from './services/weather-providers'
 import type { GeoResult } from './services/weather-providers'
 import { buildIdentifyMessages, parseIdentifyResponse } from './services/ai/identify'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
@@ -1812,6 +1818,72 @@ export async function runSmoke(outFile: string): Promise<number> {
         // 正常语句不能被冤枉
         const ok = db.get<{ n: number }>('SELECT ? AS n', 42)
         check('数量相符时正常执行', ok?.n === 42, String(ok?.n))
+      }
+
+      // ---- 换源时界面要说出来 ----
+      //
+      // providerLabel 以前是从**配置**推导的，而和风失败时会静默退回 Open-Meteo。
+      // 于是界面写着「数据来自和风天气」、预报点标着「已到区县」，
+      // 可那份预报其实是 Open-Meteo 的市级网格 —— 而设置页恰好教人
+      // 「填经纬度会更准」，填了就正好触发这条假来源。
+      //
+      // 这段判断原本埋在联网的 fetchDaily 里，自检碰不到。抽成纯函数才能测：
+      // 一段只有真联网才跑得到的逻辑，等于没有回归保护。
+      {
+        const base = { baseUrl: '', chatModel: '', temperature: 0, timeoutMs: 1, maxRetries: 0 } as never
+        const qw = { ...(base as object), provider: 'qweather', qweatherReady: true, qweatherKey: 'k' } as never
+        const qwNoKey = { ...(base as object), provider: 'qweather', qweatherReady: false } as never
+        const om = { ...(base as object), provider: 'open-meteo', qweatherReady: false } as never
+
+        const geoQw = { provider: 'qweather', locationId: '101250601' } as never
+        const geoNoId = { provider: 'qweather', locationId: null } as never
+
+        // 和风拿到了好数据：没换源，不该有提示
+        check(
+          '和风成功时没有换源提示',
+          qweatherSkipReason(qw, geoQw, { code: '200', daily: [{}] }) === null
+        )
+        // 和风返回了业务错误码 —— 原因里要带上它，用户才知道去查什么
+        check(
+          '和风返回错误码时说明是哪个码',
+          String(qweatherSkipReason(qw, geoQw, { code: '403' })).includes('403'),
+          String(qweatherSkipReason(qw, geoQw, { code: '403' }))
+        )
+        check(
+          '和风没返回东西时说没返回可用数据',
+          String(qweatherSkipReason(qw, geoQw, null)).includes('没有返回可用的数据')
+        )
+        /*
+         * 200 但没有逐日数据。**这里曾经走进一个坑**：
+         * 原来的写法是 `qweatherData?.code ? ...`，于是 code='200' 也走这个分支，
+         * 提示变成「和风返回 200」—— 读起来像成功，用户根本不知道出了什么事。
+         * 200 只代表请求通了，不代表里面有东西。
+         */
+        const empty200 = String(qweatherSkipReason(qw, geoQw, { code: '200', daily: [] }))
+        check('code=200 但没有逐日数据时，不能说成「和风返回 200」', !empty200.includes('和风返回 200'), empty200)
+        check('而且要讲清是「请求成功但没数据」', empty200.includes('没有可用的逐日预报'), empty200)
+
+        // 压根没尝试和风：配了 key 但地点是手填经纬度（没有 locationId）
+        check(
+          '手填经纬度时说明没有 locationId',
+          String(qweatherSkipReason(qw, geoNoId)).includes('locationId')
+        )
+        // 选了和风但没配齐
+        check('和风没配齐时说配置不完整', String(qweatherSkipReason(qwNoKey, geoQw)).includes('配置不完整'))
+
+        // 用户本来就选了 Open-Meteo：**没有换源这回事，不该弹提示**
+        check('本来就用 Open-Meteo 时不提示', qweatherSkipReason(om, geoNoId) === null)
+        check('本来就用 Open-Meteo 且有 id 时也不提示', qweatherSkipReason(om, geoQw) === null)
+
+        /*
+         * 这一条是整件事的核心：
+         * 配的是和风、实际走的是 Open-Meteo —— 必须给出原因，
+         * 界面才有东西可说，而不是继续显示「数据来自和风天气」。
+         */
+        check(
+          '配和风但实际没用上时**一定**有原因（界面才有话可说）',
+          qweatherSkipReason(qwNoKey, geoNoId) !== null
+        )
       }
 
       // ---- 地名解析的缓存 ----
