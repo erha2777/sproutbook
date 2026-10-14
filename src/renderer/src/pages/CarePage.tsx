@@ -810,13 +810,12 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
       ) : (
         <Panel>
           <SectionTitle>养护日志</SectionTitle>
+          {/*
+            空态文案原来写的是「也可以随时手动记一笔」—— 可界面上**没有那个入口**
+            （care:log.add 通道有实现、preload 也暴露了，就是没人接）。
+            邀请用户做一件做不到的事，比不说更糟。接线是更好的修法，先去掉这半句。
+          */}
           {logs.length === 0 ? (
-            {/*
-              原来这句写的是「也可以随时手动记一笔」—— 可界面上**没有那个入口**
-              （care:log.add 通道有实现、preload 也暴露了，就是没人接）。
-              邀请用户做一件做不到的事，比不说更糟。
-              接线是更好的修法，在接上之前先把这句去掉。
-            */}
             <EmptyState icon="📓" title="还没有记录" hint="完成任务时会自动写一条日志。" />
           ) : (
             <div className="log-timeline">
