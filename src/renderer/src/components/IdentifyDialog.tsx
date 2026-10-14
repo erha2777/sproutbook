@@ -19,15 +19,20 @@
 
 import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { Button, Field, Modal, Notice, Panel, Spinner, TextArea, cx } from './ui'
 import type { AiIdentifyCandidate, AiIdentifyResult } from '@shared/api'
 
-const LEVEL_TEXT: Record<string, string> = {
-  genus: '只到属',
-  species: '到种',
-  cultivar: '到品种'
-}
-import { Button, Field, Modal, Notice, Panel, Spinner, TextArea, cx } from './ui'
-
+/**
+ * 层级标签。
+ *
+ * 光看 level 会闹矛盾：第三候选标的是「只到属」，可它同时给了一个**种名**
+ * （Hippeastrum puniceum）—— 读起来像自相矛盾。
+ *
+ * 模型的意思其实是「属是确定的，那个种名只是属内的猜测」。
+ * 所以这里结合**有没有给名字**来判断措辞：
+ *   只到属 + 有名字 → 属内备选（属确定，种名存疑）
+ *   只到属 + 没名字 → 只到属
+ */
 export interface IdentifyDialogProps {
   open: boolean
   /** 可选的补充线索，例如「叶子有点发黄」 */
@@ -36,6 +41,17 @@ export interface IdentifyDialogProps {
   onIdentify: (hint: string) => void
   onPick: (candidate: AiIdentifyCandidate) => void
   onClose: () => void
+}
+
+function levelLabel(c: AiIdentifyCandidate): { text: string; hint: string } | null {
+  if (c.level === 'cultivar') return { text: '到品种', hint: '能确定是哪个园艺品种' }
+  if (c.level === 'species') return { text: '到种', hint: '知道是什么种，但认不出具体品种' }
+  if (c.level === 'genus') {
+    return c.scientificName
+      ? { text: '属内备选', hint: '属是确定的；那个种名只是属内的猜测，把握不大' }
+      : { text: '只到属', hint: '只确定到属，说不出是哪个种' }
+  }
+  return null
 }
 
 function confidenceLabel(c: number): string {
@@ -111,11 +127,15 @@ export function IdentifyDialog({
                       {c.cultivar ? <span className="identify-cultivar">{c.cultivar}</span> : null}
                       <span className="small muted">{c.scientificName ?? ''}</span>
                       <span style={{ flex: 1 }} />
-                      {c.level ? (
-                        <span className={`identify-level lv-${c.level}`} title="识别到了哪一层">
-                          {LEVEL_TEXT[c.level] ?? c.level}
-                        </span>
-                      ) : null}
+                      {(() => {
+                        const lv = levelLabel(c)
+                        if (!lv) return null
+                        return (
+                          <span className={`identify-level lv-${c.level}`} title={lv.hint}>
+                            {lv.text}
+                          </span>
+                        )
+                      })()}
                       <span className={cx('small', c.confidence >= 0.75 ? '' : 'muted')}>
                         {confidenceLabel(c.confidence)} {Math.round(c.confidence * 100)}%
                       </span>
