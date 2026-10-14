@@ -11,7 +11,7 @@
 import { app, dialog, ipcMain, shell } from 'electron'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
-import { qweatherLookup, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
+import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import type { Db } from '../db/connection'
@@ -514,13 +514,19 @@ function registerImageIpc(): void {
   })
   handle('weather:testLocation', async (name: string) => {
     const db = getDb()
-    const key = getWeatherKey()
-    const config = readWeatherConfig(db, key)
-    if (!config.qweatherReady) return { ok: false, error: '还没填 API Host 或 API Key' }
-    // 只在和风的域里查，不走兜底 —— 这是「验证配置」而不是「取天气」
-    const hit = await qweatherLookup(config, { city: name })
-    if (!hit) return { ok: false, error: '查不到这个地名，检查 Host / Key 或换个写法' }
-    return { ok: true, label: hit.label, level: hit.level }
+    const config = readWeatherConfig(db, getWeatherKey())
+    /*
+     * 只在和风的域里查，不走兜底 —— 这是「验证配置」而不是「取天气」。
+     *
+     * 失败原因**原样透出去**：403 要去查 key 和 Host，404 才是地名的问题，
+     * 连不上又是另一回事。第一版把它们都吞成「查不到这个地名」，
+     * 用户会去改完全无关的地方。
+     */
+    const outcome = await qweatherLookupDetailed(config, { city: name })
+    if (!outcome.geo) {
+      return { ok: false, error: outcome.error ?? '查询失败', code: outcome.code }
+    }
+    return { ok: true, label: outcome.geo.label, level: outcome.geo.level }
   })
   handle('weather:clearCache', () => {
     clearWeatherCache(getDb())

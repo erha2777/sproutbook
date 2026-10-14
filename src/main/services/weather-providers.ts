@@ -107,57 +107,120 @@ interface QWeatherLocation {
   country?: string
 }
 
-async function fetchJson<T>(url: string): Promise<T | null> {
+interface FetchOutcome<T> {
+  data: T | null
+  /** HTTP 状态码。0 表示连接根本没建立起来 */
+  status: number
+  /** 连接层失败的原因（DNS、超时、证书…） */
+  transportError: string | null
+}
+
+/**
+ * 带状态码的取 JSON。
+ *
+ * 之所以要带状态码：出问题时必须能分清「网络连不上」和
+ * 「连上了但和风说你的 key 不对」—— 这两种情况的处理方式完全不同。
+ */
+async function fetchJsonDetailed<T>(url: string): Promise<FetchOutcome<T>> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
     const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } })
-    if (!response.ok) return null
-    return (await response.json()) as T
-  } catch {
+    if (!response.ok) return { data: null, status: response.status, transportError: null }
+    return { data: (await response.json()) as T, status: response.status, transportError: null }
+  } catch (error) {
     // 断网、超时、DNS 失败一律当作「没数据」，绝不往上抛 —— 天气是锦上添花
-    return null
+    return { data: null, status: 0, transportError: error instanceof Error ? error.message : String(error) }
   } finally {
     clearTimeout(timer)
   }
 }
 
+async function fetchJson<T>(url: string): Promise<T | null> {
+  return (await fetchJsonDetailed<T>(url)).data
+}
+
 /**
- * 和风的城市搜索。
+ * 和风的错误码 → 人话。
+ *
+ * 这些码是**必须区分开**的：403 要去查 key 和 Host，404 才是地名的问题。
+ * 第一版把它们都吞成「查不到这个地名」，用户会去改完全无关的地方。
+ */
+const QWEATHER_ERRORS: Record<string, string> = {
+  '204': '这个地点没有数据',
+  '400': '请求参数有误（多半是 API Host 填错了）',
+  '401': '认证失败：API Key 不对，或这个 Key 不属于这个 Host',
+  '402': '超过访问次数或余额不足',
+  '403': '无权限：检查 API Host 是否填成了控制台地址，或 Key 没开通 GeoAPI',
+  '404': '查询的数据不存在',
+  '429': '请求过于频繁，稍后再试',
+  '500': '和风服务器错误'
+}
+
+export interface LookupOutcome {
+  geo: GeoResult | null
+  /** 和风返回的业务码，诊断时原样显示 */
+  code: string | null
+  /** 人话解释。成功时为 null */
+  error: string | null
+}
+
+/**
+ * 和风的城市搜索（带诊断）。
  *
  * `adm` 参数按上级行政区过滤 —— 「某市」全国有四个（湖南/山西/江苏），
  * 不传这个就会指到别的省去。
  */
-export async function qweatherLookup(
+export async function qweatherLookupDetailed(
   config: WeatherConfig,
   query: LocationQuery
-): Promise<GeoResult | null> {
-  if (!config.qweatherReady) return null
+): Promise<LookupOutcome> {
+  if (!config.qweatherHost) return { geo: null, code: null, error: '还没填 API Host' }
+  if (!config.qweatherKey) return { geo: null, code: null, error: '还没填 API Key' }
+
   const wanted = (query.district ?? '').trim() || (query.city ?? '').trim()
-  if (!wanted) return null
+  if (!wanted) return { geo: null, code: null, error: '没有要查的地名' }
 
   const params = new URLSearchParams({
     location: wanted,
     number: '10',
     lang: 'zh',
-    key: config.qweatherKey ?? ''
+    key: config.qweatherKey
   })
-  // adm 用省名（去掉「省/市/自治区」这类后缀，和风的 adm 是简称）
   const adm = (query.province ?? '').replace(/省|市|自治区|特别行政区|壮族|回族|维吾尔/g, '').trim()
   if (adm) params.set('adm', adm)
 
-  const data = await fetchJson<{ code?: string; location?: QWeatherLocation[] }>(
-    `https://${config.qweatherHost}/geo/v2/city/lookup?${params.toString()}`
-  )
-  // 和风的 code 是字符串："200" 才是成功
-  if (!data || data.code !== '200' || !data.location?.length) return null
+  const url = `https://${config.qweatherHost}/geo/v2/city/lookup?${params.toString()}`
+  const outcome = await fetchJsonDetailed<{ code?: string; location?: QWeatherLocation[] }>(url)
 
-  const list = data.location
+  if (outcome.transportError) {
+    return { geo: null, code: null, error: `连不上 ${config.qweatherHost}：${outcome.transportError.slice(0, 60)}` }
+  }
+  if (outcome.status === 0) {
+    return { geo: null, code: null, error: `连不上 ${config.qweatherHost}` }
+  }
+
+  const data = outcome.data
+  if (!data) {
+    return { geo: null, code: null, error: `HTTP ${outcome.status}：返回的不是 JSON。Host 多半填错了（应该是 xxx.qweatherapi.com 这种）` }
+  }
+
+  const code = data.code ?? null
+  if (code !== '200') {
+    const known = code ? QWEATHER_ERRORS[code] : null
+    return {
+      geo: null,
+      code,
+      error: known ? `和风返回 ${code}：${known}` : `和风返回了未知状态码 ${code ?? '（空）'}（HTTP ${outcome.status}）`
+    }
+  }
+
+  const list = data.location ?? []
+  if (list.length === 0) {
+    return { geo: null, code, error: `和风认得这个 Host 和 Key，但查不到「${wanted}」这个地名` }
+  }
+
   const cityName = (query.city ?? '').trim()
-  /*
-   * 优先挑「名字里带区县，或者上级是我们要的那个市」的结果。
-   * 光按第一个取会在重名时指错地方 —— 这和 Open-Meteo 那边是同一个坑。
-   */
   const pick =
     list.find((x) => cityName && (x.adm2 ?? '') === cityName) ??
     list.find((x) => (x.name ?? '') === wanted) ??
@@ -165,19 +228,28 @@ export async function qweatherLookup(
 
   const lat = Number(pick.lat)
   const lon = Number(pick.lon)
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
-
-  // 名字和要查的一致、且带上级市，说明解析到了具体那一级
-  const level: GeoResult['level'] = (pick.name ?? '') === wanted && (pick.adm2 ?? '') !== '' ? 'district' : 'city'
-
-  return {
-    label: [pick.country, pick.adm1, pick.adm2, pick.name].filter(Boolean).join(' · '),
-    latitude: lat,
-    longitude: lon,
-    locationId: pick.id ?? null,
-    level,
-    provider: 'qweather'
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return { geo: null, code, error: `和风返回了「${pick.name ?? '?'}」但坐标解析不出来` }
   }
+
+  const level: GeoResult['level'] = (pick.name ?? '') === wanted && (pick.adm2 ?? '') !== '' ? 'district' : 'city'
+  return {
+    geo: {
+      label: [pick.country, pick.adm1, pick.adm2, pick.name].filter(Boolean).join(' · '),
+      latitude: lat,
+      longitude: lon,
+      locationId: pick.id ?? null,
+      level,
+      provider: 'qweather'
+    },
+    code,
+    error: null
+  }
+}
+
+/** 取天气时只关心成不成，诊断信息丢掉。 */
+export async function qweatherLookup(config: WeatherConfig, query: LocationQuery): Promise<GeoResult | null> {
+  return (await qweatherLookupDetailed(config, query)).geo
 }
 
 /** Open-Meteo 的地理编码。只到市级 —— 区县名字它多半认不出来。 */
