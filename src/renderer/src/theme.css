@@ -617,6 +617,27 @@ img {
   font-weight: 700;
 }
 
+/* ---------- 规则库 ---------- */
+
+/*
+ * 编辑表单就地展开在规则行下面。
+ * 原来它固定渲染在列表顶部，点下方的「编辑」得先往上滚才看得到，
+ * 改完还要滚回来找那条规则。
+ */
+.rule-edit-row > td {
+  padding: 0 0 12px 0;
+  background: rgba(0, 0, 0, 0.06);
+}
+.rule-edit-row .panel {
+  margin: 0;
+  border-top: none;
+}
+/* 操作列的两个按钮必须并排，折行会让人以为「删除」是独立的一行 */
+.rule-edit-row ~ tr .row.tight,
+.pixel-table td .row.tight {
+  flex-wrap: nowrap;
+}
+
 /* 阶段选择：每个选项带一句「什么时候算进入这个阶段」 */
 .phase-choices {
   display: grid;
