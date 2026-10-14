@@ -247,6 +247,11 @@ export interface SproutbookApi {
   weather: {
     assess(force?: boolean): Promise<WeatherWarningResult>
     clearCache(): Promise<boolean>
+    /** 天气数据源配置。**不返回 key 本身**，只说配没配 */
+    config(): Promise<WeatherConfigSnapshot>
+    saveConfig(patch: { provider?: 'open-meteo' | 'qweather'; qweatherHost?: string; qweatherKey?: string }): Promise<WeatherConfigSnapshot>
+    /** 试一次定位，用来验证 key 和 Host 填对了没有 */
+    testLocation(name: string): Promise<{ ok: boolean; label?: string; level?: string; error?: string }>
   }
 
   care: {
@@ -406,6 +411,17 @@ export interface TransferResult {
  * renderer 引用主进程模块会把 fs / node:sqlite 一起拖进前端打包。
  * 两边形状必须一致，所以自检里有一条专门核对字段。
  */
+export interface WeatherConfigSnapshot {
+  provider: 'open-meteo' | 'qweather'
+  qweatherHost: string
+  /** 钥匙串里有没有 key。**永不回显 key 本身** */
+  hasWeatherKey: boolean
+  /** host 和 key 都齐了才算可用 */
+  qweatherReady: boolean
+  /** 当前实际会用的源 */
+  activeLabel: string
+}
+
 export interface WeatherPlace {
   name: string
   label: string

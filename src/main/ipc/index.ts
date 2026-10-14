@@ -10,6 +10,8 @@
 
 import { app, dialog, ipcMain, shell } from 'electron'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
+import { getWeatherKey, setWeatherKey } from '../services/secrets'
+import { qweatherLookup, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import type { Db } from '../db/connection'
@@ -478,7 +480,48 @@ function registerImageIpc(): void {
    * 而且 assessPlantsWeather 在没有养护位置填城市时会直接返回，
    * 不填城市 = 完全离线，不是「降级」而是等价的选择。
    */
-  handle('weather:assess', (force?: boolean) => assessPlantsWeather(getDb(), force === true))
+  handle('weather:assess', (force?: boolean) =>
+    // key 在 IPC 这一层从钥匙串取 —— 服务层不碰 Electron API
+    assessPlantsWeather(getDb(), force === true, getWeatherKey())
+  )
+  /** 给界面的配置快照 —— **绝不包含 key 本身**，只说配没配 */
+  function weatherConfigSnapshot(db: ReturnType<typeof getDb>, key: string | null) {
+    const config = readWeatherConfig(db, key)
+    return {
+      provider: config.provider,
+      qweatherHost: config.qweatherHost,
+      hasWeatherKey: (key ?? '') !== '',
+      qweatherReady: config.qweatherReady,
+      activeLabel:
+        config.provider === 'qweather' && config.qweatherReady
+          ? '和风天气（可精确到区县）'
+          : config.provider === 'qweather'
+            ? 'Open-Meteo（和风配置不完整，暂时退回）'
+            : 'Open-Meteo（免注册）'
+    }
+  }
+
+  handle('weather:config', () => weatherConfigSnapshot(getDb(), getWeatherKey()))
+  handle('weather:saveConfig', (patch: { provider?: 'open-meteo' | 'qweather'; qweatherHost?: string; qweatherKey?: string }) => {
+    const db = getDb()
+    /*
+     * key 单独走钥匙串。传空串＝清掉，传 undefined＝不动 ——
+     * 界面上「改了 Host 但没重填 key」是常见操作，不能顺手把 key 抹了。
+     */
+    if (patch.qweatherKey !== undefined) setWeatherKey(patch.qweatherKey)
+    saveWeatherConfig(db, { provider: patch.provider, qweatherHost: patch.qweatherHost })
+    return weatherConfigSnapshot(db, getWeatherKey())
+  })
+  handle('weather:testLocation', async (name: string) => {
+    const db = getDb()
+    const key = getWeatherKey()
+    const config = readWeatherConfig(db, key)
+    if (!config.qweatherReady) return { ok: false, error: '还没填 API Host 或 API Key' }
+    // 只在和风的域里查，不走兜底 —— 这是「验证配置」而不是「取天气」
+    const hit = await qweatherLookup(config, { city: name })
+    if (!hit) return { ok: false, error: '查不到这个地名，检查 Host / Key 或换个写法' }
+    return { ok: true, label: hit.label, level: hit.level }
+  })
   handle('weather:clearCache', () => {
     clearWeatherCache(getDb())
     return true

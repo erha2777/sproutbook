@@ -98,7 +98,10 @@ const api: SproutbookApi = {
   },
   weather: {
     assess: (force) => call('weather:assess', force ?? false),
-    clearCache: () => call('weather:clearCache')
+    clearCache: () => call('weather:clearCache'),
+    config: () => call('weather:config'),
+    saveConfig: (patch) => call('weather:saveConfig', patch ?? {}),
+    testLocation: (name) => call('weather:testLocation', name)
   },
 
   care: {

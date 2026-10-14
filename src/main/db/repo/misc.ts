@@ -18,6 +18,7 @@ interface EnvironmentRow {
   climate_zone: string | null
   province: string | null
   city: string | null
+  district: string | null
   lat: number | null
   lon: number | null
   can_heat: number
@@ -36,6 +37,7 @@ function mapEnvironment(row: EnvironmentRow): Environment {
     climateZone: row.climate_zone,
     province: row.province,
     city: row.city,
+    district: row.district ?? null,
     lat: row.lat,
     lon: row.lon,
     canHeat: row.can_heat === 1,
@@ -83,7 +85,7 @@ export function saveEnvironment(db: Db, input: EnvironmentInput): Environment {
   }
 
   const r = db.run(
-    `INSERT INTO environments (name, kind, light_level, light_hours, climate_zone, province, city, lat, lon, can_heat, frost_protected, sort_order)
+    `INSERT INTO environments (name, kind, light_level, light_hours, climate_zone, province, city, district, lat, lon, can_heat, frost_protected, sort_order)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.name,
     input.kind,
