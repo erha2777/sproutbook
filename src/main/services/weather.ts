@@ -18,6 +18,7 @@
 
 import type { Db } from '../db/connection'
 import {
+  GEOCODE_CACHE_KEY,
   fetchDaily,
   lookupLocation,
   readWeatherConfig,
@@ -154,6 +155,8 @@ export async function getForecast(
 /** 清掉天气缓存。用户在设置里手动刷新时用。 */
 export function clearWeatherCache(db: Db): void {
   setSetting(db, CACHE_KEY, {})
+  // 地名缓存一起清 —— 用户点「重新获取」多半是觉得哪里不对，地名也该重来
+  setSetting(db, GEOCODE_CACHE_KEY, {})
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +267,7 @@ export async function assessPlantsWeather(
        * 解析顺序在 lookupLocation 里：配了和风就先试和风（能到区县），
        * 失败再退 Open-Meteo。反过来的话，和风能解析出的区县永远轮不到。
        */
-      point = await lookupLocation(config, {
+      point = await lookupLocation(db, config, {
         province: env.province,
         city: env.city,
         district: env.district
