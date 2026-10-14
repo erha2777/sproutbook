@@ -43,6 +43,7 @@ const api: SproutbookApi = {
     keyWarning: () => call('settings:keyWarning'),
     test: () => call('settings:testAi'),
     autofill: (payload) => call('ai:autofill', payload),
+    identify: (payload) => call('ai:identify', payload),
     cancel: (requestId) => call('ai:cancel', requestId),
     runs: (limit) => call('ai:runs', limit)
   },

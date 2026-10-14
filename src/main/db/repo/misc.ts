@@ -185,6 +185,12 @@ export function addImage(
   return mapImage(row)
 }
 
+/** 按 id 取一张图。识图要把图片读出来发给模型，所以需要这个。 */
+export function getImage(db: Db, id: number): ImageRecord | null {
+  const row = db.get<ImageRow>('SELECT * FROM images WHERE id = ?', id)
+  return row ? mapImage(row) : null
+}
+
 export function deleteImage(db: Db, id: number): ImageRecord | null {
   const row = db.get<ImageRow>('SELECT * FROM images WHERE id = ?', id)
   if (!row) return null

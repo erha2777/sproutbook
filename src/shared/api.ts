@@ -144,6 +144,11 @@ export interface SproutbookApi {
       hints?: string
       existing?: Record<string, unknown>
     }): Promise<AiAutofillResult>
+    /**
+     * 识图：把一张已有的图片发给视觉模型，拿回 Top-3 候选。
+     * **只认品种，不写数据** —— 候选交给现有的草稿流程。
+     */
+    identify(payload: { requestId: string; imageId: number; hint?: string }): Promise<AiIdentifyResult>
     cancel(requestId: string): Promise<boolean>
     runs(limit?: number): Promise<AiRunRow[]>
   }
@@ -411,6 +416,23 @@ export interface TransferResult {
  * renderer 引用主进程模块会把 fs / node:sqlite 一起拖进前端打包。
  * 两边形状必须一致，所以自检里有一条专门核对字段。
  */
+export interface AiIdentifyCandidate {
+  name: string
+  scientificName: string | null
+  /** 0~1 */
+  confidence: number
+  reason: string
+}
+
+export interface AiIdentifyResult {
+  ok: boolean
+  candidates: AiIdentifyCandidate[]
+  /** 失败原因，或「模型认不出」时的说明。成功且有候选时为 null */
+  message: string | null
+  /** 实际用的模型。出问题时能看出是不是用错了模型 */
+  model: string | null
+}
+
 export interface WeatherConfigSnapshot {
   provider: 'open-meteo' | 'qweather'
   qweatherHost: string

@@ -8,12 +8,12 @@
  *  - 所有输入都在主进程重新校验：渲染进程的输入一律视为不可信
  */
 
-import { app, dialog, ipcMain, shell } from 'electron'
+import { app, dialog, ipcMain, nativeImage, shell } from 'electron'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
 import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
 import { join } from 'node:path'
-import { writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { Db } from '../db/connection'
 import { backupsDir, dataDir, dbFilePath, getDb, imagesDir, makeManualBackup } from '../db'
 import { listBackups } from '../db/backup'
@@ -33,6 +33,7 @@ import {
   allSettings,
   archiveEnvironment,
   deleteImage,
+  getImage,
   getSetting,
   listEnvironments,
   listImages,
@@ -97,6 +98,7 @@ import type {
   SandboxStatus
 } from '../../core/types'
 import { autofillSpecies } from '../services/ai/autofill'
+import { identifyPlant } from '../services/ai/identify'
 import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } from '../services/ai/client'
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
 import { importImage, removeImageFiles } from '../services/images'
@@ -678,6 +680,70 @@ function registerAiIpc(): void {
         existing: (payload.existing ?? {}) as never,
         signal: controller.signal
       })
+    } finally {
+      runningAi.delete(payload.requestId)
+    }
+  })
+
+  /*
+   * 识图：把一张已有的图片发给视觉模型，拿回 Top-3 候选。
+   *
+   * 只做「认出是什么」，**不写任何数据** —— 候选交给现有的
+   * 「草稿 → 逐字段勾选 → 写入」流程处理，那条路的规矩（永不自动写、
+   * 安全字段强制人工核实）不该在这里被绕过。
+   *
+   * 图片**先缩小再发**：手机照片动辄几 MB，base64 还要再涨三分之一，
+   * 直接发多半被接口按体积拒掉。识别不需要原始分辨率。
+   */
+  handle('ai:identify', async (payload: { requestId: string; imageId: number; hint?: string }) => {
+    const db = getDb()
+    const settings = readAiSettings(db)
+    const apiKey = getApiKey()
+
+    const fail = (message: string) => ({ ok: false as const, candidates: [], message, model: null })
+
+    if (!apiKey) return fail('尚未配置 API Key。请到「设置 → AI」填写后再试。')
+
+    /*
+     * 视觉模型留空时**回落到对话模型**。
+     * 用户既然选了 deepseek-flash（它本身就能读图），没道理让他填两遍。
+     */
+    const model = (settings.visionModel ?? '').trim() || settings.chatModel
+    if (!model) return fail('尚未配置模型。请到「设置 → AI」填写对话模型。')
+
+    const image = getImage(db, payload.imageId)
+    if (!image) return fail('这张图片不在库里，可能已经被删除。')
+
+    const file = join(imagesDir(), image.path)
+    if (!existsSync(file)) return fail('图片文件找不到了，可能被移动或删除。')
+
+    // 缩到长边 1024 —— 足够认出叶片和花，又不会把请求撑大
+    const native = nativeImage.createFromPath(file)
+    const resized = native.isEmpty() ? null : native.resize({ width: 1024, quality: 'good' })
+    const dataUrl = resized
+      ? `data:image/jpeg;base64,${resized.toJPEG(82).toString('base64')}`
+      : `data:image/jpeg;base64,${readFileSync(file).toString('base64')}`
+
+    const controller = new AbortController()
+    runningAi.set(payload.requestId, controller)
+    try {
+      const result = await identifyPlant({
+        baseUrl: settings.baseUrl,
+        apiKey,
+        model,
+        imageDataUrl: dataUrl,
+        hint: payload.hint,
+        temperature: settings.temperature,
+        timeoutMs: settings.timeoutMs,
+        maxRetries: settings.maxRetries,
+        signal: controller.signal
+      })
+      return {
+        ok: result.ok,
+        candidates: result.candidates,
+        message: result.error,
+        model: result.model
+      }
     } finally {
       runningAi.delete(payload.requestId)
     }
