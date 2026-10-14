@@ -23,7 +23,7 @@
  */
 
 import type { NewFieldDefinition } from './types'
-import { FLOWER_COLOR_OPTIONS } from './sprite'
+import { CULTIVATION_OPTIONS, FLOWER_COLOR_OPTIONS } from './sprite'
 
 type Seed = Omit<NewFieldDefinition, 'ownerKind'>
 
@@ -258,6 +258,15 @@ const plantFields: Seed[] = [
     helpText: '决定花园里那一株显示成什么样子。'
   },
   { key: 'acquired_at', label: '入手 / 播种日期', groupName: '基础', type: 'date', helpText: '生长进度与养护计划的时间基准。' },
+  {
+    key: 'cultivation',
+    label: '栽种方式',
+    groupName: '基础',
+    type: 'select',
+    // 怎么种是**植株**的属性，不是物种的：同一株薄荷，你可以种盆里也可以种地里
+    options: [...CULTIVATION_OPTIONS],
+    helpText: '决定花园视图里画成什么底座。留空则水生植物默认水培、其余默认盆栽。'
+  },
   { key: 'pot_size', label: '盆径', groupName: '基础', type: 'text' },
   { key: 'plant_notes', label: '备注', groupName: '其他', type: 'longtext' }
 ]

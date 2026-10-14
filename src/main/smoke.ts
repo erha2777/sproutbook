@@ -40,10 +40,13 @@ import {
 } from '../core/growth'
 import type { GrowthStage } from '../core/growth'
 import {
+  CULTIVATION_BASE,
+  CULTIVATION_OPTIONS,
   FLOWER_COLOR_HEX,
   FLOWER_COLOR_OPTIONS,
   SPRITE_HABITS,
   SPRITE_SIZE,
+  baseForCultivation,
   buildPlantSprite,
   countPixels,
   flowerColorForSpecies,
@@ -1467,6 +1470,47 @@ export function runSmoke(outFile: string): number {
       check('尺寸说明：米', describeSize(200) === '成株 2 m')
       check('尺寸说明：非整数米', describeSize(150) === '成株 1.5 m')
       check('尺寸说明：未知', describeSize(null) === '成株高度未知')
+
+      // ---- 栽种方式决定底座 ----
+      //
+      // 第一版底座写死在株型里：乔木→地面、水生→水面、其余→花盆。
+      // 于是一盆盆栽的乔木也画在地里、地栽的月季也画在盆里 —— 这是明确画错，
+      // 而且「怎么种」是植株属性，不是物种属性。
+      check('盆栽 → 花盆底座', baseForCultivation('盆栽') === 'pot')
+      check('地栽 → 地面底座', baseForCultivation('地栽') === 'ground')
+      check('水培 → 水面底座', baseForCultivation('水培') === 'water')
+      check('附生板 → 木板底座', baseForCultivation('附生板') === 'board')
+      check('带空格也认', baseForCultivation('  地栽 ') === 'ground')
+      check('没填时水生植物默认水培', baseForCultivation(null, '水生') === 'water')
+      check('没填时乔木默认盆栽（阳台养花更常见）', baseForCultivation(null, '乔木') === 'pot')
+      check('填了就以填的为准，不被株型覆盖', baseForCultivation('地栽', '水生') === 'ground')
+      check('四个选项都有对应底座', CULTIVATION_OPTIONS.every((k) => CULTIVATION_BASE[k] !== undefined))
+
+      // 同一个株型换底座，画出来必须真的不同
+      {
+        const potted = buildPlantSprite({ habit: '乔木', look: growthLook('blooming'), cultivation: '盆栽' })
+        const inGround = buildPlantSprite({ habit: '乔木', look: growthLook('blooming'), cultivation: '地栽' })
+        check('同一株型换底座画出来不一样', potted.grid.join('|') !== inGround.grid.join('|'))
+        // 盆用陶土色 p、地用土色 S —— 底座那两行应该有区别
+        const bottom = (g: string[]): string => g.slice(13).join('')
+        check('盆栽的底部是花盆', bottom(potted.grid).includes('p'))
+        check('地栽的底部是土', bottom(inGround.grid).includes('S') && !bottom(inGround.grid).includes('p'))
+      }
+      {
+        const wat = buildPlantSprite({ habit: '草本', look: growthLook('blooming'), cultivation: '水培' })
+        check('水培的底部是水面', wat.grid.slice(13).join('').includes('w'))
+        const board = buildPlantSprite({ habit: '蕨类', look: growthLook('growing'), cultivation: '附生板' })
+        check('附生板的底部是木头', board.grid.slice(12).join('').includes('t'))
+      }
+
+      {
+        // 模板字段和底座选项必须对得上，否则选了画不出来
+        const defs = defaultFieldDefinitions()
+        const field = defs.find((d) => d.key === 'cultivation')
+        check('植株模板里有栽种方式字段', field !== undefined)
+        check('栽种方式在「基础」分组', field?.groupName === '基础')
+        check('栽种方式的选项和底座表一一对应', (field?.options ?? []).join(',') === CULTIVATION_OPTIONS.join(','), (field?.options ?? []).join(','))
+      }
     }
 
     // --- 像素精灵 ---

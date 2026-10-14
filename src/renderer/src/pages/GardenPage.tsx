@@ -111,13 +111,23 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
   /** 物种 id → 生长相关的属性 */
   const speciesById = useMemo(() => new Map(speciesList.map((s) => [s.id, s])), [speciesList])
 
+  /**
+   * 一株植物在花园里长什么样，需要哪些输入。
+   *
+   * 注意两类属性的来源不同：株型、成株高度、花期、花色是**物种**的
+   * （同品种共有）；栽种方式是**植株**的 —— 同一株薄荷，你可以种盆里
+   * 也可以种地里，这不是品种决定的。
+   */
   const growthOf = useCallback(
     (plant: PlantListItem) => {
       const sp = plant.species ? speciesById.get(plant.species.id) : undefined
       const attrs = sp?.attributes ?? {}
+      const own = plant.attributes ?? {}
       const habitRaw = attrs.growth_habit
+      const cultivationRaw = own.cultivation
       return {
         habit: typeof habitRaw === 'string' ? habitRaw : null,
+        cultivation: typeof cultivationRaw === 'string' ? cultivationRaw : null,
         bloomMonths: readMonthSet(attrs.bloom_months),
         dormancyMonths: readMonthSet(attrs.dormancy_months),
         // 物种填了花色就用真的，没填退回按名字散列
@@ -261,6 +271,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                       <PlantSprite
                         habit={g.habit}
                         look={growthLook(result.stage)}
+                        cultivation={g.cultivation}
                         flowerColor={g.flowerColor}
                         size={Math.round(PLOT_SPRITE_MAX * sizeScaleFor(g.matureHeight))}
                       />
@@ -318,6 +329,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                       <PlantSprite
                         habit={g.habit}
                         look={growthLook(result.stage)}
+                        cultivation={g.cultivation}
                         flowerColor={g.flowerColor}
                         size={Math.round(DETAIL_SPRITE_MAX * sizeScaleFor(g.matureHeight))}
                         title={`${selectedPlant.nickname} · ${describeSize(g.matureHeight)}`}

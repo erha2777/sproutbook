@@ -40,6 +40,8 @@ export function normalizeHabit(value: string | null | undefined): SpriteHabit {
 export interface SpriteOptions {
   habit: string | null | undefined
   look: GrowthLook
+  /** 栽种方式（盆栽/地栽/水培/附生板），决定底座。留空则按株型给默认值 */
+  cultivation?: string | null
   /** 花色。跟着物种走，同一片花园才有层次 */
   flowerColor?: string
   /** 叶色。默认是常用绿 */
@@ -174,18 +176,71 @@ class Canvas {
   }
 }
 
-/** 土面所在的行：往下就是花盆/地面。 */
+/** 土面所在的行：往下就是花盆/地面/水面。 */
 const GROUND_Y = 13
 
-function drawSoil(c: Canvas, pot: boolean): void {
-  if (pot) {
-    c.rect(4, GROUND_Y, 8, 2, 'p')
-    c.rect(4, GROUND_Y, 8, 1, 'P')
-    c.px(4, GROUND_Y + 1, 'P')
-    c.px(11, GROUND_Y + 1, 'P')
-  } else {
-    c.rect(2, GROUND_Y, 12, 3, 'S')
-    c.rect(2, GROUND_Y, 12, 1, 's')
+// ---------------------------------------------------------------------------
+// 栽种方式 → 底座
+// ---------------------------------------------------------------------------
+
+export type SpriteBase = 'pot' | 'ground' | 'water' | 'board'
+
+/**
+ * 植株的栽种方式。
+ *
+ * 之前底座是**写死在株型里**的：乔木→地面、水生→水面、其余→花盆。
+ * 于是一盆盆栽的乔木也画在地里、地栽的月季也画在盆里 —— 这是明确画错，
+ * 而且「怎么种」是植株的属性，不是物种的属性：同一株薄荷，
+ * 你可以种在盆里也可以种在地里。
+ */
+export const CULTIVATION_OPTIONS = ['盆栽', '地栽', '水培', '附生板'] as const
+
+export const CULTIVATION_BASE: Record<string, SpriteBase> = {
+  盆栽: 'pot',
+  地栽: 'ground',
+  水培: 'water',
+  附生板: 'board'
+}
+
+/**
+ * 取底座。
+ *
+ * 没填栽种方式时退回株型的天然底座：水生植物（睡莲、铜钱草）默认在水里，
+ * 其余默认盆栽 —— 这个应用的用户大多是阳台/窗台养花，
+ * 盆栽是更常见的默认，而且用户随时可以改成地栽。
+ */
+export function baseForCultivation(cultivation: string | null | undefined, habit?: string | null): SpriteBase {
+  const key = (cultivation ?? '').trim()
+  if (CULTIVATION_BASE[key]) return CULTIVATION_BASE[key]
+  return habit === '水生' ? 'water' : 'pot'
+}
+
+function drawBase(c: Canvas, base: SpriteBase): void {
+  switch (base) {
+    case 'pot':
+      c.rect(4, GROUND_Y, 8, 2, 'p')
+      c.rect(4, GROUND_Y, 8, 1, 'P')
+      c.px(4, GROUND_Y + 1, 'P')
+      c.px(11, GROUND_Y + 1, 'P')
+      break
+    case 'ground':
+      c.rect(2, GROUND_Y, 12, 3, 'S')
+      c.rect(2, GROUND_Y, 12, 1, 's')
+      break
+    case 'water':
+      // 水面 + 一圈玻璃口的暗示，和纯地栽区分开
+      c.rect(2, GROUND_Y, 12, 3, 'w')
+      c.rect(2, GROUND_Y, 12, 1, 'W')
+      c.px(2, GROUND_Y + 2, 'W')
+      c.px(13, GROUND_Y + 2, 'W')
+      break
+    case 'board':
+      // 附生板：一块树皮，植物长在上面
+      c.rect(3, GROUND_Y - 1, 10, 3, 't')
+      c.rect(3, GROUND_Y - 1, 10, 1, 'T')
+      c.px(4, GROUND_Y + 1, 'T')
+      c.px(11, GROUND_Y + 1, 'T')
+      break
   }
 }
 
@@ -220,10 +275,10 @@ function drawFlower(c: Canvas, x: number, y: number, kind: GrowthLook['flower'])
  * 约定：从 (8, GROUND_Y-1) 往上生长。对称的株型只画**左半边**，
  * 由 mirror() 补右半边；藤本和水生是不对称的，自己画完整。
  */
-const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook) => void> = {
+const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase) => void> = {
   /** 草本：一根细茎，对生叶 */
-  草本(c, look) {
-    drawSoil(c, true)
+  草本(c, look, base) {
+    drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     c.vline(7, top, GROUND_Y - 1, 'b')
     for (let i = 0; i < look.leaves; i++) {
@@ -238,8 +293,8 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook) => void> = {
   },
 
   /** 灌木：短主干 + 一蓬叶子 */
-  灌木(c, look) {
-    drawSoil(c, true)
+  灌木(c, look, base) {
+    drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     c.rect(7, top + 3, 1, GROUND_Y - top - 3, 't')
     // 蓬：从下往上收窄
@@ -258,8 +313,8 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook) => void> = {
   },
 
   /** 乔木：主干 + 圆树冠 */
-  乔木(c, look) {
-    drawSoil(c, false)
+  乔木(c, look, base) {
+    drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     c.rect(7, top + 3, 1, GROUND_Y - top - 3, 't')
     c.px(6, top + 6, 'T')
@@ -276,8 +331,8 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook) => void> = {
   },
 
   /** 藤本：细长茎带点弯。不对称，不镜像 */
-  藤本(c, look) {
-    drawSoil(c, true)
+  藤本(c, look, base) {
+    drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     let x = 8
     for (let y = GROUND_Y - 1; y >= top; y--) {
@@ -293,8 +348,8 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook) => void> = {
   },
 
   /** 多肉：低矮莲座，一层层往外摊 */
-  多肉(c, look) {
-    drawSoil(c, true)
+  多肉(c, look, base) {
+    drawBase(c, base)
     const layers = Math.max(1, Math.min(3, Math.ceil(look.stem / 3)))
     for (let i = 0; i < layers; i++) {
       const y = GROUND_Y - 1 - i
@@ -306,8 +361,8 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook) => void> = {
   },
 
   /** 球根：土面一个球，抽出几片带状叶 */
-  球根(c, look) {
-    drawSoil(c, true)
+  球根(c, look, base) {
+    drawBase(c, base)
     c.rect(6, GROUND_Y - 1, 3, 2, 'p')
     const blades = Math.max(1, Math.min(4, look.leaves + 1))
     for (let i = 0; i < blades; i++) {
@@ -318,10 +373,9 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook) => void> = {
     if (look.flower !== 'none') drawFlower(c, 8, GROUND_Y - 3 - look.stem, look.flower)
   },
 
-  /** 水生：水面 + 浮叶 + 立出水面的花。不对称，不镜像 */
-  水生(c, look) {
-    c.rect(1, GROUND_Y, 14, 3, 'w')
-    c.rect(1, GROUND_Y, 14, 1, 'W')
+  /** 水生：浮叶 + 立出水面的花。底座由栽种方式决定（睡莲默认水培） */
+  水生(c, look, base) {
+    drawBase(c, base)
     c.rect(5, GROUND_Y - 1, 4, 1, 'g') // 浮叶
     c.px(4, GROUND_Y - 1, 'G')
     c.px(9, GROUND_Y - 1, 'G')
@@ -330,8 +384,8 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook) => void> = {
   },
 
   /** 蕨类：一根主轴，两侧羽状小叶 */
-  蕨类(c, look) {
-    drawSoil(c, true)
+  蕨类(c, look, base) {
+    drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     c.vline(7, top, GROUND_Y - 1, 'b')
     for (let y = GROUND_Y - 2; y >= top; y -= 2) {
@@ -344,8 +398,8 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook) => void> = {
   },
 
   /** 附生：一截木头，叶子贴在木头上 */
-  附生(c, look) {
-    drawSoil(c, true)
+  附生(c, look, base) {
+    drawBase(c, base)
     const top = GROUND_Y - 1 - Math.max(3, look.stem)
     c.rect(7, top, 1, GROUND_Y - top - 1, 't')
     c.px(5, top + 2, 'T')
@@ -371,9 +425,10 @@ export interface BuiltSprite {
 export function buildPlantSprite(options: SpriteOptions): BuiltSprite {
   const habit = normalizeHabit(options.habit)
   const look = options.look
+  const base = baseForCultivation(options.cultivation, habit)
   const c = new Canvas()
 
-  SHAPES[habit](c, look)
+  SHAPES[habit](c, look, base)
 
   // 种子阶段：只画土，露一点芽
   if (look.stem === 0 && look.leaves === 0 && !look.bare) {

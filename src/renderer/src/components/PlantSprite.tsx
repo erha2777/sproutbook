@@ -45,6 +45,7 @@ export function mergeRuns(grid: PixelGrid): Run[] {
 export function PlantSprite({
   habit,
   look,
+  cultivation,
   flowerColor,
   leafColor,
   size = 64,
@@ -52,6 +53,8 @@ export function PlantSprite({
 }: {
   habit: string | null | undefined
   look: GrowthLook
+  /** 栽种方式（盆栽/地栽/水培/附生板），决定底座 */
+  cultivation?: string | null
   flowerColor?: string
   leafColor?: string
   /** 渲染边长（像素）。网格始终是 16×16，这里只放大 */
@@ -59,10 +62,10 @@ export function PlantSprite({
   title?: string
 }): ReactNode {
   const built = useMemo(
-    () => buildPlantSprite({ habit, look, flowerColor, leafColor }),
+    () => buildPlantSprite({ habit, look, cultivation, flowerColor, leafColor }),
     // look 是每次新建的对象，逐字段比较，否则 useMemo 等于没有
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [habit, flowerColor, leafColor, look.stem, look.leaves, look.flower, look.wither, look.bare]
+    [habit, cultivation, flowerColor, leafColor, look.stem, look.leaves, look.flower, look.wither, look.bare]
   )
   const runs = useMemo(() => mergeRuns(built.grid), [built.grid])
 
