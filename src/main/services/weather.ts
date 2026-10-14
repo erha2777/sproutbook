@@ -273,8 +273,21 @@ export async function assessPlantsWeather(
         error = error ?? `没能定位「${env.district || env.city || env.name}」`
         continue
       }
-      // 定位成功就写回档案：下次不用再查，也让用户看得见用的是哪个坐标
-      db.run('UPDATE environments SET lat = ?, lon = ? WHERE id = ?', point.latitude, point.longitude, env.id)
+      /*
+       * **不把解析结果写回档案。**
+       *
+       * 原来这里有一句 UPDATE environments SET lat/lon —— 想法是「下次不用再查，
+       * 也让用户看得见用的是哪个坐标」。但它抢了用户的决定权：
+       *
+       *   用户清空经纬度，是在表达「别用那个点，请按区县名重新解析」；
+       *   结果一打开养护计划就被写回岳阳市中心 —— 怎么清都清不掉。
+       *
+       * 而且它把两种完全不同的语义塞进了同一格：手填的坐标（用户的明确指定）
+       * 和自动解析的结果（我的猜测）。现在 lat/lon 只表示前者，猜测一律不留痕。
+       *
+       * 「看得见用的是哪个坐标」由天气面板负责，那里本来就列出了预报点和坐标，
+       * 不需要拿用户的数据去当告示板。
+       */
     }
 
     const pointKey = `${point.latitude.toFixed(3)},${point.longitude.toFixed(3)}`
