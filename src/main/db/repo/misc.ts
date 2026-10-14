@@ -108,8 +108,13 @@ export function saveEnvironment(db: Db, input: EnvironmentInput): Environment {
 }
 
 export function archiveEnvironment(db: Db, id: number): boolean {
-  db.run("UPDATE environments SET archived_at = datetime('now') WHERE id = ?", id)
-  return true
+  const r = db.run("UPDATE environments SET archived_at = datetime('now') WHERE id = ?", id)
+  /*
+   * 影响 0 行说明那条记录已经不在了 —— 如实返回 false。
+   * 一直 return true 的话，界面报「已删除」而对象还在列表里，
+   * 用户会以为删除功能坏了。
+   */
+  return Number(r.changes) > 0
 }
 
 // ---------------------------------------------------------------------------
@@ -202,12 +207,38 @@ export function deleteImage(db: Db, id: number): ImageRecord | null {
 // 设置（键值，值统一存 JSON 字符串）
 // ---------------------------------------------------------------------------
 
+/**
+ * 记录哪些设置项**读不出来**（JSON 坏了）。
+ *
+ * 为什么需要它：以前坏掉的设置静默回落成默认值，于是
+ * **「读取失败」和「从未配置」在界面上长得一模一样** ——
+ * ai 那条一坏，baseUrl 变回 OpenAI、模型变空，界面显示
+ * 「尚未配置对话模型」，用户明明配过，只会以为配置被吞了，
+ * 然后**把原值覆盖掉**。
+ *
+ * 这里不抛异常（很多调用点是启动路径，抛不起），
+ * 改成一个可以问的名单，让设置页能如实说「你的配置读不出来」。
+ */
+const corruptSettings = new Set<string>()
+
+/** 哪些设置项读出来是坏的。设置页用它给用户一个准话。 */
+export function listCorruptSettings(): string[] {
+  return [...corruptSettings]
+}
+
 export function getSetting<T>(db: Db, key: string, fallback: T): T {
   const row = db.get<{ value: string }>('SELECT value FROM settings WHERE key = ?', key)
-  if (!row) return fallback
+  if (!row) {
+    // 这一项确实没配过 —— 和「坏了」不是一回事
+    corruptSettings.delete(key)
+    return fallback
+  }
   try {
-    return JSON.parse(row.value) as T
+    const parsed = JSON.parse(row.value) as T
+    corruptSettings.delete(key)
+    return parsed
   } catch {
+    corruptSettings.add(key)
     return fallback
   }
 }

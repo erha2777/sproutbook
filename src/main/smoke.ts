@@ -33,8 +33,8 @@ import { buildIdentifyMessages, parseIdentifyResponse } from './services/ai/iden
 import { chat } from './services/ai/client'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
-import { listPlants, plantStats, savePlant } from './db/repo/plants'
-import { archiveEnvironment, getEnvironment, getSetting, listEnvironments, saveEnvironment, setSetting } from './db/repo/misc'
+import { archivePlant, listPlants, plantStats, savePlant } from './db/repo/plants'
+import { archiveEnvironment, getEnvironment, getSetting, listCorruptSettings, listEnvironments, saveEnvironment, setSetting } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
@@ -1975,7 +1975,70 @@ export async function runSmoke(outFile: string): Promise<number> {
         }
       }
 
-      // ---- 地名解析的缓存 ----
+        // ---- 写操作要如实报告有没有改到东西 ----
+      //
+      // 这批（归档植株/位置、删规则/任务/日志、删材料、归档恢复配方）
+      // 原来一律 return true。**报「已删除」之后对象又出现在列表里**，
+      // 用户会以为删除功能坏了。
+      //
+      // Db.run 早就把 changes 返回出来了，只是一直没人读。
+      {
+        check('归档一个不存在的植株 → false', archivePlant(db, 999999) === false)
+        check('归档一个不存在的位置 → false', archiveEnvironment(db, 999999) === false)
+        check('删一条不存在的规则 → false', deleteCareRule(db, 999999) === false)
+        check('删一条不存在的任务 → false', deleteCareTask(db, 999999) === false)
+        check('删一条不存在的日志 → false', deleteCareLog(db, 999999) === false)
+        check('删一个不存在的材料 → false', deleteMaterial(db, 999999) === false)
+        check('归档一个不存在的配方 → false', archiveRecipe(db, 999999) === false)
+        check('恢复一个不存在的配方 → false', restoreRecipe(db, 999999) === false)
+
+        // 真的存在的要返回 true —— 不然就是把功能改坏了
+        const victim = saveSpeciesOk(db, { values: { common_name: '待归档物种' } })
+        const victimPlant = savePlant(db, { nickname: '待归档植株', values: { nickname: '待归档植株' } })
+        check(
+          '真的存在时仍然返回 true',
+          victimPlant.plant ? archivePlant(db, victimPlant.plant.id) === true : false
+        )
+        /*
+         * 重复归档一条**已归档**的植株仍然返回 true —— 那一行确实还在，
+         * UPDATE 会重写归档时间戳，changes = 1。这是对的：
+         * 这个函数回答的是「有没有改到东西」，不是「状态有没有变化」。
+         * （我第一版把它断言成 false，是我想当然了。）
+         */
+        check('重复归档仍然 true（行还在，时间戳被重写）', archivePlant(db, victimPlant.plant?.id ?? 0) === true)
+        check('物种本身没问题', victim.species.commonName === '待归档物种')
+      }
+
+      // ---- 设置读不出来时不能装作「没配过」 ----
+      //
+      // 坏掉的设置以前静默回落成默认值，于是「读取失败」和「从未配置」
+      // 在界面上长得一样：ai 那条一坏，界面显示「尚未配置对话模型」，
+      // 用户明明配过，只会以为配置被吞了，然后把原值覆盖掉。
+      {
+        setSetting(db, '自检.坏设置', { 正常: true })
+        check('正常设置能读出来', JSON.stringify(getSetting(db, '自检.坏设置', null)) === '{"正常":true}')
+        check('正常设置不出现在坏名单里', !listCorruptSettings().includes('自检.坏设置'))
+
+        // 直接写一段坏 JSON 进去
+        db.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", '自检.坏设置', '{这不是 JSON')
+        const fallbackValue = getSetting(db, '自检.坏设置', '兜底')
+        check('坏设置仍然给兜底值（启动路径抛不起）', fallbackValue === '兜底')
+        check('但会被记进坏名单，界面才有话可说', listCorruptSettings().includes('自检.坏设置'), listCorruptSettings().join(','))
+
+        // 修好之后要从名单里消失，否则会一直报「配置坏了」
+        setSetting(db, '自检.坏设置', { 修好了: true })
+        getSetting(db, '自检.坏设置', null)
+        check('修好之后从名单里移除', !listCorruptSettings().includes('自检.坏设置'))
+
+        // 从来没配过的项不该被当成坏的
+        db.run('DELETE FROM settings WHERE key = ?', '自检.从没配过')
+        getSetting(db, '自检.从没配过', null)
+        check('从没配过的项不算坏', !listCorruptSettings().includes('自检.从没配过'))
+
+        db.run('DELETE FROM settings WHERE key = ?', '自检.坏设置')
+      }
+
+    // ---- 地名解析的缓存 ----
       //
       // 这条能在**不联网**的情况下验证：往缓存里塞一个特征明显的假结果，
       // 再调 lookupLocation。拿回那个假值 = 命中了缓存 = 没发请求。

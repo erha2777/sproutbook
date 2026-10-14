@@ -212,8 +212,13 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
 }
 
 export function deleteCareRule(db: Db, id: number): boolean {
-  db.run('DELETE FROM care_rules WHERE id = ?', id)
-  return true
+  const r = db.run('DELETE FROM care_rules WHERE id = ?', id)
+  /*
+   * 影响 0 行说明那条记录已经不在了 —— 如实返回 false。
+   * 一直 return true 的话，界面报「已删除」而对象还在列表里，
+   * 用户会以为删除功能坏了。
+   */
+  return Number(r.changes) > 0
 }
 
 export function careRuleCount(db: Db): number {
@@ -478,8 +483,13 @@ export function deleteCareTask(db: Db, id: number): boolean {
   return db.transaction(() => {
     // task_id 没有外键约束（日志要能在任务删除后继续存在），这里显式解绑
     db.run('UPDATE care_logs SET task_id = NULL WHERE task_id = ?', id)
-    db.run('DELETE FROM care_tasks WHERE id = ?', id)
-    return true
+    const r = db.run('DELETE FROM care_tasks WHERE id = ?', id)
+    /*
+     * 看的是**删任务**那条的 changes，不是解绑日志那条 ——
+     * 日志本来就可能一条都没有，用它的行数判断会误报失败。
+     * 影响 0 行说明这条任务已经不在了，如实返回 false。
+     */
+    return Number(r.changes) > 0
   })
 }
 
@@ -750,8 +760,13 @@ export function addCareLog(
 }
 
 export function deleteCareLog(db: Db, id: number): boolean {
-  db.run('DELETE FROM care_logs WHERE id = ?', id)
-  return true
+  const r = db.run('DELETE FROM care_logs WHERE id = ?', id)
+  /*
+   * 影响 0 行说明那条记录已经不在了 —— 如实返回 false。
+   * 一直 return true 的话，界面报「已删除」而对象还在列表里，
+   * 用户会以为删除功能坏了。
+   */
+  return Number(r.changes) > 0
 }
 
 // ---------------------------------------------------------------------------
