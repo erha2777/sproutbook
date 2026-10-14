@@ -92,13 +92,20 @@ registerImageScheme()
 const hasSingleInstanceLock = isSmoke ? true : app.requestSingleInstanceLock()
 
 if (!hasSingleInstanceLock) {
+  // 记一笔：否则这次启动在用户眼里就是「闪退」，日志是唯一的线索
+  logStartup('未取得单实例锁：已有另一个 Sproutbook 在运行，本实例退出')
   app.quit()
 } else {
   app.on('second-instance', () => {
     const [win] = BrowserWindow.getAllWindows()
     if (win) {
+      // 关键：窗口可能从未被显示过（见 createWindow 里的说明），
+      // 光 focus() 对隐藏窗口是没用的，必须先 show()。
       if (win.isMinimized()) win.restore()
+      if (!win.isVisible()) win.show()
       win.focus()
+      win.moveTop()
+      logStartup('收到第二个实例的启动请求，已尝试把已有窗口带到前台')
     }
   })
 }
@@ -124,10 +131,43 @@ function createWindow(): void {
     }
   })
 
-  // 先渲染完再显示，避免白屏闪烁
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  /**
+   * 窗口显示策略。
+   *
+   * ⚠️ 这里曾经有个会导致「应用隐身」的 bug：
+   * 窗口以 show:false 创建，然后**只**依赖 ready-to-show 事件来显示。
+   * 一旦该事件不触发（渲染层加载失败、GPU 异常等），窗口就永远隐藏 ——
+   * 进程在后台跑着，用户却什么都看不到；而且后续每次启动都抢不到单实例锁
+   * 从而静默退出，表现出来就是「双击一闪而过」。
+   *
+   * 所以现在有三重保障：正常事件、超时兜底、加载失败兜底。任一路径都会显示窗口。
+   */
+  let windowShown = false
+  const showWindow = (reason: string): void => {
+    if (windowShown) return
+    windowShown = true
+    mainWindow?.show()
+    logStartup('窗口已显示', reason)
+  }
+
+  mainWindow.once('ready-to-show', () => showWindow('ready-to-show 事件'))
+
+  const showFallbackTimer = setTimeout(() => {
+    if (!windowShown) {
+      logStartup('ready-to-show 未在 6 秒内触发，强制显示窗口（界面可能不完整）')
+      showWindow('超时兜底')
+    }
+  }, 6000)
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    logStartup('渲染层加载失败', { errorCode, errorDescription, validatedURL })
+    // 即使加载失败也要把窗口显示出来，让用户看到界面而不是完全没反应
+    showWindow('加载失败兜底')
+  })
 
   mainWindow.on('closed', () => {
+    clearTimeout(showFallbackTimer)
+    windowShown = false
     mainWindow = null
   })
 
