@@ -322,8 +322,14 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
           </>
         )}
 
-        {/* 选中某株后的详情：把「为什么是这个阶段」讲清楚 */}
-        {selectedPlant
+        {/*
+          选中某株后的详情：把「为什么是这个阶段、为什么画这么大」讲清楚。
+
+          只在**花园视图**里显示。之前在列表视图下也挂着 ——
+          切过去以后底下留着一个花园的详情面板，看着像没切干净。
+          列表视图里点卡片是打开编辑器，本来就不该有这一块。
+        */}
+        {view === 'scene' && selectedPlant
           ? (() => {
               const g = growthOf(selectedPlant)
               const info = phases[selectedPlant.id]
