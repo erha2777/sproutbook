@@ -16,9 +16,14 @@
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
     "build": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && electron-vite build",
     "start": "electron-vite preview",
-    "smoke": "electron-vite build && electron . --smoke",
-    "dist": "electron-vite build && electron-builder --publish never",
-    "dist:win": "electron-vite build && electron-builder --win --publish never"
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:electron": "electron-vite build && electron . --smoke",
+    "seed-demo": "node scripts/seed-demo.mjs",
+    "verify": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && node scripts/smoke.mjs",
+    "dist": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && electron-vite build && electron-builder --publish never",
+    "dist:win": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && electron-vite build && electron-builder --win --publish never",
+    "dist:mac": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && electron-vite build && electron-builder --mac --publish never",
+    "dist:linux": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && electron-vite build && electron-builder --linux --publish never"
   },
   "dependencies": {},
   "devDependencies": {
