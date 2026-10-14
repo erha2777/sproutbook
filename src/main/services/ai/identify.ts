@@ -50,6 +50,13 @@ export interface IdentifyCandidate {
 
 export interface IdentifyResult {
   ok: boolean
+  /**
+   * 模型的原话。
+   *
+   * 认不出和没按格式返回，从解析结果上分不出来 —— 所以把原文交给用户，
+   * 让他自己看一眼，而不是替他编一个原因（「多半是照片看不清」就是这么来的）。
+   */
+  raw: string | null
   candidates: IdentifyCandidate[]
   error: string | null
   /** 实际用的模型，出问题时能看出来是不是用错了模型 */
@@ -245,21 +252,28 @@ export async function identifyPlant(params: IdentifyParams): Promise<IdentifyRes
   })
 
   if (!outcome.ok) {
-    return { ok: false, candidates: [], error: outcome.error ?? '调用失败', model: params.model }
+    return { ok: false, candidates: [], error: outcome.error ?? '调用失败', raw: outcome.content ?? null, model: params.model }
   }
 
   const candidates = parseIdentifyResponse(outcome.content ?? '')
   if (candidates.length === 0) {
     /*
-     * 调用成功但没解析出候选：可能是模型说「认不出」，
-     * 也可能是没按格式返回。两种都如实告诉用户，不假装识别成功。
+     * 调用成功但没解析出候选。两种情况：
+     *   ① 模型真的认不出（给了空数组或说了句人话）
+     *   ② 模型没按格式返回
+     *
+     * **从解析结果上分不出是哪一种**，所以别替它下结论 ——
+     * 原话一起带回去。界面上原本写死了「多半是这张照片看不清特征，
+     * 换个角度再拍」，那是在替服务端编原因：用户会去反复重拍，
+     * 而问题可能根本不在照片上。
      */
     return {
       ok: true,
       candidates: [],
       error: null,
+      raw: outcome.content ?? '',
       model: params.model
     }
   }
-  return { ok: true, candidates, error: null, model: params.model }
+  return { ok: true, candidates, error: null, raw: outcome.content ?? null, model: params.model }
 }

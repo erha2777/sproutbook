@@ -137,13 +137,49 @@ export async function chat(request: ChatRequest): Promise<ChatOutcome> {
         throw new HttpError(response.status, `HTTP ${response.status}：${redact(text).slice(0, 500)}`)
       }
 
-      const data = (await response.json()) as {
+      /*
+       * **200 也要把 body 读出来当文本**，再自己解析。
+       *
+       * 原来直接用 response.json()：body 不是 JSON 时（反代登录页、网关的 HTML
+       * 错误页，很常见）它抛 SyntaxError，被下面的 catch 归成「网络错误」——
+       * 于是用户看到「网络错误：Unexpected token '<'」，跑去查 Wi-Fi，
+       * 而网络其实是通的，**真正的原因（服务端到底回了什么）从头到尾没露过面。**
+       */
+      const rawText = await safeText(response)
+
+      let data: {
         choices?: Array<{ message?: { content?: string } }>
         usage?: { prompt_tokens?: number; completion_tokens?: number }
         model?: string
+        error?: unknown
+      }
+      try {
+        data = JSON.parse(rawText) as typeof data
+      } catch {
+        throw new HttpError(
+          200,
+          `服务端返回的不是 JSON（HTTP 200）。多半是接口地址填错了，或者中间有网关/代理拦下来了。` +
+            `\n返回内容开头：${redact(rawText).slice(0, 300) || '(空)'}`
+        )
       }
 
       const content = data.choices?.[0]?.message?.content ?? ''
+
+      /*
+       * **没有 choices 或内容为空时，不能算成功。**
+       *
+       * 网关和兼容服务经常用 200 回一个 {"error":{...}}。原来这里
+       * `content ?? ''` 就返回 ok: true，于是下游各自编一个原因：
+       *   补全 → 「模型没有返回可解析的 JSON，可以换一个模型」
+       *   识图 → 「多半是这张照片看不清特征，换个角度、拍清楚叶片和花再试」
+       * **用户在照片上白费功夫，而服务端早就把原因写在 body 里了。**
+       */
+      if (!content) {
+        const bodyPreview = redact(rawText).slice(0, 400) || '(空)'
+        const hint = data.error ? '服务端在 error 字段里说明了原因' : '服务端既没给 choices，也没给 error'
+        throw new HttpError(200, `模型没有返回内容（HTTP 200）。${hint}。\n返回内容：${bodyPreview}`)
+      }
+
       return {
         ok: true,
         content,

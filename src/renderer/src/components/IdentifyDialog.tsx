@@ -108,9 +108,24 @@ export function IdentifyDialog({
             {result.message ? <Notice tone="warn">{result.message}</Notice> : null}
 
             {candidates.length === 0 && !result.message ? (
+              /*
+               * 这里原来写死了「多半是这张照片看不清特征，换个角度再拍」——
+               * **那是在替服务端编原因。** 没给出候选可能是照片确实看不清，
+               * 也可能是模型没按格式返回。用户按那句话去反复重拍，
+               * 而问题可能根本不在照片上。
+               *
+               * 现在把模型的原话摆出来，让用户自己看一眼判断。
+               */
               <Notice tone="warn">
-                模型没给出候选 —— 多半是这张照片看不清特征。
-                <b>换个角度、拍清楚叶片和花再试</b>，或者直接手填名称。
+                模型没给出候选。可能是这张照片看不清特征，也可能是它没按格式回答。
+                {result.raw ? (
+                  <>
+                    <br />
+                    模型的原话：<span className="small muted">{result.raw.slice(0, 300)}</span>
+                  </>
+                ) : null}
+                <br />
+                <b>可以先看看上面那句话再决定要不要重拍</b>，或者直接手填名称。
               </Notice>
             ) : null}
 
