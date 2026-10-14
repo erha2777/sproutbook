@@ -1588,7 +1588,9 @@ export async function runSmoke(outFile: string): Promise<number> {
         const plain = buildIdentifyMessages(dataUrl)
         check('识图消息是两段：系统提示 + 用户', plain.length === 2)
         check('系统提示要求只输出 JSON', String(plain[0].content).includes('只输出一个 JSON'))
-        check('系统提示要求不确定就别硬凑', String(plain[0].content).includes('不要为了凑数编造'))
+        check('系统提示要求尽量给 3 个', String(plain[0].content).includes('尽量给 3 个候选'))
+        check('系统提示要求备选如实标低置信度', String(plain[0].content).includes('要如实写低'))
+        check('但也说了凑不出别凑', String(plain[0].content).includes('凑不出第三条就别凑'))
         const userParts = Array.isArray(plain[1].content) ? plain[1].content : []
         check('用户那一段带上了图片', userParts.some((p) => p.type === 'image_url'), JSON.stringify(userParts.map((p) => p.type)))
         check('图片用的是传进来的 data URL', JSON.stringify(plain[1].content).includes(dataUrl))
