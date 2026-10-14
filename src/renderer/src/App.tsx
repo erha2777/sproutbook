@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Panel, Sign, ToastProvider, cx, useToast } from './components/ui'
+import { Button, Notice, Panel, Sign, ToastProvider, cx, useToast } from './components/ui'
 import { GardenPage } from './pages/GardenPage'
 import { SpeciesPage } from './pages/SpeciesPage'
 import { SpeciesEditor } from './pages/SpeciesEditor'
@@ -76,6 +76,28 @@ function Shell(): ReactNode {
   const toast = useToast()
   const [route, setRoute] = useState<Route>(routeFromHash)
   const [speciesCount, setSpeciesCount] = useState<number | null>(null)
+  /**
+   * 兼容模式首启提示。
+   *
+   * 触发条件：当前进程是用 --no-sandbox 启动的（说明用户只能靠启动器运行），
+   * 但桌面上还没有兼容模式快捷方式。这时主动提示一键创建，
+   * 用户就不用自己去设置页里找了。
+   */
+  const [compatHint, setCompatHint] = useState(false)
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        if (window.localStorage.getItem('sproutbook.compatHintDismissed') === '1') return
+        const status = await window.api.sandbox.status()
+        if (status.disabled && status.canCreateShortcut && !status.shortcuts.some((s) => s.exists)) {
+          setCompatHint(true)
+        }
+      } catch {
+        // 拿不到状态就不提示，绝不因为提示逻辑影响启动
+      }
+    })()
+  }, [])
 
   // 路由 → hash 同步，并支持浏览器前进/后退
   useEffect(() => {
@@ -159,6 +181,44 @@ function Shell(): ReactNode {
       </aside>
 
       <main className="main">
+        {compatHint ? (
+          <div style={{ padding: '0 0 2px' }}>
+            <Notice tone="warn">
+              你正在用<b>兼容模式</b>启动（命令行带了 <span className="mono">--no-sandbox</span>），
+              说明这台机器上 Chromium 沙箱无法初始化，直接双击 exe 会没反应。
+              <br />
+              要不要在桌面创建一个快捷方式？以后<b>直接双击图标</b>就能打开，不用启动器、不用管理员权限。
+              <div className="row" style={{ marginTop: 9 }}>
+                <Button
+                  variant="primary"
+                  size="small"
+                  onClick={async () => {
+                    try {
+                      const result = await window.api.sandbox.createShortcut('desktop')
+                      setCompatHint(false)
+                      toast.push(`已创建：${result.created.path}`, 'success')
+                    } catch (error) {
+                      toast.push(error instanceof Error ? error.message : '创建失败', 'error')
+                    }
+                  }}
+                >
+                  创建桌面快捷方式
+                </Button>
+                <Button
+                  size="small"
+                  variant="ghost"
+                  onClick={() => {
+                    window.localStorage.setItem('sproutbook.compatHintDismissed', '1')
+                    setCompatHint(false)
+                  }}
+                >
+                  不再提示
+                </Button>
+              </div>
+            </Notice>
+          </div>
+        ) : null}
+
         <div className="content">
           {route.name === 'garden' ? <GardenPage onGoSpecies={() => setRoute({ name: 'species' })} /> : null}
 
