@@ -170,7 +170,7 @@ export interface WeatherWarningResult {
    */
   configured: boolean
   /** 参与判断的地点（按地点去重，同一地点只请求一次） */
-  places: Array<{ name: string; label: string; days: DailyTemp[] }>
+  places: Array<{ name: string; label: string; latitude: number; longitude: number; days: DailyTemp[] }>
   /** 收拢后的风险，每株每种一条 */
   risks: WeatherRisk[]
   /** 逐天的明细，界面展开时用 */
@@ -218,6 +218,8 @@ export async function assessPlantsWeather(db: Db, force = false): Promise<Weathe
   const places: WeatherWarningResult['places'] = []
   /** 环境 id → 该地点的逐日预报。同一地点只请求一次。 */
   const daysByEnvId = new Map<number, DailyTemp[]>()
+  /** 每个环境对应的预报点显示名，例如「中国 · 湖南 · 岳阳」 */
+  const daysLabel = new Map<number, string>()
   let fetchedAt: string | null = null
   let error: string | null = null
 
@@ -250,10 +252,11 @@ export async function assessPlantsWeather(db: Db, force = false): Promise<Weathe
       }
       days = fetched
       daysByPoint.set(pointKey, days)
-      places.push({ name: env.name, label: point.label, days })
+      places.push({ name: env.name, label: point.label, latitude: point.latitude, longitude: point.longitude, days })
       fetchedAt = new Date().toISOString()
     }
     daysByEnvId.set(env.id, days)
+    daysLabel.set(env.id, point.label || env.name)
   }
 
   if (daysByEnvId.size === 0) return { ...empty, configured: true, error }
@@ -261,6 +264,8 @@ export async function assessPlantsWeather(db: Db, force = false): Promise<Weathe
   // 组装判断输入：每株 + 它所在的养护位置 + 那个位置的预报
   const inputs: WeatherRiskInput[] = []
   const daysByPlant = new Map<number, DailyTemp[]>()
+  /** 每株对应的预报点标签 —— 提示语要把温度归给它，而不是归给院子 */
+  const labelByPlant = new Map<number, string>()
   for (const plant of plants) {
     if (plant.envId === null) continue
     const env = envById.get(plant.envId)
@@ -279,17 +284,24 @@ export async function assessPlantsWeather(db: Db, force = false): Promise<Weathe
       canHeat: env.canHeat
     })
     daysByPlant.set(plant.id, days)
+    labelByPlant.set(plant.id, daysLabel.get(plant.envId) ?? '')
   }
 
   const daily: WeatherRisk[] = []
   for (const input of inputs) {
     const days = daysByPlant.get(input.plantId)
-    if (days) daily.push(...assessWeatherRisks([input], days))
+    if (days) daily.push(...assessWeatherRisks([input], days, labelByPlant.get(input.plantId)))
   }
 
   return {
     configured: true,
-    places: places.map((p) => ({ name: p.name, label: p.label, days: p.days })),
+    places: places.map((p) => ({
+      name: p.name,
+      label: p.label,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      days: p.days
+    })),
     risks: summarizeRisks(daily),
     daily,
     unknownCold: unjudgeable(inputs, 'frost').map((p) => p.plantName),

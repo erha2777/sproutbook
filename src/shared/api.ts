@@ -409,6 +409,9 @@ export interface TransferResult {
 export interface WeatherPlace {
   name: string
   label: string
+  /** 实际用的坐标。精度可见，用户才知道要不要填精确经纬度 */
+  latitude: number
+  longitude: number
   days: Array<{ date: string; tempMin: number; tempMax: number }>
 }
 
