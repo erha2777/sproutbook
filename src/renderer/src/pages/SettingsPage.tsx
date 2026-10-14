@@ -520,20 +520,21 @@ export function SettingsPage(): ReactNode {
           <>
             <Field
               label="API Host"
-              help="在 dev.qweather.com 控制台 → 设置 里查看。形如 h2a9cf3mhs.xy.qweatherapi.com，每个账号一个。"
+              help="在 dev.qweather.com 控制台 → 设置 里查看。每个账号随机分配一个，形如 <你的ID>.xx.qweatherapi.com —— 中间那两位各人不同（有 xy、re 等），照抄自己的即可，不要照抄示例。只填域名，不要带 https:// 前缀。"
             >
               <TextInput
                 value={qweatherHostDraft}
                 onChange={setQweatherHostDraft}
-                placeholder="h2a9cf3mhs.xy.qweatherapi.com"
+                placeholder="<你的ID>.xx.qweatherapi.com"
               />
             </Field>
             <Field
               label="API Key"
               help={
-                weatherConfig.hasWeatherKey
+                (weatherConfig.hasWeatherKey
                   ? '已配置。留空＝保持不变；填入新值会覆盖。'
-                  : '在同一个控制台里创建。密钥存进系统钥匙串，不会写进数据库。'
+                  : '在同一个控制台里创建。密钥存进系统钥匙串，不会写进数据库。') +
+                '注意：和风的每个凭据要单独勾选能访问哪些 API —— 没勾 GeoAPI 的话，测试会报 403。'
               }
             >
               <TextInput
