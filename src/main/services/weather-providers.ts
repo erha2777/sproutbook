@@ -190,9 +190,18 @@ const QWEATHER_ERRORS: Record<string, string> = {
  * 每一种都有明确的去处，那就直接说去处。
  */
 const QWEATHER_ERROR_ADVICE: Record<string, string> = {
+  /*
+   * 这一个标题覆盖**两种**限制，别只看一种就下结论。
+   *
+   * 我第一版只写了「安全限制」（IP / Referer），结果用户踩的是
+   * 「API 限制 → 指定数据」里没勾 GeoAPI —— 照那个提示去改会改错地方。
+   * 所以两种都列出来，并且把更常见的「没勾 GeoAPI」放前面。
+   */
   'Security Restriction':
-    '控制台里开了「安全限制」。到 dev.qweather.com 控制台 → 设置 → 安全限制，改成「不限制」即可。' +
-    '桌面应用不发 Referer，所以 Referer 白名单一定拦；IP 白名单也会因为家里宽带换 IP 而失效。',
+    '凭据的「API 限制」或「安全限制」挡住了这个请求。两种都查一下：' +
+    '① 控制台 → 凭据 → API 限制：如果选了「指定数据」，确认 **GeoAPI** 在勾选列表里（定位地名正是靠它）；' +
+    '② 控制台 → 设置 → 安全限制：如果开了 IP / Referer 白名单，改成「不限制」——' +
+    '桌面应用不发 Referer，白名单一定拦；IP 白名单也会因为家里宽带换 IP 而失效。',
   'Invalid Host': 'API Host 填错了。到控制台 → 设置 里复制你自己的那串，注意别带 https:// 前缀。',
   Unauthorized: '凭据无效。检查 API Key 是否复制完整（前后别带空格），或它是否属于这个 API Host。',
   Forbidden: '这个凭据没有访问 GeoAPI 的权限。到控制台给凭据勾上 GeoAPI。',
