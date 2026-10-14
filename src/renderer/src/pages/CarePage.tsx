@@ -187,13 +187,21 @@ function TaskRecipe({
   materials
 }: {
   recipeId: number
-  recipes: RecipeListItem[]
-  materials: Material[]
+  /**
+   * 配方列表。**null 表示没取到**，和「取到了但是空的」不是一回事 ——
+   * 混为一谈的话，一次加载失败会让每张任务卡都断言「配方已删除」，
+   * 用户就会去重建一份其实还在的配方。
+   */
+  recipes: RecipeListItem[] | null
+  materials: Material[] | null
 }): ReactNode {
+  if (recipes === null) {
+    return <div className="small muted">📋 配方未能读取（列表加载失败，配方本身可能还在）</div>
+  }
   const rec = recipes.find((r) => r.id === recipeId)
   if (!rec) return <div className="small muted">📋 配方已删除</div>
   const parts = rec.items.map((it) => {
-    const label = it.name ?? materials.find((m) => m.id === it.materialId)?.name ?? '材料'
+    const label = it.name ?? materials?.find((m) => m.id === it.materialId)?.name ?? '材料'
     return it.ratioPart && it.ratioPart !== 1 ? `${label} ${it.ratioPart} 份` : label
   })
   return (
@@ -232,8 +240,8 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   const [plants, setPlants] = useState<PlantOption[]>([])
   const [speciesNames, setSpeciesNames] = useState<string[]>([])
   /** 任务上要显示绑定的配方，所以把配方与材料一起取回来（都是几十条量级） */
-  const [recipes, setRecipes] = useState<RecipeListItem[]>([])
-  const [materials, setMaterials] = useState<Material[]>([])
+  const [recipes, setRecipes] = useState<RecipeListItem[] | null>(null)
+  const [materials, setMaterials] = useState<Material[] | null>(null)
   /**
    * 天气预警。
    *
@@ -354,9 +362,16 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         window.api.care.logs(plantId, 100),
         window.api.plants.list({ limit: 500 }),
         window.api.species.list({ limit: 500 }),
-        // 任务卡片要显示绑定的配方，所以一起取
-        window.api.recipes.list().catch(() => []),
-        window.api.materials.list().catch(() => [])
+        /*
+         * 任务卡片要显示绑定的配方，所以一起取。
+         *
+         * **失败时给 null，不要给 []** —— 空数组会让 TaskRecipe 断言
+         * 「配方已删除」，用户就会去重建一份其实还在的配方。
+         * 而且 .catch 吞在最内层时 Promise.all 不会 reject，
+         * 外层 catch 不触发，连一句报错都没有，页面看起来完全正常。
+         */
+        window.api.recipes.list().catch(() => null),
+        window.api.materials.list().catch(() => null)
       ])
       setTasks(monthTasks)
       // 逾期任务可能落在任意更早的月份，必须单独取，否则翻页就「看不见」了
@@ -371,8 +386,8 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
       )
       setSpeciesNames(speciesList.items.map((s) => s.commonName))
       // 配方取不到不该让整页报错（用户可能一个配方都没有）
-      setRecipes(recipeList ?? [])
-      setMaterials(materialList ?? [])
+      setRecipes(recipeList)
+      setMaterials(materialList)
       {
         const infos = await Promise.all(plantList.items.map((p) => window.api.care.plantPhase(p.id)))
         setPlantPhases(Object.fromEntries(infos.map((i) => [i.plantId, i])))
