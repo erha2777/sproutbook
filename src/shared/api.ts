@@ -451,6 +451,8 @@ export interface WeatherRiskItem {
 export interface WeatherWarningResult {
   /** 这次实际用的是哪个数据源。**不能写死** —— 配了和风就不是 Open-Meteo 了 */
   providerLabel: string
+  /** 今天向数据源发了几次请求 */
+  requestsToday: number
   /** 有没有养护位置填了城市。false = 完全没联网 */
   configured: boolean
   places: WeatherPlace[]

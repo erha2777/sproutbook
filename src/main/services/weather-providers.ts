@@ -31,6 +31,8 @@ export const PROVIDER_LABELS: Record<WeatherProviderId, string> = {
 export const QWEATHER_HOST_KEY = 'weather.qweatherHost'
 /** 地名解析结果的缓存。地名不会变，解析一次就够 */
 export const GEOCODE_CACHE_KEY = 'weather.geocodeCache'
+/** 当天向数据源发了几次请求。和风免费额度有限，这个数字要给用户看见 */
+export const USAGE_KEY = 'weather.usage'
 export const QWEATHER_KEY_KEY = 'weather.provider'
 export const SELECTED_PROVIDER_KEY = 'weather.providerId'
 
@@ -70,6 +72,37 @@ export function readWeatherConfig(db: Db, qweatherKey: string | null = null): We
 export function saveWeatherConfig(db: Db, patch: { provider?: WeatherProviderId; qweatherHost?: string }): void {
   if (patch.provider) setSetting(db, SELECTED_PROVIDER_KEY, patch.provider)
   if (patch.qweatherHost !== undefined) setSetting(db, QWEATHER_HOST_KEY, patch.qweatherHost.trim())
+}
+
+// ---------------------------------------------------------------------------
+// 用量记账
+// ---------------------------------------------------------------------------
+
+export interface WeatherUsage {
+  /** YYYY-MM-DD（本地日期） */
+  date: string
+  count: number
+}
+
+/**
+ * 记一次对外请求。
+ *
+ * 和风的免费额度是按天的（用户提到每天一千次左右），而天气判断本身很省
+ *（有 3 小时缓存），真正会烧额度的是「重新获取」被连点。
+ * 把数字摆在界面上，用户自己就能发现异常。
+ */
+export function countRequest(db: Db): number {
+  const today = new Date().toISOString().slice(0, 10)
+  const usage = getSetting<WeatherUsage>(db, USAGE_KEY, { date: today, count: 0 })
+  const next: WeatherUsage = usage.date === today ? { date: today, count: usage.count + 1 } : { date: today, count: 1 }
+  setSetting(db, USAGE_KEY, next)
+  return next.count
+}
+
+export function readUsage(db: Db): WeatherUsage {
+  const today = new Date().toISOString().slice(0, 10)
+  const usage = getSetting<WeatherUsage>(db, USAGE_KEY, { date: today, count: 0 })
+  return usage.date === today ? usage : { date: today, count: 0 }
 }
 
 // ---------------------------------------------------------------------------
@@ -386,6 +419,7 @@ export async function lookupLocation(
   const hit = cache[key]
   if (hit) return hit
 
+  countRequest(db)
   const result = source === 'qweather' ? await qweatherLookup(config, query) : await openMeteoLookup(query)
   // 失败**不缓存** —— 网络抖一下不该让这个地名永久失效
   if (result) {

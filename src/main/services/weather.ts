@@ -19,6 +19,8 @@
 import type { Db } from '../db/connection'
 import {
   GEOCODE_CACHE_KEY,
+  countRequest,
+  readUsage,
   fetchDaily,
   lookupLocation,
   readWeatherConfig,
@@ -36,6 +38,9 @@ import {
 import type { DailyTemp, WeatherRisk, WeatherRiskInput } from '../../core/weather'
 
 const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search'
+
+/** 强制刷新（用户点「重新获取」）的最小间隔。防止连点烧掉免费额度。 */
+const FORCE_COOLDOWN_MS = 60 * 1000
 
 /** 缓存多久。预报一天更新几次就够，没必要每次开页面都请求。 */
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000
@@ -139,10 +144,20 @@ export async function getForecast(
   const key = `${point.latitude.toFixed(3)},${point.longitude.toFixed(3)}`
   const cache = getSetting<Record<string, CacheEntry>>(db, CACHE_KEY, {})
   const hit = cache[key]
-  if (!force && hit && Date.now() - hit.at < CACHE_TTL_MS && (hit as CacheEntry & { provider?: string }).provider === point.provider) {
-    return hit.days
+  const sameSource = (hit as (CacheEntry & { provider?: string }) | undefined)?.provider === point.provider
+  if (hit && sameSource) {
+    const age = Date.now() - hit.at
+    /*
+     * force（用户点了「重新获取」）也**至少隔 60 秒**才真的重新请求。
+     *
+     * 这是给免费额度上的保险：数据源按天限量，而这个按钮绕过缓存，
+     * 连点几下就是几次调用。60 秒内的数据本来也没有实质差别，
+     * 挡掉的只是误触和连点。
+     */
+    if (age < CACHE_TTL_MS && (!force || age < FORCE_COOLDOWN_MS)) return hit.days
   }
 
+  countRequest(db)
   const days = await fetchDaily(config, point)
   if (!days) return null
 
@@ -166,6 +181,8 @@ export function clearWeatherCache(db: Db): void {
 export interface WeatherWarningResult {
   /** 这次实际用的是哪个数据源，界面要说明白 */
   providerLabel: string
+  /** 今天向数据源发了几次请求。和风免费额度有限，摆出来让用户看得见 */
+  requestsToday: number
   /**
    * 有没有任何一个养护位置填了城市。
    * **为 false 时一个字节都没发出去** —— 界面要如实这么告诉用户。
@@ -211,6 +228,7 @@ export async function assessPlantsWeather(
   const empty: WeatherWarningResult = {
     configured: false,
     providerLabel: '',
+    requestsToday: 0,
     places: [],
     risks: [],
     daily: [],
@@ -356,6 +374,7 @@ export async function assessPlantsWeather(
   return {
     configured: true,
     providerLabel: config.provider === 'qweather' && config.qweatherReady ? '和风天气' : 'Open-Meteo',
+    requestsToday: readUsage(db).count,
     places: places.map((p) => ({
       name: p.name,
       label: p.label,
