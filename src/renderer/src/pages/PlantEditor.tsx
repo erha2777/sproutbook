@@ -182,9 +182,6 @@ export function PlantEditorModal({
   }
 
   const currentSpecies = speciesList.find((s) => s.id === speciesId) ?? null
-  const filteredSpecies = speciesQuery.trim()
-    ? speciesList.filter((s) => s.commonName.toLowerCase().includes(speciesQuery.trim().toLowerCase())).slice(0, 40)
-    : speciesList.slice(0, 40)
 
   return (
     <Modal
@@ -250,33 +247,18 @@ export function PlantEditorModal({
               </Button>
             </div>
             {/*
-              原来这里写的是「或在右上角下拉框里从已有 N 个物种中选择」——
-              可**右上角根本没有物种下拉框**，真正的「所属物种」在下面的表单里。
+              这句话原来写的是「或在**右上角**下拉框里从已有 N 个物种中选择」——
+              可右上角根本没有物种下拉框，真正的「所属物种」在**下面**的表单里。
               一句把人支使到不存在的地方的话，用户只会得出「已有的物种不能选」。
-              改成就地列出、点一下就关联。
+
+              问题从来不是缺一个列表（下面那个 relation 字段本来就能选，
+              而且它是模板字段，改标签、排序都跟着走），而是指错了地方。
+              所以只把位置说对，不再另起一份选择器。
             */}
-            {filteredSpecies.length > 0 ? (
-              <div style={{ marginTop: 8 }}>
-                <div className="small muted" style={{ marginBottom: 4 }}>
-                  {speciesQuery.trim()
-                    ? `或者从名字带「${speciesQuery.trim()}」的已有物种里选：`
-                    : `或者直接选一个已有的（共 ${speciesList.length} 个）：`}
-                </div>
-                <div className="row tight" style={{ flexWrap: 'wrap' }}>
-                  {filteredSpecies.map((s) => (
-                    <Button
-                      key={s.id}
-                      size="small"
-                      onClick={() => {
-                        setValue('species_id', s.id)
-                        setSpeciesQuery('')
-                      }}
-                      title={s.scientificName ?? ''}
-                    >
-                      {s.commonName}
-                    </Button>
-                  ))}
-                </div>
+            {speciesList.length > 0 ? (
+              <div className="small muted" style={{ marginTop: 6 }}>
+                已经在库里的（共 {speciesList.length} 个），到下面的「<b>所属物种</b>」里选；
+                这里只在库里**没有**这个物种时用来新建。
               </div>
             ) : null}
           </Panel>
