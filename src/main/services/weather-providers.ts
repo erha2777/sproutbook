@@ -113,6 +113,8 @@ interface FetchOutcome<T> {
   status: number
   /** 连接层失败的原因（DNS、超时、证书…） */
   transportError: string | null
+  /** 响应体前几百个字符。失败时**必须留着** —— 服务端往往在里面说清楚了原因 */
+  bodyPreview: string
 }
 
 /**
@@ -126,11 +128,35 @@ async function fetchJsonDetailed<T>(url: string): Promise<FetchOutcome<T>> {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
     const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } })
-    if (!response.ok) return { data: null, status: response.status, transportError: null }
-    return { data: (await response.json()) as T, status: response.status, transportError: null }
+    /*
+     * **不管成功失败都读 body。**
+     *
+     * 第一版在 !response.ok 时直接返回 null，然后在报错里断言「返回的不是 JSON」——
+     * 可它根本没看过 body。而服务端的 403 往往带着 JSON 把原因写得清清楚楚
+     *（和风就是 {"error":{"title":"Invalid Host",...}}）。
+     * 不读就下结论，等于把用户往错的方向指。
+     */
+    const text = await response.text().catch(() => '')
+    let parsed: T | null = null
+    try {
+      parsed = JSON.parse(text) as T
+    } catch {
+      parsed = null
+    }
+    return {
+      data: parsed,
+      status: response.status,
+      transportError: null,
+      bodyPreview: text.slice(0, 300)
+    }
   } catch (error) {
     // 断网、超时、DNS 失败一律当作「没数据」，绝不往上抛 —— 天气是锦上添花
-    return { data: null, status: 0, transportError: error instanceof Error ? error.message : String(error) }
+    return {
+      data: null,
+      status: 0,
+      transportError: error instanceof Error ? error.message : String(error),
+      bodyPreview: ''
+    }
   } finally {
     clearTimeout(timer)
   }
@@ -202,7 +228,29 @@ export async function qweatherLookupDetailed(
 
   const data = outcome.data
   if (!data) {
-    return { geo: null, code: null, error: `HTTP ${outcome.status}：返回的不是 JSON。Host 多半填错了（应该是 xxx.qweatherapi.com 这种）` }
+    /*
+     * 状态不是 2xx，或者 body 不是 JSON。
+     * 这时候**把 body 原文摆出来** —— 服务端一般已经说清楚了，
+     * 我替它转述只会再错一次。
+     */
+    const preview = outcome.bodyPreview.replace(/\s+/g, ' ').trim()
+    return {
+      geo: null,
+      code: null,
+      error: preview
+        ? `HTTP ${outcome.status}，返回内容：${preview}`
+        : `HTTP ${outcome.status}，响应体是空的`
+    }
+  }
+
+  // 新版错误体：{"error":{"status":403,"title":"...","detail":"..."}}
+  const errBody = (data as { error?: { title?: string; detail?: string } }).error
+  if (errBody) {
+    return {
+      geo: null,
+      code: String(errBody.title ?? ''),
+      error: `和风返回 ${errBody.title ?? '错误'}：${errBody.detail ?? ''}`
+    }
   }
 
   const code = data.code ?? null
