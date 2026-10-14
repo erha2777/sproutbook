@@ -46,7 +46,9 @@ jobs:
         run: pnpm build
 
       - name: 打包并发布到 Release
-        run: pnpm exec electron-builder ${{ matrix.args }} --publish always
+        # electron-builder.yml 里 publish 为 null，这里显式指定GitHub 发布目标。
+        # CI 中 actions/checkout 已配置好 git remote，因此能解析出仓库地址。
+        run: pnpm exec electron-builder ${{ matrix.args }} --publish always -c.publish.provider=github
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # 未配置签名证书时，macOS 不做公证；签名相关告警可忽略

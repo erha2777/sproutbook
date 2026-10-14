@@ -58,9 +58,14 @@ linux:
   category: Utility
   artifactName: ${productName}-${version}-linux-${arch}.${ext}
 
-# 发布目标：GitHub Release。
-# 本地打包脚本都带了 --publish never，所以普通构建不会误发布；
-# 只有 CI 里的 `electron-builder --publish always` 会真正上传。
-publish:
-  provider: github
-  releaseType: release
+# 这里**刻意不配置 publish**。
+#
+# 原因：只要配置了发布目标，electron-builder 就会尝试生成自动更新元数据
+# （latest.yml），而这一步需要知道仓库地址（从 .git/config 或 package.json 的
+# repository 字段读取）。本地仓库可能还没配 remote，于是打包在最后一步失败 ——
+# 安装包其实已经生成，但退出码是 1，很容易让人误判。
+#
+# 所以：本地打包只产出安装包；需要发布时由 CI 显式指定发布目标，见
+# .github/workflows/release.yml 里的 `--publish always -c.publish.provider=github`。
+# CI 中 actions/checkout 会配置好 git remote，因此能正常解析仓库地址。
+publish: null
