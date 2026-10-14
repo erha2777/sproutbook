@@ -439,6 +439,11 @@ export interface AiIdentifyResult {
   candidates: AiIdentifyCandidate[]
   /** 识别用的图片来源（文件名），让用户确认看的是哪张 */
   sourceName?: string | null
+  /**
+   * 模型的原话。没给出候选时用它说明情况。
+   * 认不出和没按格式返回分不出来，别替模型编原因。
+   */
+  raw?: string | null
   /** 失败原因，或「模型认不出」时的说明。成功且有候选时为 null */
   message: string | null
   /** 实际用的模型。出问题时能看出是不是用错了模型 */

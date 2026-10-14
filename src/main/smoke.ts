@@ -30,6 +30,7 @@ import {
 } from './services/weather-providers'
 import type { GeoResult } from './services/weather-providers'
 import { buildIdentifyMessages, parseIdentifyResponse } from './services/ai/identify'
+import { chat } from './services/ai/client'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { listPlants, plantStats, savePlant } from './db/repo/plants'
@@ -1884,6 +1885,66 @@ export async function runSmoke(outFile: string): Promise<number> {
           '配和风但实际没用上时**一定**有原因（界面才有话可说）',
           qweatherSkipReason(qwNoKey, geoNoId) !== null
         )
+      }
+
+      // ---- 200 也不能算成功 ----
+      //
+      // 网关和兼容服务经常用 **200** 回一个 {"error":{...}}，
+      // 或者干脆回一个 HTML 错误页。原来的写法两种情况都出事：
+      //
+      //   content ?? ''            → ok: true，于是下游各自编原因：
+      //                              补全说「模型没有返回可解析的 JSON」
+      //                              识图说「多半是这张照片看不清特征，换个角度再拍」
+      //   response.json() 抛错     → 被归成「网络错误：Unexpected token '<'」，
+      //                              用户跑去查 Wi-Fi，而网络是通的
+      //
+      // 两种都在**替服务端编原因**，而原因早就写在 body 里了。
+      {
+        const realFetch = globalThis.fetch
+        const reply = (body: string, status = 200, type = 'application/json'): void => {
+          globalThis.fetch = (async () =>
+            new Response(body, { status, headers: { 'Content-Type': type } })) as typeof fetch
+        }
+        const ask = () =>
+          chat({ baseUrl: 'https://example.com/v1', apiKey: 'k', model: 'm', messages: [{ role: 'user', content: 'hi' }] })
+
+        try {
+          // ① 200 + error 字段
+          reply(JSON.stringify({ error: { message: '额度已用完，请充值' } }))
+          const r1 = await ask()
+          check('200 但没有 choices 时不算成功', r1.ok === false)
+          check('而且把服务端写的原话带出来', String(r1.error).includes('额度已用完'), String(r1.error).slice(0, 60))
+          check('错误里附上了返回内容', String(r1.error).includes('返回内容'))
+
+          // ② 200 + HTML（反代登录页 / 网关错误页）
+          reply('<!DOCTYPE html><html><body>502 Bad Gateway</body></html>', 200, 'text/html')
+          const r2 = await ask()
+          check('200 但返回不是 JSON 时不算成功', r2.ok === false)
+          check('明说「不是 JSON」，而不是赖到网络上', String(r2.error).includes('不是 JSON'), String(r2.error).slice(0, 60))
+          check(
+            '不再出现「网络错误」（网络其实是通的）',
+            !String(r2.error).includes('网络错误'),
+            String(r2.error).slice(0, 60)
+          )
+
+          // ③ 200 + choices 但内容为空
+          reply(JSON.stringify({ choices: [{ message: { content: '' } }] }))
+          const r3 = await ask()
+          check('内容为空时不算成功', r3.ok === false)
+
+          // ④ 正常返回不能被冤枉
+          reply(JSON.stringify({ choices: [{ message: { content: '你好' } }], model: 'm' }))
+          const r4 = await ask()
+          check('正常返回照常通过', r4.ok === true && r4.content === '你好', r4.content)
+
+          // ⑤ 4xx 老路子没被弄坏
+          reply(JSON.stringify({ error: 'bad key' }), 401)
+          const r5 = await ask()
+          check('4xx 仍然失败', r5.ok === false)
+          check('4xx 的错误里也带 body', String(r5.error).includes('bad key'), String(r5.error).slice(0, 50))
+        } finally {
+          globalThis.fetch = realFetch
+        }
       }
 
       // ---- 地名解析的缓存 ----

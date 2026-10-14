@@ -755,6 +755,7 @@ function registerAiIpc(): void {
         ok: result.ok,
         candidates: result.candidates,
         message: result.error,
+        raw: result.raw,
         model: result.model
       }
     } finally {
@@ -809,7 +810,14 @@ function registerAiIpc(): void {
         signal: controller.signal
       })
       const sourceName = file.split(/[\\/]/).pop() ?? null
-      return { ok: result.ok, candidates: result.candidates, message: result.error, model: result.model, sourceName }
+      return {
+        ok: result.ok,
+        candidates: result.candidates,
+        message: result.error,
+        raw: result.raw,
+        model: result.model,
+        sourceName
+      }
     } finally {
       runningAi.delete(payload.requestId)
     }
