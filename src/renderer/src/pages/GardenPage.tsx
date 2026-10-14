@@ -23,7 +23,16 @@ import {
   readMonthSet,
   sizeScaleFor
 } from '@core/growth'
-import { CARE_ACTION_ICONS, CARE_PHASE_ICONS, CARE_PHASE_LABELS, dueDescription, urgencyOf } from '@core/care'
+import {
+  CARE_ACTION_ICONS,
+  CARE_PHASE_HINTS,
+  CARE_PHASE_ICONS,
+  CARE_PHASE_LABELS,
+  CARE_PHASE_OPTIONS,
+  dueDescription,
+  urgencyOf
+} from '@core/care'
+import type { CarePhase } from '@core/types'
 import { flowerColorForSpecies } from '@core/sprite'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
 import { todayIso } from '@core/care'
@@ -163,6 +172,43 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
 
   /** 送人的植株不留在花园里 —— 它已经不在你这儿了。 */
   const gardenItems = useMemo(() => items.filter((p) => p.status !== 'gifted'), [items])
+  /**
+   * 就地标记物候阶段。
+   *
+   * 和养护计划页那个「标记阶段」做的是同一件事，包括**标记完立刻重新生成任务** ——
+   * 限定该阶段的规则（缓苗 / 暴雨后救苗）不必再手动建，标完就出现在待办里。
+   * 这才是「事件触发」的意思：事件（转缓苗期）一发生，该做的事自己冒出来。
+   *
+   * 原来这里只写了一句「到『养护计划』页标记后，这里会更准」——
+   * 又是指着别处说话。事情就在这一株身上，就地做就行了。
+   */
+  const markPhase = async (plantId: number, phase: CarePhase | null): Promise<void> => {
+    try {
+      const info = await window.api.care.setPlantPhase(plantId, phase, null)
+      setPhases((prev) => ({ ...prev, [plantId]: info }))
+      // 重新生成任务：阶段一变，限定该阶段的规则就该生效/失效
+      await window.api.care.generate(plantId, new Date().getFullYear())
+      /*
+       * 「下一件事」也要跟着刷新。
+       * 阶段一变，限定该阶段的规则就会生效或失效 ——
+       * 不重取的话，卡片上还挂着一条已经不该做的事。
+       */
+      const open = await window.api.care.tasks({ status: 'open' })
+      const mine = open
+        .filter((t) => t.plantId === plantId)
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      setNextTask((prev) => {
+        const next = { ...prev }
+        if (mine[0]) next[plantId] = mine[0]
+        else delete next[plantId]
+        return next
+      })
+      toast.push(phase ? `已标记为「${CARE_PHASE_LABELS[phase]}」，相关任务已重新生成` : '已清除阶段标记', 'success')
+    } catch (error) {
+      toast.push(`标记失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    }
+  }
+
 
   const selectedPlant = gardenItems.find((p) => p.id === selected) ?? null
 
@@ -380,15 +426,50 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                         {selectedPlant.envName ? ` · ${selectedPlant.envName}` : ''}
                         {` · ${PLANT_STATUS_ICONS[selectedPlant.status]} ${PLANT_STATUS_LABELS[selectedPlant.status]}`}
                       </div>
-                      {info?.phase ? (
-                        <div className="small" style={{ marginTop: 4 }}>
-                          你标记的阶段：{CARE_PHASE_ICONS[info.phase]} {CARE_PHASE_LABELS[info.phase]}
+                      {/*
+                        就地标记物候阶段。
+                        原来这里只写「到『养护计划』页标记后，这里会更准」——
+                        又是指着别处说话。事情就在这一株身上，就地做就行。
+
+                        标记完会**立刻重新生成任务**：限定该阶段的规则
+                        （缓苗 / 暴雨后救苗）不必再手动建，标完就出现在「下一件事」里。
+                        这才是「事件触发」的意思 —— 事件一发生，该做的事自己冒出来。
+                      */}
+                      <div style={{ marginTop: 6 }}>
+                        <div className="small" style={{ marginBottom: 4 }}>
+                          物候阶段：
+                          {info?.phase ? (
+                            <b>
+                              {' '}
+                              {CARE_PHASE_ICONS[info.phase]} {CARE_PHASE_LABELS[info.phase]}
+                            </b>
+                          ) : (
+                            <span className="muted"> 还没标记（标记后，限定该阶段的规则才会生效）</span>
+                          )}
                         </div>
-                      ) : (
-                        <div className="small muted" style={{ marginTop: 4 }}>
-                          还没标记物候阶段 —— 到「养护计划」页标记后，这里会更准。
+                        <div className="row tight" style={{ flexWrap: 'wrap' }}>
+                          {CARE_PHASE_OPTIONS.map((opt) => (
+                            <Button
+                              key={opt.value}
+                              size="small"
+                              variant={info?.phase === opt.value ? 'primary' : undefined}
+                              onClick={() => void markPhase(selectedPlant.id, opt.value as CarePhase)}
+                              title={CARE_PHASE_HINTS[opt.value as CarePhase]}
+                            >
+                              {CARE_PHASE_ICONS[opt.value as CarePhase]} {CARE_PHASE_LABELS[opt.value as CarePhase]}
+                            </Button>
+                          ))}
+                          {info?.phase ? (
+                            <Button
+                              size="small"
+                              onClick={() => void markPhase(selectedPlant.id, null)}
+                              title="清除标记。限定阶段的规则会随之失效"
+                            >
+                              清除
+                            </Button>
+                          ) : null}
                         </div>
-                      )}
+                      </div>
                       <div className="small" style={{ marginTop: 4 }}>
                         {task ? (
                           <>
