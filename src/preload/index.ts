@@ -59,7 +59,7 @@ const api: SproutbookApi = {
     list: (options) => call('species:list', options ?? {}),
     get: (id) => call('species:get', id),
     save: (payload) => call('species:save', payload),
-    verify: (id, fieldKeys) => call('species:verify', id, fieldKeys),
+    verify: (id, fieldKeys, verified) => call('species:verify', id, fieldKeys, verified !== false),
     remove: (id) => call('species:delete', id),
     families: () => call('species:families')
   },

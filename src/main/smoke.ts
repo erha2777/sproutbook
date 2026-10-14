@@ -21,7 +21,7 @@ import { seedAll, seedFieldDefinitions } from './db/seed'
 import { backupDatabase } from './db/backup'
 import { loadFieldDefinitions } from './db/repo/common'
 import { createField, deleteField, fieldUsage, setFieldArchived } from './db/repo/fields'
-import { getSpecies, listSpecies, saveSpecies, archiveSpecies } from './db/repo/species'
+import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { listPlants, plantStats, savePlant } from './db/repo/plants'
 
 interface CheckResult {
@@ -156,6 +156,21 @@ export function runSmoke(outFile: string): number {
     check('数字字段正确落库', saved.species.attributes.cold_hardiness === -15)
     check('标签字段为数组', Array.isArray(saved.species.aliases) && saved.species.aliases.length === 2)
     check('系统列写入独立列', saved.species.family === '蔷薇科')
+
+    // --- 核实 / 撤回核实 ---
+    //
+    // 曾经的 bug：批量核实只标记 isSafety 的字段，AI 填的其它字段永远停在
+    // 「待核实」，用户点多少次都没用。这里同时验证「标记」和「撤回」两条路径。
+    verifySpeciesFields(db, speciesId, ['toxicity_level', 'pet_safe'])
+    check('核实后字段进入已核实列表', getSpecies(db, speciesId)?.verifiedFields.length === 2)
+    verifySpeciesFields(db, speciesId, ['pet_safe'], false)
+    const afterUnverify = getSpecies(db, speciesId)?.verifiedFields ?? []
+    check(
+      '撤回核实会移除指定字段且不影响其它字段',
+      afterUnverify.length === 1 && afterUnverify[0] === 'toxicity_level',
+      afterUnverify.join(',')
+    )
+    check('对不存在的记录核实返回 null', verifySpeciesFields(db, 999999, ['x']) === null)
 
     // --- 索引投影 ---
     const monthRows = db.all<{ idx: number; value_num: number }>(

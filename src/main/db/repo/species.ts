@@ -235,13 +235,26 @@ export function saveSpecies(
   })
 }
 
-/** 标记某些字段已由人工确认（AI 填充后的信任闭环）。 */
-export function verifySpeciesFields(db: Db, id: number, fieldKeys: string[]): Species | null {
+/**
+ * 标记（或取消标记）某些字段已由人工确认 —— AI 填充后的信任闭环。
+ *
+ * verified=false 用于「点错了想撤回」：核实是个人的判断，
+ * 必须能反悔，否则用户只能重新录入整条记录。
+ */
+export function verifySpeciesFields(
+  db: Db,
+  id: number,
+  fieldKeys: string[],
+  verified = true
+): Species | null {
   return db.transaction(() => {
     const row = db.get<SpeciesRow>('SELECT * FROM species WHERE id = ?', id)
     if (!row) return null
     const current = new Set(jsonArray(row.verified_json))
-    for (const k of fieldKeys) current.add(k)
+    for (const k of fieldKeys) {
+      if (verified) current.add(k)
+      else current.delete(k)
+    }
     db.run('UPDATE species SET verified_json = ?, updated_at = datetime(\'now\') WHERE id = ?', JSON.stringify([...current]), id)
     return mapSpecies(db.get<SpeciesRow>('SELECT * FROM species WHERE id = ?', id) as SpeciesRow)
   })

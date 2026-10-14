@@ -737,6 +737,28 @@ img {
 .notice.warn { background: #fff3d6; border-color: #8a5f10; }
 .notice.danger { background: #ffe4de; border-color: #7a1f14; }
 .notice.info { background: #e6f0ff; border-color: #2a4f8a; }
+.notice.ok { background: #e3f6dd; border-color: #2f6b26; }
+
+/*
+ * 可点击的标签（AI 字段来源记录里的核实开关）。
+ * 复用 .pixel-tag 的外观，但它是 <button>，需要把浏览器默认样式清掉，
+ * 并且给出明确的「可以点」的反馈 —— 之前这里是个纯展示的 <span>，
+ * 用户根本不知道能点，也不知道只有安全字段能被批量标记。
+ */
+.tag-toggle {
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+}
+.tag-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 0 var(--wood-outline);
+}
+.tag-toggle:active { transform: translateY(1px); box-shadow: none; }
+.tag-toggle:focus-visible { outline: 2px solid var(--leaf-dark); outline-offset: 1px; }
+/* 已核实的标签明显「落地」，一眼能分辨哪些还没确认 */
+.tag-toggle.verified { background: #dff0d8; border-color: #2f6b26; }
+.tag-toggle:not(.verified) { border-style: dashed; }
 
 /* ---------- 表格 ---------- */
 

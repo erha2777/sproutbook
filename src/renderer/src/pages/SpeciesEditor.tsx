@@ -160,26 +160,47 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
     toast.push(`已填入 ${keys.length} 个字段。检查后再点保存。`, 'success')
   }
 
-  const verifySafety = async (): Promise<void> => {
+  /**
+   * 标记或撤回核实。
+   *
+   * 之前的实现有个真 bug：它只会标记 `isSafety` 的字段，
+   * 于是 AI 填的其它字段永远停在「待核实」，用户点多少次都没用。
+   * 现在接受任意字段集合，并且支持撤回 —— 核实是人的判断，点错了必须能反悔。
+   */
+  const setVerified = async (keys: string[], verified: boolean): Promise<void> => {
     if (currentId === null) {
       toast.push('请先保存，再标记核实', 'error')
       return
     }
-    const safetyKeys = defs.filter((d) => d.isSafety).map((d) => d.key)
+    if (keys.length === 0) return
     try {
-      await window.api.species.verify(currentId, safetyKeys)
-      const refreshed = await window.api.species.get(currentId)
-      setSpecies(refreshed)
-      toast.push('已标记安全字段为「已核实」', 'success')
+      await window.api.species.verify(currentId, keys, verified)
+      // 重新拉一次：verify 返回的是 Species，而页面状态是带封面/计数的 SpeciesListItem
+      setSpecies(await window.api.species.get(currentId))
+      toast.push(
+        verified ? `已标记 ${keys.length} 个字段为「已核实」` : `已撤回 ${keys.length} 个字段的核实`,
+        'success'
+      )
     } catch (error) {
-      toast.push(`标记失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+      toast.push(`操作失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }
   }
 
-  const safetyPending = useMemo(() => {
+  /** AI 填过、尚未人工核实的字段 */
+  const pendingAll = useMemo(() => {
     if (!species) return [] as string[]
     return Object.keys(species.confidence).filter((k) => !species.verifiedFields.includes(k))
   }, [species])
+
+  /**
+   * 其中真正涉及安全的（毒性等）。
+   * 之前这里把两者混为一谈，提示语才写成「有 12 个安全相关字段」——
+   * 实际只有少数几个是安全字段，夸大了紧迫性，也误导用户。
+   */
+  const pendingSafety = useMemo(
+    () => pendingAll.filter((k) => defs.find((d) => d.key === k)?.isSafety),
+    [pendingAll, defs]
+  )
 
   if (loading) {
     return (
@@ -241,14 +262,37 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
           </div>
         ) : null}
 
-        {safetyPending.length > 0 ? (
+        {pendingAll.length > 0 ? (
           <div style={{ marginTop: 10 }}>
-            <Notice tone="warn">
-              有 <b>{safetyPending.length}</b> 个安全相关字段是 AI 填写的，尚未人工核实。请对照可靠资料确认后再点
-              <Button size="small" variant="ghost" onClick={() => void verifySafety()}>
-                标记为已核实
-              </Button>
+            <Notice tone={pendingSafety.length > 0 ? 'warn' : 'info'}>
+              有 <b>{pendingAll.length}</b> 个字段是 AI 填写的，尚未人工核实
+              {pendingSafety.length > 0 ? (
+                <>
+                  ，其中 <b>{pendingSafety.length}</b> 个属于<b>安全相关字段</b>（毒性等），请务必优先对照可靠资料确认
+                </>
+              ) : null}
+              。
+              <div className="row tight" style={{ marginTop: 9 }}>
+                {pendingSafety.length > 0 ? (
+                  <Button
+                    variant="primary"
+                    size="small"
+                    onClick={() => void setVerified(pendingSafety, true)}
+                    title="只标记安全性相关的字段，例如毒性等级、有毒部位、对宠物是否安全"
+                  >
+                    ✓ 核实这 {pendingSafety.length} 个安全字段
+                  </Button>
+                ) : null}
+                <Button size="small" onClick={() => void setVerified(pendingAll, true)}>
+                  全部标记为已核实（{pendingAll.length}）
+                </Button>
+                <span className="small muted">也可以在下方「AI 字段来源记录」里逐个点击标记。</span>
+              </div>
             </Notice>
+          </div>
+        ) : species && Object.keys(species.confidence).length > 0 ? (
+          <div style={{ marginTop: 10 }}>
+            <Notice tone="ok">AI 填入的字段都已人工核实。</Notice>
           </div>
         ) : null}
       </Panel>
@@ -332,16 +376,40 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
 
       {species && Object.keys(species.confidence).length > 0 ? (
         <Panel flat>
-          <SectionTitle>AI 字段来源记录</SectionTitle>
+          <SectionTitle
+            right={
+              pendingAll.length > 0 ? (
+                <Button size="small" onClick={() => void setVerified(pendingAll, true)}>
+                  全部核实（{pendingAll.length}）
+                </Button>
+              ) : (
+                <Badge tone="ok">全部已核实</Badge>
+              )
+            }
+          >
+            AI 字段来源记录
+          </SectionTitle>
+          <div className="small muted" style={{ marginBottom: 8 }}>
+            带 <Badge tone="safety">安全</Badge> 的是安全相关字段，务必逐项确认。
+            <b>点任意标签即可单独标记或撤回核实</b> —— 核实代表你亲自查证过，应用不会替你确认。
+          </div>
           <div className="row tight">
             {Object.entries(species.confidence).map(([key, confidence]) => {
               const def = defs.find((d) => d.key === key)
               const verified = species.verifiedFields.includes(key)
+              const label = def?.label ?? key
               return (
-                <span key={key} className={cx('pixel-tag')} title={`置信度 ${(Number(confidence) * 100).toFixed(0)}%`}>
-                  {def?.label ?? key}
-                  <Badge tone={verified ? 'ok' : 'ai'}>{verified ? '已核实' : '待核实'}</Badge>
-                </span>
+                <button
+                  key={key}
+                  type="button"
+                  className={cx('pixel-tag', 'tag-toggle', verified && 'verified')}
+                  title={`${label}｜AI 置信度 ${(Number(confidence) * 100).toFixed(0)}%｜点击${verified ? '撤回核实' : '标记为已核实'}`}
+                  onClick={() => void setVerified([key], !verified)}
+                >
+                  {label}
+                  {def?.isSafety ? <Badge tone="safety">安全</Badge> : null}
+                  <Badge tone={verified ? 'ok' : 'ai'}>{verified ? '✓ 已核实' : '待核实'}</Badge>
+                </button>
               )
             })}
           </div>

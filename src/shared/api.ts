@@ -157,7 +157,8 @@ export interface SproutbookApi {
       /** AI 填入的字段及置信度，用于把安全字段标记为「待核实」 */
       aiFields?: Array<{ key: string; confidence: number }>
     }): Promise<SaveSpeciesResponse>
-    verify(id: number, fieldKeys: string[]): Promise<Species | null>
+    /** verified=false 表示撤回核实（点错了能反悔） */
+    verify(id: number, fieldKeys: string[], verified?: boolean): Promise<Species | null>
     remove(id: number): Promise<boolean>
     families(): Promise<Array<{ family: string; count: number }>>
   }

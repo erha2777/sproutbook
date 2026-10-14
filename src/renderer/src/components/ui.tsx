@@ -37,8 +37,8 @@ export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?
   return <span className={cx('pixel-badge', tone)}>{children}</span>
 }
 
-export function Notice({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'warn' | 'danger' }): ReactNode {
-  const icon = tone === 'danger' ? '⛔' : tone === 'warn' ? '⚠️' : 'ℹ️'
+export function Notice({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'warn' | 'danger' | 'ok' }): ReactNode {
+  const icon = tone === 'danger' ? '⛔' : tone === 'warn' ? '⚠️' : tone === 'ok' ? '✅' : 'ℹ️'
   return (
     <div className={cx('notice', tone)}>
       <span>{icon}</span>
