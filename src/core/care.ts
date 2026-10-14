@@ -102,6 +102,51 @@ export function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
 }
 
+export interface DateSpan {
+  /** YYYY-MM-DD，含 */
+  from: string
+  /** YYYY-MM-DD，含 */
+  to: string
+}
+
+/**
+ * 规则在**指定年份内**覆盖的日期区间。
+ *
+ * 跨年区间（如 11~2 月）会拆成两段，而不是横跨到次年 ——
+ * 因为计划是按年生成的：横跨的话，2026 年的计划会产出 2027 年 2 月的任务，
+ * 而生成 2027 年计划时又会产出一次，同一件事出现两遍。
+ * 拆成「年初 1~2 月 + 年末 11~12 月」既在一个自然年内，也不重不漏。
+ */
+export function dateSpansFor(year: number, monthFrom: number, monthTo: number | null): DateSpan[] {
+  const months = monthsCovered({ monthFrom, monthTo })
+  if (months.length === 0) return []
+
+  const monthSpan = (m: number): DateSpan => {
+    const mm = String(m).padStart(2, '0')
+    return { from: `${year}-${mm}-01`, to: `${year}-${mm}-${String(daysInMonth(year, m)).padStart(2, '0')}` }
+  }
+
+  const sorted = [...months].sort((a, b) => a - b)
+  const spans: DateSpan[] = []
+
+  // monthsCovered 是「环绕顺序」（11,12,1,2），排序后会变成两段
+  let runStart = sorted[0]
+  let prev = sorted[0]
+  for (let i = 1; i < sorted.length; i++) {
+    const cur = sorted[i]
+    if (cur === prev + 1) {
+      prev = cur
+      continue
+    }
+    spans.push({ from: monthSpan(runStart).from, to: monthSpan(prev).to })
+    runStart = cur
+    prev = cur
+  }
+  spans.push({ from: monthSpan(runStart).from, to: monthSpan(prev).to })
+
+  return spans
+}
+
 /**
  * 生成任务时的「锚点日」。
  *
@@ -130,9 +175,15 @@ export interface GeneratedTask {
 /**
  * 把规则展开成某一年的一组任务。
  *
- * 每月一条，日期取该月的锚点日（见 spreadDay），时间窗默认 ±15 天 ——
- * 也就是「这个月内做都行」。不细化到具体某天，是因为规则本身只到月；
- * 假装精确反而是误导。
+ * 两种节奏：
+ *  - **按月**（默认）：区间内每月一条，日期取该月的锚点日（见 spreadDay），
+ *    时间窗默认 ±15 天 —— 也就是「这个月内做都行」。
+ *  - **按天**（规则填了 repeatDays）：区间内每隔 N 天一条。
+ *    这是为「7~10 天一轮」这类真实节奏准备的；时间窗收窄到半个间隔，
+ *    这样相邻两次不会互相覆盖判定。
+ *
+ * 规则填了 rotation 时，每次取序列里的下一步，标题变成「追肥 · 花多多1号」，
+ * 循环使用 —— 对应施肥方案里的三肥轮换。
  */
 export function generateTasks(
   rules: CareRule[],
@@ -141,7 +192,7 @@ export function generateTasks(
   options: { hemisphere?: 'N' | 'S'; defaultWindowDays?: number; spreadSeed?: number } = {}
 ): GeneratedTask[] {
   const hemisphere = options.hemisphere ?? 'N'
-  const windowDays = options.defaultWindowDays ?? 15
+  const defaultWindow = options.defaultWindowDays ?? 15
   const name = speciesName?.trim().toLowerCase() ?? ''
   const seed = options.spreadSeed ?? 0
 
@@ -154,23 +205,55 @@ export function generateTasks(
   const out: GeneratedTask[] = []
   const seen = new Set<string>()
 
+  const push = (dueDate: string, rule: CareRule, title: string, windowDays: number): void => {
+    const signature = `${dueDate}|${rule.actionType}|${title}`
+    if (seen.has(signature)) return
+    seen.add(signature)
+    out.push({
+      dueDate,
+      title,
+      detail: rule.detail,
+      actionType: rule.actionType,
+      priority: rule.priority,
+      windowDays,
+      ruleId: rule.id
+    })
+  }
+
   for (const rule of applicable) {
+    const spans = dateSpansFor(year, rule.monthFrom, rule.monthTo)
+    if (spans.length === 0) continue
+
+    const rotation = (rule.rotation ?? []).map((s) => s.trim()).filter(Boolean)
+
+    // ---- 按天重复 ----
+    if (rule.repeatDays !== null && rule.repeatDays !== undefined && rule.repeatDays > 0) {
+      const step = Math.max(1, Math.trunc(rule.repeatDays))
+      // 相邻两次不能共用同一个判定窗口，否则「该做了」会一直亮着
+      const win = Math.max(1, Math.min(defaultWindow, Math.floor(step / 2)))
+      let index = 0
+
+      for (const span of spans) {
+        // 起始日按植株错开，避免所有植物同一天施肥
+        const offset = Math.max(0, spreadDay(year, Number(span.from.slice(5, 7)), seed) - 1)
+        let cursor = addDays(span.from, offset)
+        // 上限保护：即使 repeatDays 被填成 1，也不会无限循环
+        for (let guard = 0; guard < 400 && cursor <= span.to; guard++) {
+          const label = rotation.length > 0 ? ` · ${rotation[index % rotation.length]}` : ''
+          push(cursor, rule, `${rule.title}${label}`, win)
+          index++
+          cursor = addDays(cursor, step)
+        }
+      }
+      continue
+    }
+
+    // ---- 每月一条（原行为）----
+    // 注意：这里必须按**月份**迭代而不是 spans —— 3~4 月是连续的两个月，
+    // dateSpansFor 会把它们合成一个 span，按 span 走只会产出一条任务。
     for (const month of monthsCovered(rule)) {
       const day = spreadDay(year, month, seed)
-      const dueDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-      // 同一株同一月同一件事只留一条：通用规则和物种规则可能重复
-      const signature = `${dueDate}|${rule.actionType}|${rule.title}`
-      if (seen.has(signature)) continue
-      seen.add(signature)
-      out.push({
-        dueDate,
-        title: rule.title,
-        detail: rule.detail,
-        actionType: rule.actionType,
-        priority: rule.priority,
-        windowDays,
-        ruleId: rule.id
-      })
+      push(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`, rule, rule.title, defaultWindow)
     }
   }
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 养护规则库管理。
  *
  * 规则是「哪个月该做什么」的知识，不是排期 —— 所以这里只填月份区间，
@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareActionType, CareRule } from '@core/types'
 import { CARE_ACTION_LABELS, CARE_ACTION_OPTIONS, UNIVERSAL_SPECIES_KEY, monthsCovered } from '@core/care'
-import { Badge, Button, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextInput, useToast } from './ui'
+import { Badge, Button, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextArea, TextInput, useToast } from './ui'
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `${i + 1} 月` }))
 
@@ -18,6 +18,9 @@ interface Draft {
   speciesKey: string
   monthFrom: string
   monthTo: string
+  repeatDays: string
+  /** 每行一个轮换步骤 */
+  rotationText: string
   actionType: CareActionType
   title: string
   detail: string
@@ -29,6 +32,8 @@ const BLANK: Draft = {
   speciesKey: UNIVERSAL_SPECIES_KEY,
   monthFrom: '3',
   monthTo: '',
+  repeatDays: '',
+  rotationText: '',
   actionType: 'fertilize',
   title: '',
   detail: '',
@@ -72,6 +77,10 @@ export function CareRuleManager({
     }
     setSaving(true)
     try {
+      const rotation = draft.rotationText
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
       await window.api.care.saveRule({
         id: draft.id,
         speciesKey: draft.speciesKey.trim() || UNIVERSAL_SPECIES_KEY,
@@ -79,6 +88,8 @@ export function CareRuleManager({
         climateZone: null,
         monthFrom: Number(draft.monthFrom),
         monthTo: draft.monthTo ? Number(draft.monthTo) : null,
+        repeatDays: draft.repeatDays.trim() ? Number(draft.repeatDays) : null,
+        rotation: rotation.length > 0 ? rotation : null,
         actionType: draft.actionType,
         title: draft.title.trim(),
         detail: draft.detail.trim() || null,
@@ -172,6 +183,27 @@ export function CareRuleManager({
             <Field label="标题" required>
               <TextInput value={draft.title} onChange={(v) => setDraft({ ...draft, title: v })} placeholder="例如：春季追肥" />
             </Field>
+            <Field
+              label="重复间隔（天）"
+              help="留空＝区间内每月一条。填 7~10 这类值可表达「每 7~10 天一轮」的真实节奏。"
+            >
+              <TextInput
+                value={draft.repeatDays}
+                onChange={(v) => setDraft({ ...draft, repeatDays: v })}
+                placeholder="留空＝每月一次"
+              />
+            </Field>
+            <Field
+              label="轮换步骤"
+              help="每行一个，生成任务时按顺序循环。留空则不做轮换。"
+            >
+              <TextArea
+                value={draft.rotationText}
+                onChange={(v) => setDraft({ ...draft, rotationText: v })}
+                rows={3}
+                placeholder={'花多多1号\n海藻精\n腐植酸水溶肥'}
+              />
+            </Field>
             <Field label="说明">
               <TextInput value={draft.detail} onChange={(v) => setDraft({ ...draft, detail: v })} placeholder="具体怎么做…" />
             </Field>
@@ -220,11 +252,17 @@ export function CareRuleManager({
                       <b>{rule.speciesKey}</b>
                     )}
                   </td>
-                  <td className="small">{monthsCovered(rule).map((m) => m).join('/')} 月</td>
+                  <td className="small">
+                    {monthsCovered(rule).map((m) => m).join('/')} 月
+                    {rule.repeatDays ? <div className="muted">每 {rule.repeatDays} 天</div> : null}
+                  </td>
                   <td className="small">{CARE_ACTION_LABELS[rule.actionType]}</td>
                   <td>
                     <b>{rule.title}</b>
                     {rule.detail ? <div className="small muted">{rule.detail}</div> : null}
+                    {rule.rotation && rule.rotation.length > 0 ? (
+                      <div className="small muted">轮换：{rule.rotation.join(' → ')}</div>
+                    ) : null}
                     {!rule.verified ? <Badge tone="ai">未核实</Badge> : null}
                   </td>
                   <td className="small">{rule.priority}</td>
@@ -238,6 +276,8 @@ export function CareRuleManager({
                             speciesKey: rule.speciesKey,
                             monthFrom: String(rule.monthFrom),
                             monthTo: rule.monthTo === null ? '' : String(rule.monthTo),
+                            repeatDays: rule.repeatDays === null ? '' : String(rule.repeatDays),
+                            rotationText: (rule.rotation ?? []).join('\n'),
                             actionType: rule.actionType,
                             title: rule.title,
                             detail: rule.detail ?? '',

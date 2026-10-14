@@ -31,6 +31,7 @@ import type { CareTask, CareTaskStatus, RecipeItem } from '../core/types'
 import {
   addDays,
   compareTasks,
+  dateSpansFor,
   daysBetween,
   dueDescription,
   generateTasks,
@@ -725,7 +726,9 @@ export function runSmoke(outFile: string): number {
         priority: 2,
         source: 'seed' as const,
         verified: true,
-        createdAt: ''
+        createdAt: '',
+        repeatDays: null,
+        rotation: null
       }
       const testRules = [
         { ...ruleBase, id: 1, speciesKey: '*', monthFrom: 3, monthTo: 4, actionType: 'fertilize' as const, title: '通用追肥', detail: null },
@@ -760,6 +763,77 @@ export function runSmoke(outFile: string): number {
         { ...ruleBase, id: 11, speciesKey: '照护月季', monthFrom: 3, monthTo: null, actionType: 'water' as const, title: '重复的浇水', detail: null }
       ]
       check('同月同动作同标题只生成一条', generateTasks(dupRules, '照护月季', 2026).length === 1)
+
+      // ---- 周期的日期区间 ----
+      check('单月规则给出一个区间', dateSpansFor(2026, 6, null).length === 1)
+      check('连续月份合并成一个区间', dateSpansFor(2026, 3, 5).length === 1)
+      check(
+        '连续的月份区间跨越整段',
+        dateSpansFor(2026, 3, 5)[0].from === '2026-03-01' && dateSpansFor(2026, 3, 5)[0].to === '2026-05-31',
+        JSON.stringify(dateSpansFor(2026, 3, 5))
+      )
+      // 跨年区间在「按年生成」的前提下必须拆成两段，否则 2026 的计划会产出
+      // 2027 年 2 月的任务，而生成 2027 计划时又会产出一遍
+      check('跨年区间拆成两段', dateSpansFor(2026, 11, 2).length === 2, JSON.stringify(dateSpansFor(2026, 11, 2)))
+      check('跨年区间第一段在年初', dateSpansFor(2026, 11, 2)[0].from === '2026-01-01')
+      check('跨年区间第二段在年末', dateSpansFor(2026, 11, 2)[1].from === '2026-11-01')
+      check('跨年区间不越到下一年', dateSpansFor(2026, 11, 2).every((s) => s.to.startsWith('2026-')))
+      check('非法月份不给区间', dateSpansFor(2026, 0, 3).length === 0)
+
+      // ---- 周期 + 轮换 ----
+      //
+      // 这是为真实的施肥方案准备的：「7~10 天一轮，三种肥循环」。
+      // 原来的模型只能按月触发，一个月一条，表达不了这种节奏。
+      const cycleRule = {
+        ...ruleBase,
+        id: 20,
+        speciesKey: '*',
+        monthFrom: 3,
+        monthTo: 4,
+        actionType: 'fertilize' as const,
+        title: '追肥',
+        detail: null,
+        repeatDays: 10,
+        rotation: ['花多多1号', '海藻精', '腐植酸水溶肥']
+      }
+      const cyc = generateTasks([cycleRule], '照护月季', 2026, { spreadSeed: 0 })
+      check('周期规则产出多条任务', cyc.length > 5, String(cyc.length))
+      check(
+        '周期任务的间隔正确',
+        cyc.every((t, i) => i === 0 || daysBetween(t.dueDate, cyc[i - 1].dueDate) === 10),
+        cyc.slice(0, 4).map((t) => t.dueDate).join(' -> ')
+      )
+      check('周期任务都在区间内', cyc.every((t) => t.dueDate >= '2026-03-01' && t.dueDate <= '2026-04-30'))
+      check(
+        '轮换按顺序循环',
+        cyc[0].title === '追肥 · 花多多1号' &&
+          cyc[1].title === '追肥 · 海藻精' &&
+          cyc[2].title === '追肥 · 腐植酸水溶肥' &&
+          cyc[3].title === '追肥 · 花多多1号',
+        cyc.slice(0, 4).map((t) => t.title).join(' | ')
+      )
+      check(
+        '周期任务的时间窗收窄到半个间隔（相邻两次不互相覆盖）',
+        cyc.every((t) => t.windowDays === 5),
+        String(cyc[0].windowDays)
+      )
+      check('没有轮换步骤时标题不带后缀', generateTasks([{ ...cycleRule, rotation: null }], null, 2026)[0].title === '追肥')
+      check(
+        '间隔为 1 天也不会死循环',
+        generateTasks([{ ...cycleRule, repeatDays: 1, monthFrom: 3, monthTo: 3 }], null, 2026).length <= 400
+      )
+      check(
+        '周期规则的起始日按植株错开',
+        generateTasks([cycleRule], null, 2026, { spreadSeed: 3 })[0].dueDate !==
+          generateTasks([cycleRule], null, 2026, { spreadSeed: 0 })[0].dueDate,
+        `${generateTasks([cycleRule], null, 2026, { spreadSeed: 3 })[0].dueDate} vs ${generateTasks([cycleRule], null, 2026, { spreadSeed: 0 })[0].dueDate}`
+      )
+      check(
+        '跨年周期规则两段都在当年内',
+        generateTasks([{ ...cycleRule, monthFrom: 11, monthTo: 2 }], null, 2026).every((t) =>
+          t.dueDate.startsWith('2026-')
+        )
+      )
 
       // ---- 时间窗与紧急度 ----
       const task = (dueDate: string, status: CareTaskStatus = 'pending', windowDays = 3) =>
@@ -810,6 +884,8 @@ export function runSmoke(outFile: string): number {
         climateZone: null,
         monthFrom: 6,
         monthTo: 8,
+        repeatDays: null,
+        rotation: null,
         actionType: 'water',
         title: '自检浇水规则',
         detail: '两天一次',
@@ -840,8 +916,17 @@ export function runSmoke(outFile: string): number {
       const tasks1 = listCareTasks(db, { plantId: carePlantId })
       check('生成的任务都能查到', tasks1.length === g1.created, `${tasks1.length} vs ${g1.created}`)
       check('生成了该物种的专属规则任务', tasks1.some((t) => t.title === '专属重剪') === false || true)
-      check('通用规则的任务也在', tasks1.some((t) => t.title === '春季追肥'))
+      check('通用规则的任务也在', tasks1.some((t) => t.title.startsWith('生长期追肥')))
       check('自建规则被用上了（6~8 月浇水）', tasks1.some((t) => t.title === '自检浇水规则'))
+      check(
+        '种子里的轮换规则产生了带步骤名的任务',
+        tasks1.some((t) => /生长期追肥 · (花多多1号|海藻精|腐植酸水溶肥)/.test(t.title)),
+        tasks1
+          .filter((t) => t.title.startsWith('生长期追肥'))
+          .slice(0, 3)
+          .map((t) => t.title)
+          .join(' | ')
+      )
 
       // 重新生成：已完成的必须保留
       const firstTask = tasks1[0]

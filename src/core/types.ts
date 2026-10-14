@@ -292,6 +292,17 @@ export interface CareRule {
   monthFrom: number
   /** 为空表示只作用于 monthFrom 这一个月 */
   monthTo: number | null
+  /**
+   * 重复间隔（天）。为空时保持「区间内每月一条」的老行为；
+   * 填 7 ~ 10 这类值可表达「每 7~10 天一轮」的节奏。
+   */
+  repeatDays: number | null
+  /**
+   * 轮换步骤。非空时生成的任务会按顺序取名 ——
+   * 例如 ["花多多1号","海藻精","腐植酸水溶肥"] 会产出
+   * 「追肥 · 花多多1号」「追肥 · 海藻精」「追肥 · 腐植酸水溶肥」再循环。
+   */
+  rotation: string[] | null
   actionType: CareActionType
   title: string
   detail: string | null

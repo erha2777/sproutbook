@@ -326,10 +326,28 @@ function migrateMonthRangesToSets(db: Db): void {
   }
 }
 
+/**
+ * 周期任务：让「每 7~10 天一轮」这种节奏能被表达出来。
+ *
+ * 起因：真实的施肥方案不是「每月一次」，而是「7~10 天一轮，三种肥循环」。
+ * 原来的规则只能按月份触发、一个月只产出一条任务，表达不了这种节奏 ——
+ * 而 care_tasks.recurrence 那一列从一开始就是为它准备的，只是没人接上线。
+ *
+ * repeat_days 为空时保持原行为（区间内每月一条）；
+ * 非空时按天数在区间内重复排布。
+ * rotation_json 是轮换步骤数组，生成时按顺序取名，例如
+ * ["花多多1号","海藻精","腐植酸水溶肥"]。
+ */
+const V4_CARE_CYCLE = /* sql */ `
+ALTER TABLE care_rules ADD COLUMN repeat_days INTEGER;
+ALTER TABLE care_rules ADD COLUMN rotation_json TEXT;
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
-  { version: 3, name: 'month_sets', run: migrateMonthRangesToSets }
+  { version: 3, name: 'month_sets', run: migrateMonthRangesToSets },
+  { version: 4, name: 'care_cycle', sql: V4_CARE_CYCLE }
 ]
 
 export const LATEST_VERSION = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0)

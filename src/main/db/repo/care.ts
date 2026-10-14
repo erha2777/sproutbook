@@ -38,6 +38,8 @@ interface CareRuleRow {
   climate_zone: string | null
   month_from: number
   month_to: number | null
+  repeat_days: number | null
+  rotation_json: string | null
   action_type: string
   title: string
   detail: string | null
@@ -55,6 +57,8 @@ function mapRule(row: CareRuleRow): CareRule {
     climateZone: row.climate_zone,
     monthFrom: row.month_from,
     monthTo: row.month_to,
+    repeatDays: row.repeat_days,
+    rotation: parseRotation(row.rotation_json),
     actionType: row.action_type as CareActionType,
     title: row.title,
     detail: row.detail,
@@ -62,6 +66,19 @@ function mapRule(row: CareRuleRow): CareRule {
     source: row.source as CareRule['source'],
     verified: row.verified === 1,
     createdAt: row.created_at
+  }
+}
+
+/** 轮换步骤存成 JSON 数组。坏数据当作空，不因为一条规则读不出来就整个列表失败。 */
+function parseRotation(raw: string | null): string[] | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    const list = parsed.map((s) => String(s).trim()).filter(Boolean)
+    return list.length > 0 ? list : null
+  } catch {
+    return null
   }
 }
 
@@ -89,16 +106,26 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
   const title = input.title.trim()
   if (!title) throw new Error('规则标题不能为空')
   if (input.monthFrom < 1 || input.monthFrom > 12) throw new Error('起始月份需要在 1~12 之间')
+  if (input.repeatDays !== null && input.repeatDays !== undefined && input.repeatDays < 1) {
+    throw new Error('重复间隔至少 1 天')
+  }
+
+  const rotation = input.rotation && input.rotation.length > 0 ? input.rotation : null
+  const rotationJson = rotation ? JSON.stringify(rotation) : null
+  const repeatDays = input.repeatDays ?? null
 
   if (input.id) {
     db.run(
       `UPDATE care_rules SET species_key=?, hemisphere=?, climate_zone=?, month_from=?, month_to=?,
-         action_type=?, title=?, detail=?, priority=?, source=?, verified=? WHERE id=?`,
+         repeat_days=?, rotation_json=?, action_type=?, title=?, detail=?, priority=?, source=?, verified=?
+       WHERE id=?`,
       input.speciesKey.trim() || '*',
       input.hemisphere,
       input.climateZone,
       input.monthFrom,
       input.monthTo,
+      repeatDays,
+      rotationJson,
       input.actionType,
       title,
       input.detail,
@@ -114,13 +141,15 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
 
   const r = db.run(
     `INSERT INTO care_rules (species_key, hemisphere, climate_zone, month_from, month_to,
-       action_type, title, detail, priority, source, verified)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       repeat_days, rotation_json, action_type, title, detail, priority, source, verified)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.speciesKey.trim() || '*',
     input.hemisphere,
     input.climateZone,
     input.monthFrom,
     input.monthTo,
+    repeatDays,
+    rotationJson,
     input.actionType,
     title,
     input.detail,
