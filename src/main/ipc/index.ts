@@ -695,6 +695,22 @@ function registerAiIpc(): void {
    * 图片**先缩小再发**：手机照片动辄几 MB，base64 还要再涨三分之一，
    * 直接发多半被接口按体积拒掉。识别不需要原始分辨率。
    */
+  /**
+   * 把一张图片处理成可以发给模型的 data URL。
+   *
+   * **先缩到长边 1024 再发**：手机照片动辄几 MB，base64 还要再涨三分之一，
+   * 直接发多半被接口按体积拒掉。识别不需要原始分辨率。
+   * 用 Electron 自带的 nativeImage，不引新依赖。
+   *
+   * 读不出来时回落到原图 —— 宁可发大图被接口拒，也不要在这里静默失败。
+   */
+  function prepareImageDataUrl(file: string): string {
+    const native = nativeImage.createFromPath(file)
+    const resized = native.isEmpty() ? null : native.resize({ width: 1024, quality: 'good' })
+    if (resized) return `data:image/jpeg;base64,${resized.toJPEG(82).toString('base64')}`
+    return `data:image/jpeg;base64,${readFileSync(file).toString('base64')}`
+  }
+
   handle('ai:identify', async (payload: { requestId: string; imageId: number; hint?: string }) => {
     const db = getDb()
     const settings = readAiSettings(db)
@@ -717,12 +733,7 @@ function registerAiIpc(): void {
     const file = join(imagesDir(), image.path)
     if (!existsSync(file)) return fail('图片文件找不到了，可能被移动或删除。')
 
-    // 缩到长边 1024 —— 足够认出叶片和花，又不会把请求撑大
-    const native = nativeImage.createFromPath(file)
-    const resized = native.isEmpty() ? null : native.resize({ width: 1024, quality: 'good' })
-    const dataUrl = resized
-      ? `data:image/jpeg;base64,${resized.toJPEG(82).toString('base64')}`
-      : `data:image/jpeg;base64,${readFileSync(file).toString('base64')}`
+    const dataUrl = prepareImageDataUrl(file)
 
     const controller = new AbortController()
     runningAi.set(payload.requestId, controller)
@@ -744,6 +755,57 @@ function registerAiIpc(): void {
         message: result.error,
         model: result.model
       }
+    } finally {
+      runningAi.delete(payload.requestId)
+    }
+  })
+
+  /*
+   * 识别一张**本地图片**（弹文件对话框选）。
+   *
+   * 为什么要这条：识图最该用的地方是「录入一种新植物」——
+   * 拍了照想知道是什么。可那时相册里还没有这张图，所以必须能从磁盘选。
+   *
+   * 文件对话框放在主进程：不让界面直接传任意路径进来。
+   */
+  handle('ai:identifyFile', async (payload: { requestId: string; hint?: string }) => {
+    const fail = (message: string) => ({ ok: false as const, candidates: [], message, model: null, sourceName: null })
+
+    const picked = await dialog.showOpenDialog({
+      title: '选一张植物照片',
+      properties: ['openFile'],
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }]
+    })
+    if (picked.canceled || picked.filePaths.length === 0) return fail('没有选择图片。')
+
+    const db = getDb()
+    const settings = readAiSettings(db)
+    const apiKey = getApiKey()
+    if (!apiKey) return fail('尚未配置 API Key。请到「设置 → AI」填写后再试。')
+
+    // 视觉模型留空时回落到对话模型 —— deepseek-flash 本身就能读图
+    const model = (settings.visionModel ?? '').trim() || settings.chatModel
+    if (!model) return fail('尚未配置模型。请到「设置 → AI」填写对话模型。')
+
+    const file = picked.filePaths[0]
+    if (!existsSync(file)) return fail('文件读不到了。')
+
+    const controller = new AbortController()
+    runningAi.set(payload.requestId, controller)
+    try {
+      const result = await identifyPlant({
+        baseUrl: settings.baseUrl,
+        apiKey,
+        model,
+        imageDataUrl: prepareImageDataUrl(file),
+        hint: payload.hint,
+        temperature: settings.temperature,
+        timeoutMs: settings.timeoutMs,
+        maxRetries: settings.maxRetries,
+        signal: controller.signal
+      })
+      const sourceName = file.split(/[\\/]/).pop() ?? null
+      return { ok: result.ok, candidates: result.candidates, message: result.error, model: result.model, sourceName }
     } finally {
       runningAi.delete(payload.requestId)
     }
