@@ -636,6 +636,28 @@ export function SettingsPage(): ReactNode {
               >
                 {weatherTesting ? '测试中…' : '用「某县县」试一下'}
               </Button>
+              {/*
+                硬清缓存。
+                「重新获取」有 60 秒冷却（防连点烧额度），所以缓存一旦出问题，
+                用户**没有任何办法让应用立刻重取**。这个通道一直存在，
+                只是从来没人接 —— 现在接上。
+              */}
+              <Button
+                size="small"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      await window.api.weather.clearCache()
+                      toast.push('天气缓存已清空。回到「养护计划」会重新取一次。', 'success')
+                    } catch (error) {
+                      toast.push(`清空失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+                    }
+                  })()
+                }}
+                title="包含预报缓存与地名解析缓存。下次打开养护计划会重新请求一次"
+              >
+                清空天气缓存
+              </Button>
               <span className="small muted">{weatherConfig.qweatherReady ? '' : '填好 Host 和 Key 才能测'}</span>
             </div>
             {weatherTestResult ? (
