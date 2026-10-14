@@ -37,7 +37,7 @@ import { flowerColorForSpecies } from '@core/sprite'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
 import { todayIso } from '@core/care'
 import { PlantSprite } from '../components/PlantSprite'
-import { Badge, Button, EmptyState, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
+import { Badge, Button, EmptyState, LoadFailure, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 import { PlantEditorModal } from './PlantEditor'
 
 
@@ -55,6 +55,8 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
   /** 每株最近一条待办，场景里直接标出来「这盆该做什么」 */
   const [nextTask, setNextTask] = useState<Record<number, CareTaskListItem>>({})
   const [phases, setPhases] = useState<Record<number, PlantPhaseInfo>>({})
+  /** 读取失败的原因。和「确实没有数据」是两回事 —— 不能都显示成空态 */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<'' | PlantStatus>('')
@@ -79,6 +81,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
         window.api.species.list({ limit: 500 }),
         window.api.care.tasks({ status: 'open' })
       ])
+      setLoadError(null)
       setItems(list.items)
       setStats(stat)
       setEnvironments(envs)
@@ -97,7 +100,10 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
       const infos = await Promise.all(list.items.map((p) => window.api.care.plantPhase(p.id)))
       setPhases(Object.fromEntries(infos.map((i) => [i.plantId, i])))
     } catch (error) {
-      toast.push(`加载失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+      const msg = error instanceof Error ? error.message : '未知错误'
+      // 记下来，页面主体要显示「读取失败」而不是「还没有植物」
+      setLoadError(msg)
+      toast.push(`加载失败：${msg}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -287,6 +293,8 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
           <Panel>
             <Spinner label="加载中…" />
           </Panel>
+        ) : loadError ? (
+          <LoadFailure what="植株列表" detail={loadError} onRetry={() => void reload()} />
         ) : gardenItems.length === 0 ? (
           <Panel>
             <EmptyState

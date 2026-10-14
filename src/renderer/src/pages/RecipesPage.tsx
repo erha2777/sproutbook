@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { RecipeListItem } from '@core/types'
-import { Badge, Button, EmptyState, Notice, Panel, SectionTitle, SelectInput, Spinner, useDebounced, useToast } from '../components/ui'
+import { LoadFailure, Badge, Button, EmptyState, Notice, Panel, SectionTitle, SelectInput, Spinner, useDebounced, useToast } from '../components/ui'
 import { RecipeEditor } from '../components/RecipeEditor'
 import { MaterialManager } from '../components/MaterialManager'
 
@@ -17,6 +17,8 @@ export function RecipesPage(): ReactNode {
   const [items, setItems] = useState<RecipeListItem[]>([])
   const [kinds, setKinds] = useState<string[]>([])
   const [stats, setStats] = useState({ materials: 0, recipes: 0 })
+  /** 读取失败的原因。和「确实没有数据」是两回事，不能都显示成空态 */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [kind, setKind] = useState('')
@@ -33,11 +35,14 @@ export function RecipesPage(): ReactNode {
         window.api.recipes.kinds(),
         window.api.recipes.stats()
       ])
+      setLoadError(null)
       setItems(list)
       setKinds(kindList)
       setStats(s)
     } catch (error) {
-      toast.push(`加载配方失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+      const msg = error instanceof Error ? error.message : '未知错误'
+      setLoadError(msg)
+      toast.push(`${msg}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -113,6 +118,8 @@ export function RecipesPage(): ReactNode {
 
         {loading ? (
           <Spinner label="加载中…" />
+        ) : loadError ? (
+          <LoadFailure what="配方库" detail={loadError} onRetry={() => void reload()} />
         ) : items.length === 0 ? (
           <EmptyState
             icon="🧪"
