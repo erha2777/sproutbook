@@ -79,7 +79,7 @@ const speciesFields: Seed[] = [
     groupName: '形态',
     type: 'select',
     options: ['草本', '灌木', '乔木', '藤本', '多肉', '球根', '水生', '蕨类', '附生'],
-    helpText: '决定将来「花园视图」用哪套生长阶段素材。'
+    helpText: '决定花园视图用哪套生长阶段素材（花园视图已实现）。'
   },
   {
     key: 'mature_height',
