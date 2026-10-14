@@ -401,6 +401,45 @@ img {
   gap: 6px;
 }
 
+/* ---------- 养护计划 ---------- */
+
+/* 任务行：左图标、中间内容自适应、右操作按钮不换行 */
+.task-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 2px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+  margin-bottom: 6px;
+}
+.task-icon {
+  font-size: 20px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+/* 养护日志时间线：左侧日期列对齐，像一条竖轴 */
+.log-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.log-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 7px 10px;
+  border-left: 3px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+}
+.log-date {
+  flex-shrink: 0;
+  width: 92px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
 .pixel-card {
   background: var(--wood-panel);
   border: var(--step) solid var(--wood-outline);

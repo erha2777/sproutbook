@@ -53,6 +53,26 @@ import {
 import type { RecipeListOptions } from '../db/repo/recipes'
 import type { MaterialInput, RecipeInput } from '../../core/types'
 import {
+  addCareLog,
+  careOverview,
+  completeCareTask,
+  createCareTask,
+  deleteCareLog,
+  deleteCareRule,
+  deleteCareTask,
+  generateTasksForAll,
+  generateTasksForPlant,
+  listCareLogs,
+  listCareRules,
+  listCareTasks,
+  reopenCareTask,
+  saveCareRule,
+  skipCareTask,
+  updateCareTask
+} from '../db/repo/care'
+import type { CareTaskPatch, CareTaskQuery } from '../../shared/api'
+import type { CareHemisphere, CareRuleInput, CareTaskInput } from '../../core/types'
+import {
   applyImport,
   buildExport,
   discardImport,
@@ -441,6 +461,34 @@ function registerImageIpc(): void {
     }
     return { imported, canceled: false, failures }
   })
+
+  // -------------------------------------------------------------------------
+  // 养护计划
+  // -------------------------------------------------------------------------
+
+  handle('care:rules', (options?: { speciesKey?: string; hemisphere?: CareHemisphere }) =>
+    listCareRules(getDb(), options ?? {})
+  )
+  handle('care:rule.save', (input: CareRuleInput) => saveCareRule(getDb(), input))
+  handle('care:rule.delete', (id: number) => deleteCareRule(getDb(), id))
+
+  handle('care:tasks', (query?: CareTaskQuery) => listCareTasks(getDb(), query ?? {}))
+  handle('care:task.create', (input: CareTaskInput) => createCareTask(getDb(), input))
+  handle('care:task.update', (id: number, patch: CareTaskPatch) => updateCareTask(getDb(), id, patch))
+  handle('care:task.complete', (id: number, note?: string | null, date?: string) =>
+    completeCareTask(getDb(), id, note, date)
+  )
+  handle('care:task.skip', (id: number, reason?: string | null) => skipCareTask(getDb(), id, reason))
+  handle('care:task.reopen', (id: number) => reopenCareTask(getDb(), id))
+  handle('care:task.delete', (id: number) => deleteCareTask(getDb(), id))
+
+  handle('care:generate', (plantId: number, year: number) => generateTasksForPlant(getDb(), plantId, year))
+  handle('care:generateAll', (year: number) => generateTasksForAll(getDb(), year))
+  handle('care:overview', (year: number) => careOverview(getDb(), year))
+
+  handle('care:logs', (plantId?: number, limit?: number) => listCareLogs(getDb(), { plantId, limit }))
+  handle('care:log.add', (input: Parameters<typeof addCareLog>[1]) => addCareLog(getDb(), input))
+  handle('care:log.delete', (id: number) => deleteCareLog(getDb(), id))
 
   // -------------------------------------------------------------------------
   // 材料与配方

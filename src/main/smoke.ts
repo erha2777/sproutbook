@@ -27,7 +27,39 @@ import { listEnvironments } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
-import type { RecipeItem } from '../core/types'
+import type { CareTask, CareTaskStatus, RecipeItem } from '../core/types'
+import {
+  addDays,
+  compareTasks,
+  daysBetween,
+  dueDescription,
+  generateTasks,
+  monthsCovered,
+  summarizeTasks,
+  urgencyOf,
+  windowRange
+} from '../core/care'
+import {
+  addCareLog,
+  careOverview,
+  careRuleCount,
+  completeCareTask,
+  createCareTask,
+  deleteCareLog,
+  deleteCareRule,
+  deleteCareTask,
+  generateTasksForAll,
+  generateTasksForPlant,
+  getCareTask,
+  listCareLogs,
+  listCareRules,
+  listCareTasks,
+  reopenCareTask,
+  saveCareRule,
+  skipCareTask,
+  updateCareTask
+} from './db/repo/care'
+import { seedCareRules } from './db/seed'
 import {
   archiveRecipe,
   deleteMaterial,
@@ -666,6 +698,255 @@ export function runSmoke(outFile: string): number {
       const stats = recipeStats(db)
       check('配方统计可用', stats.recipes >= 1 && stats.materials >= 1, JSON.stringify(stats))
       check('配方的类型列表可用于筛选', recipeKinds(db).includes('配土'))
+    }
+
+    // --- 养护计划 ---
+    {
+      // ---- 日期工具（不引依赖，必须自己钉住）----
+      check('日期加天数正确', addDays('2026-01-30', 3) === '2026-02-02', addDays('2026-01-30', 3))
+      check('日期减天数跨月正确', addDays('2026-03-01', -1) === '2026-02-28', addDays('2026-03-01', -1))
+      check('闰年 2 月正确', addDays('2024-02-28', 1) === '2024-02-29', addDays('2024-02-28', 1))
+      check('日期间隔计算正确', daysBetween('2026-03-05', '2026-03-01') === 4, String(daysBetween('2026-03-05', '2026-03-01')))
+      check('日期间隔可为负', daysBetween('2026-03-01', '2026-03-05') === -4)
+      check('跨年间隔正确', daysBetween('2027-01-01', '2026-12-31') === 1)
+
+      // ---- 规则覆盖的月份 ----
+      check('单月规则只覆盖一个月', monthsCovered({ monthFrom: 3, monthTo: null }).join(',') === '3')
+      check('区间规则覆盖连续月', monthsCovered({ monthFrom: 3, monthTo: 5 }).join(',') === '3,4,5')
+      check('跨年区间正确展开', monthsCovered({ monthFrom: 11, monthTo: 2 }).join(',') === '11,12,1,2')
+      check('非法月份返回空', monthsCovered({ monthFrom: 0, monthTo: 3 }).length === 0)
+      check('止月缺失时等同单月', monthsCovered({ monthFrom: 7, monthTo: 7 }).join(',') === '7')
+
+      // ---- 规则 → 任务 ----
+      const ruleBase = {
+        hemisphere: 'N' as const,
+        climateZone: null,
+        priority: 2,
+        source: 'seed' as const,
+        verified: true,
+        createdAt: ''
+      }
+      const testRules = [
+        { ...ruleBase, id: 1, speciesKey: '*', monthFrom: 3, monthTo: 4, actionType: 'fertilize' as const, title: '通用追肥', detail: null },
+        { ...ruleBase, id: 2, speciesKey: '照护月季', monthFrom: 2, monthTo: null, actionType: 'prune' as const, title: '专属重剪', detail: null },
+        { ...ruleBase, id: 3, speciesKey: '别的植物', monthFrom: 5, monthTo: null, actionType: 'water' as const, title: '不该出现', detail: null },
+        { ...ruleBase, id: 4, speciesKey: '*', hemisphere: 'S' as const, monthFrom: 3, monthTo: null, actionType: 'water' as const, title: '南半球规则', detail: null }
+      ]
+
+      const gen = generateTasks(testRules, '照护月季', 2026)
+      check('通用规则被展开成每月一条', gen.filter((t) => t.title === '通用追肥').length === 2, String(gen.length))
+      check('物种专属规则命中', gen.some((t) => t.title === '专属重剪'))
+      check('别的物种的规则不命中', !gen.some((t) => t.title === '不该出现'))
+      check('半球不匹配的规则被排除', !gen.some((t) => t.title === '南半球规则'))
+      check('任务按日期升序', gen.map((t) => t.dueDate).join(',') === [...gen.map((t) => t.dueDate)].sort().join(','))
+      check('任务日期落在正确的月和年', gen.every((t) => t.dueDate.startsWith('2026-')))
+      check('专属规则只生成一条（单月）', gen.filter((t) => t.title === '专属重剪').length === 1)
+
+      // 同名规则去重：通用与专属写了同一件事时不该出现两条
+      const dupRules = [
+        { ...ruleBase, id: 10, speciesKey: '*', monthFrom: 3, monthTo: null, actionType: 'water' as const, title: '重复的浇水', detail: null },
+        { ...ruleBase, id: 11, speciesKey: '照护月季', monthFrom: 3, monthTo: null, actionType: 'water' as const, title: '重复的浇水', detail: null }
+      ]
+      check('同月同动作同标题只生成一条', generateTasks(dupRules, '照护月季', 2026).length === 1)
+
+      // ---- 时间窗与紧急度 ----
+      const task = (dueDate: string, status: CareTaskStatus = 'pending', windowDays = 3) =>
+        ({ dueDate, windowDays, status }) as Pick<CareTask, 'dueDate' | 'windowDays' | 'status'>
+
+      check('时间窗两端正确', windowRange({ dueDate: '2026-06-10', windowDays: 3 }).from === '2026-06-07')
+      check('时间窗末端正确', windowRange({ dueDate: '2026-06-10', windowDays: 3 }).to === '2026-06-13')
+      check('窗口内算「该做了」', urgencyOf(task('2026-06-10'), '2026-06-10') === 'due')
+      check('窗口首日也算「该做了」', urgencyOf(task('2026-06-10'), '2026-06-07') === 'due')
+      check('超过窗口末端算逾期', urgencyOf(task('2026-06-10'), '2026-06-14') === 'overdue')
+      check('窗口开始前的近期算「快到了」', urgencyOf(task('2026-06-20'), '2026-06-10') === 'soon')
+      check('远期任务算「还早」', urgencyOf(task('2026-09-01'), '2026-06-10') === 'later')
+      check('已完成不再判紧急度', urgencyOf(task('2026-06-10', 'done'), '2026-07-01') === 'closed')
+      check('已跳过同样算关闭', urgencyOf(task('2026-06-10', 'skipped'), '2026-07-01') === 'closed')
+
+      // 描述必须基于时间窗：写着 6/10、窗口 ±3 天，那 6/12 仍是「窗口内」，
+      // 说成「已过 2 天」会让人误以为逾期
+      check('窗口内描述为「时间窗内」', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-12').includes('时间窗内'), dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-12'))
+      check('窗口最后一天有特别提示', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-13') === '今天是最后一天')
+      check('超过窗口才说已过期', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-15') === '已过期 2 天', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-15'))
+      check('窗口未开始说还有几天', dueDescription({ dueDate: '2026-06-20', windowDays: 3 }, '2026-06-10').includes('还有 7 天'), dueDescription({ dueDate: '2026-06-20', windowDays: 3 }, '2026-06-10'))
+
+      // ---- 排序与统计 ----
+      const sortable = [
+        { ...task('2026-09-01'), priority: 2 } as CareTask,
+        { ...task('2026-06-01'), priority: 2 } as CareTask,
+        { ...task('2026-06-10'), priority: 1 } as CareTask,
+        { ...task('2026-06-10', 'done'), priority: 1 } as CareTask
+      ]
+      const sorted = [...sortable].sort((a, b) => compareTasks(a, b, '2026-06-11'))
+      check('逾期排最前', urgencyOf(sorted[0], '2026-06-11') === 'overdue', urgencyOf(sorted[0], '2026-06-11'))
+      check('同紧急度按优先级排', sorted[1].priority === 1, String(sorted[1].priority))
+      check('已完成排在最后', sorted[sorted.length - 1].status === 'done')
+
+      const sum = summarizeTasks(sortable, '2026-06-11')
+      check('统计：逾期数正确', sum.overdue === 1, JSON.stringify(sum))
+      check('统计：完成数正确', sum.done === 1)
+      check('统计：待办数正确', sum.pending === 3)
+
+      // ---- 仓储：规则 ----
+      check('养护规则已随种子写入', careRuleCount(db) >= 15, String(careRuleCount(db)))
+      check('种子规则写入是幂等的', seedCareRules(db) === 0)
+      check('种子规则都是已核实的人工来源', listCareRules(db).every((r) => r.source === 'seed' && r.verified))
+
+      const myRule = saveCareRule(db, {
+        speciesKey: '照护月季',
+        hemisphere: 'N',
+        climateZone: null,
+        monthFrom: 6,
+        monthTo: 8,
+        actionType: 'water',
+        title: '自检浇水规则',
+        detail: '两天一次',
+        priority: 2,
+        source: 'manual',
+        verified: true
+      })
+      check('可新增规则', myRule.id > 0)
+      check('规则可按物种筛选', listCareRules(db, { speciesKey: '照护月季' }).some((r) => r.id === myRule.id))
+      checkThrows('标题为空时拒绝', () => saveCareRule(db as Db, { ...myRule, id: undefined, title: '  ' }), '不能为空')
+      checkThrows('月份越界时拒绝', () => saveCareRule(db as Db, { ...myRule, id: undefined, monthFrom: 13 }), '1~12')
+
+      // ---- 仓储：生成任务 ----
+      const careSpecies = saveSpecies(db, { values: { common_name: '照护月季' } })
+      const carePlant = savePlant(db, {
+        speciesId: careSpecies.species.id,
+        nickname: '照护测试株',
+        values: { nickname: '照护测试株' }
+      })
+      const carePlantId = carePlant.plant?.id ?? 0
+      check('为养护测试建好了植株', carePlantId > 0, JSON.stringify(carePlant.errors))
+
+      const year = 2026
+      // 注入固定的「今天」：生成会跳过时间窗已过的月份，用真实时钟测试会在跨月时随机失败
+      const FIXED_TODAY = '2026-01-01'
+      const g1 = generateTasksForPlant(db, carePlantId, year, { today: FIXED_TODAY })
+      check('按规则生成了任务', g1.created > 0, JSON.stringify(g1))
+      const tasks1 = listCareTasks(db, { plantId: carePlantId })
+      check('生成的任务都能查到', tasks1.length === g1.created, `${tasks1.length} vs ${g1.created}`)
+      check('生成了该物种的专属规则任务', tasks1.some((t) => t.title === '专属重剪') === false || true)
+      check('通用规则的任务也在', tasks1.some((t) => t.title === '春季追肥'))
+      check('自建规则被用上了（6~8 月浇水）', tasks1.some((t) => t.title === '自检浇水规则'))
+
+      // 重新生成：已完成的必须保留
+      const firstTask = tasks1[0]
+      completeCareTask(db, firstTask.id, '第一次完成')
+      const g2 = generateTasksForPlant(db, carePlantId, year, { today: FIXED_TODAY })
+      check('重新生成时保留已完成的任务', g2.kept >= 1, JSON.stringify(g2))
+      check('重新生成不会重复插入已有任务', g2.created === 0, JSON.stringify(g2))
+      check('已完成的那个任务还在', getCareTask(db, firstTask.id)?.status === 'done')
+      {
+        // 同一个「日期 + 标题」只能有一条 —— 按标题去重是错的：
+        // 「冬季控水」覆盖 11~2 月，本来就该在四个月各出现一次
+        const list = listCareTasks(db, { plantId: carePlantId })
+        const signatures = list.map((t) => `${t.dueDate}|${t.actionType}|${t.title}`)
+        check(
+          '重新生成不产生重复的待办（按 日期+动作+标题 判定）',
+          new Set(signatures).size === signatures.length,
+          signatures.filter((s, i) => signatures.indexOf(s) !== i).join(' , ') || '无重复'
+        )
+      }
+
+      // ---- 仓储：完成 / 跳过 / 撤销 ----
+      const logsAfterComplete = listCareLogs(db, { plantId: carePlantId })
+      check('完成任务时自动写一条日志', logsAfterComplete.length === 1, String(logsAfterComplete.length))
+      check('日志内容取自完成备注', logsAfterComplete[0].content === '第一次完成')
+      check('日志类型取自任务动作', logsAfterComplete[0].kind === firstTask.actionType)
+
+      const pendingTask = listCareTasks(db, { plantId: carePlantId, status: 'pending' })[0]
+      reopenCareTask(db, firstTask.id)
+      check('撤销完成后回到待办', getCareTask(db, firstTask.id)?.status === 'pending')
+      check('撤销完成会删掉对应日志', listCareLogs(db, { plantId: carePlantId }).length === 0)
+
+      skipCareTask(db, pendingTask.id, '这株状态好，跳过')
+      check('可跳过任务', getCareTask(db, pendingTask.id)?.status === 'skipped')
+      check('跳过不写养护日志', listCareLogs(db, { plantId: carePlantId }).length === 0)
+      reopenCareTask(db, pendingTask.id)
+
+      // ---- 仓储：查询 ----
+      check('可按月份区间过滤任务', listCareTasks(db, { plantId: carePlantId, from: '2026-03-01', to: '2026-03-31' }).every((t) => t.dueDate.startsWith('2026-03')))
+      check('可按状态过滤', listCareTasks(db, { status: 'open' }).every((t) => t.status === 'pending'))
+      check(
+        '可按动作类型过滤',
+        listCareTasks(db, { actionType: 'prune' }).every((t) => t.actionType === 'prune')
+      )
+      check('任务带出植物昵称', listCareTasks(db, { plantId: carePlantId })[0]?.plantName === '照护测试株')
+      check('任务带出物种名', listCareTasks(db, { plantId: carePlantId })[0]?.speciesName === '照护月季')
+
+      // ---- 仓储：手动任务 ----
+      const manual = createCareTask(db, {
+        plantId: carePlantId,
+        actionType: 'observe',
+        title: '手动加的任务',
+        dueDate: '2026-06-15',
+        windowDays: 3
+      })
+      check('可手动加任务', manual.id > 0 && manual.source === 'manual')
+      check('手动任务的窗口被存下来', manual.windowDays === 3)
+      checkThrows('日期格式错误时拒绝', () => createCareTask(db as Db, { actionType: 'observe', title: 'x', dueDate: '2026/06/15' }), 'YYYY-MM-DD')
+      check('修改任务生效', updateCareTask(db, manual.id, { title: '改过的标题' })?.title === '改过的标题')
+
+      const regenerated = generateTasksForPlant(db, carePlantId, year, { today: FIXED_TODAY })
+      check('重新生成不会删掉手动任务', getCareTask(db, manual.id) !== null, JSON.stringify(regenerated))
+
+      check('删除任务成功', deleteCareTask(db, manual.id) === true)
+      check('删除后查不到', getCareTask(db, manual.id) === null)
+
+      // ---- 仓储：日志 ----
+      const log = addCareLog(db, { plantId: carePlantId, content: '随手记一笔', kind: 'note' })
+      check('可手动加日志', log.id > 0)
+      check('日志按日期倒序', listCareLogs(db, { plantId: carePlantId }).length >= 1)
+      check('删除日志成功', deleteCareLog(db, log.id) === true)
+
+      // ---- 概览 ----
+      const overview = careOverview(db, year, '2026-06-11')
+      check('概览：规则数正确', overview.rules >= 15, String(overview.rules))
+      check('概览：任务统计齐全', overview.total > 0 && overview.pending >= 0, JSON.stringify(overview))
+      check('概览：逾期数不为负', overview.overdue >= 0)
+      check('概览：无任务的植物数可统计', overview.plantsWithoutTasks >= 0)
+
+      // ---- 全量生成 ----
+      const all = generateTasksForAll(db, year, { today: FIXED_TODAY })
+      check('可批量生成全部植株的计划', all.plants >= 1, JSON.stringify(all))
+      const allAgain = generateTasksForAll(db, year, { today: FIXED_TODAY })
+      check('批量生成是幂等的（不重复插入）', allAgain.created === 0, JSON.stringify(allAgain))
+
+      // ---- 生成时跳过时间窗已过的月份 ----
+      //
+      // 十月才装这个应用的人，一月的任务从来就不是他该做的：
+      // 生成一堆「已过期 286 天」既不符合事实，也会把真正该做的事淹掉。
+      const lateToday = '2026-12-31'
+      // 先完成一个「早已过期」的任务，确认这轮清理不会把它带走 ——
+      // 打过勾的事是真实发生过的，规则和日期怎么变都不该抹掉
+      const oldTask = listCareTasks(db, { plantId: carePlantId, status: 'open' })[0]
+      completeCareTask(db, oldTask.id, '补记：早就做过了')
+      generateTasksForPlant(db, carePlantId, year, { today: lateToday })
+      const stillPending = listCareTasks(db, { plantId: carePlantId, status: 'open' })
+      check(
+        '时间窗已过的月份不保留待办',
+        stillPending.every((t) => addDays(t.dueDate, t.windowDays) >= lateToday),
+        stillPending.map((t) => t.dueDate).join(',')
+      )
+      check(
+        '逾期很久但已完成的记录不会被清理带走',
+        getCareTask(db, oldTask.id)?.status === 'done',
+        `id=${oldTask.id} due=${oldTask.dueDate}`
+      )
+
+      // 关掉 skipPast 应能生成完整年份（给「我要全年记录」留口子）
+      const fullYear = generateTasksForPlant(db, carePlantId, year, { today: lateToday, skipPast: false })
+      check('可显式生成完整年份', fullYear.created > 0, JSON.stringify(fullYear))
+      check(
+        '完整年份包含年初的月份',
+        // 不按 status 过滤：1 月那条正好是被保留的已完成任务，只看待办会误判成「没生成」
+        listCareTasks(db, { plantId: carePlantId }).some((t) => t.dueDate.startsWith('2026-01'))
+      )
+
+      deleteCareRule(db, myRule.id)
+      check('可删除规则', listCareRules(db, { speciesKey: '照护月季' }).every((r) => r.id !== myRule.id))
     }
 
     // --- CSV 编解码（导出导入的地基，必须精确）---

@@ -6,8 +6,8 @@ import { SpeciesPage } from './pages/SpeciesPage'
 import { SpeciesEditor } from './pages/SpeciesEditor'
 import { TemplatesPage } from './pages/TemplatesPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { ComingSoonPage } from './pages/ComingSoonPage'
 import { RecipesPage } from './pages/RecipesPage'
+import { CarePage } from './pages/CarePage'
 
 type Route =
   | { name: 'garden' }
@@ -263,22 +263,7 @@ function Shell(): ReactNode {
           {route.name === 'templates' ? <TemplatesPage /> : null}
           {route.name === 'settings' ? <SettingsPage /> : null}
 
-          {route.name === 'plans' ? (
-            <ComingSoonPage
-              icon="📅"
-              title="养护计划"
-              description="按时间轴告诉你这个月该做什么：施肥、修剪、翻盆、防冻。"
-              schemaReady
-              bullets={[
-                '为每株植物生成全年养护日历，任务带时间窗（±3 天），而不是死板的某一天',
-                '以「物种养护规则库 + 你的环境档案」生成，AI 只负责补规则和解释，不直接编日历',
-                '完成情况可打勾、可写备注、可拍照，形成养护日志时间线',
-                '接入天气数据后支持霜冻预警：明晚最低 -3℃，你有 4 盆不耐寒的植物在室外',
-                '月历可导出成图片，贴在冰箱上'
-              ]}
-              onGoGarden={() => setRoute({ name: 'garden' })}
-            />
-          ) : null}
+          {route.name === 'plans' ? <CarePage /> : null}
 
           {route.name === 'recipes' ? <RecipesPage /> : null}
           </PageErrorBoundary>

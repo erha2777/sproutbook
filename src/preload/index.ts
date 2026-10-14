@@ -96,6 +96,27 @@ const api: SproutbookApi = {
     kinds: () => call('recipes:kinds'),
     stats: () => call('recipes:stats')
   },
+  care: {
+    rules: (options) => call('care:rules', options ?? {}),
+    saveRule: (input) => call('care:rule.save', input),
+    removeRule: (id) => call('care:rule.delete', id),
+
+    tasks: (query) => call('care:tasks', query ?? {}),
+    createTask: (input) => call('care:task.create', input),
+    updateTask: (id, patch) => call('care:task.update', id, patch),
+    completeTask: (id, note, date) => call('care:task.complete', id, note ?? null, date),
+    skipTask: (id, reason) => call('care:task.skip', id, reason ?? null),
+    reopenTask: (id) => call('care:task.reopen', id),
+    removeTask: (id) => call('care:task.delete', id),
+
+    generate: (plantId, year) => call('care:generate', plantId, year),
+    generateAll: (year) => call('care:generateAll', year),
+    overview: (year) => call('care:overview', year),
+
+    logs: (plantId, limit) => call('care:logs', plantId, limit),
+    addLog: (input) => call('care:log.add', input),
+    removeLog: (id) => call('care:log.delete', id)
+  },
   transfer: {
     export: (kind, format) => call('transfer:export', kind, format),
     previewImport: (kind) => call('transfer:previewImport', kind),

@@ -11,6 +11,14 @@ import type {
   AiSettings,
   AiSettingsPatch,
   AppInfo,
+  CareActionType,
+  CareHemisphere,
+  CareLog,
+  CareRule,
+  CareRuleInput,
+  CareTask,
+  CareTaskInput,
+  CareTaskStatus,
   Environment,
   EnvironmentInput,
   FieldDefinition,
@@ -229,6 +237,87 @@ export interface SproutbookApi {
     applyImport(token: string, options?: TransferImportOptions): Promise<TransferResult>
     discardImport(token: string): Promise<boolean>
   }
+  care: {
+    rules(options?: { speciesKey?: string; hemisphere?: CareHemisphere }): Promise<CareRule[]>
+    saveRule(input: CareRuleInput): Promise<CareRule>
+    removeRule(id: number): Promise<boolean>
+
+    tasks(query?: CareTaskQuery): Promise<CareTaskListItem[]>
+    createTask(input: CareTaskInput): Promise<CareTask>
+    updateTask(id: number, patch: CareTaskPatch): Promise<CareTask | null>
+    /** 完成时会自动写一条养护日志 */
+    completeTask(id: number, note?: string | null, date?: string): Promise<CareTask | null>
+    skipTask(id: number, reason?: string | null): Promise<CareTask | null>
+    /** 撤销完成 / 跳过，并删掉对应日志 */
+    reopenTask(id: number): Promise<CareTask | null>
+    removeTask(id: number): Promise<boolean>
+
+    /** 生成是幂等的：签名相同的任务原样保留，已完成的一律不动 */
+    generate(plantId: number, year: number): Promise<CareGenerateResult>
+    generateAll(year: number): Promise<CareGenerateResult>
+    overview(year: number): Promise<CareOverview>
+
+    logs(plantId?: number, limit?: number): Promise<CareLog[]>
+    addLog(input: {
+      plantId: number
+      taskId?: number | null
+      logDate?: string
+      kind?: string
+      content?: string | null
+    }): Promise<CareLog>
+    removeLog(id: number): Promise<boolean>
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 养护计划（跨进程契约）
+// ---------------------------------------------------------------------------
+
+/** 任务带上植物与物种名 —— 列表里只说「施肥」没人知道是哪一盆 */
+export interface CareTaskListItem extends CareTask {
+  plantName: string | null
+  speciesName: string | null
+}
+
+export interface CareTaskQuery {
+  plantId?: number
+  /** YYYY-MM-DD，含 */
+  from?: string
+  /** YYYY-MM-DD，含 */
+  to?: string
+  /** 'open' = 只要待办 */
+  status?: CareTaskStatus | 'open'
+  actionType?: CareActionType
+  limit?: number
+}
+
+export interface CareTaskPatch {
+  title?: string
+  detail?: string | null
+  dueDate?: string
+  windowDays?: number
+  priority?: number
+  actionType?: CareActionType
+  plantId?: number | null
+}
+
+export interface CareGenerateResult {
+  created: number
+  kept: number
+  removed: number
+  plants: number
+}
+
+export interface CareOverview {
+  total: number
+  pending: number
+  done: number
+  skipped: number
+  overdue: number
+  due: number
+  rules: number
+  /** 还没有生成过任务的植物数，界面用来提示「先生成计划」 */
+  plantsWithoutTasks: number
 }
 
 // ---------------------------------------------------------------------------

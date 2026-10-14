@@ -261,6 +261,111 @@ export interface RecipeListItem extends Recipe {
 }
 
 // ---------------------------------------------------------------------------
+// 养护计划
+// ---------------------------------------------------------------------------
+
+export type CareActionType =
+  | 'water'
+  | 'fertilize'
+  | 'prune'
+  | 'repot'
+  | 'pest'
+  | 'protect'
+  | 'observe'
+  | 'other'
+
+export type CareHemisphere = 'N' | 'S'
+
+/**
+ * 物种养护规则。
+ *
+ * `speciesKey` 为 `'*'` 时是通用规则（所有植物都适用），
+ * 否则按**物种名**匹配 —— 规则库是给人看、可导出分享的数据，
+ * 用名字比用自增 ID 有意义。代价是改物种名会让专属规则失配，
+ * 所以生成任务时会把「用了哪些规则」记在计划里备查。
+ */
+export interface CareRule {
+  id: number
+  speciesKey: string
+  hemisphere: CareHemisphere
+  climateZone: string | null
+  monthFrom: number
+  /** 为空表示只作用于 monthFrom 这一个月 */
+  monthTo: number | null
+  actionType: CareActionType
+  title: string
+  detail: string | null
+  priority: number
+  source: 'seed' | 'ai' | 'manual'
+  /** 未经人工核实的 AI 规则，界面上要标出来 */
+  verified: boolean
+  createdAt: string
+}
+
+export type CareRuleInput = Omit<CareRule, 'id' | 'createdAt'> & { id?: number }
+
+export type CarePlanStatus = 'active' | 'archived'
+
+export interface CarePlan {
+  id: number
+  plantId: number | null
+  name: string
+  year: number | null
+  source: 'manual' | 'generated'
+  status: CarePlanStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export type CareTaskStatus = 'pending' | 'done' | 'skipped'
+
+export interface CareTask {
+  id: number
+  planId: number | null
+  plantId: number | null
+  actionType: CareActionType
+  title: string
+  detail: string | null
+  /** YYYY-MM-DD */
+  dueDate: string
+  /** 时间窗：dueDate ± windowDays 内做都算准时 */
+  windowDays: number
+  recurrence: string | null
+  priority: number
+  status: CareTaskStatus
+  completedAt: string | null
+  completedNote: string | null
+  source: 'seed' | 'ai' | 'manual' | 'generated'
+  createdAt: string
+}
+
+export interface CareTaskInput {
+  id?: number
+  planId?: number | null
+  plantId?: number | null
+  actionType: CareActionType
+  title: string
+  detail?: string | null
+  dueDate: string
+  windowDays?: number
+  recurrence?: string | null
+  priority?: number
+  source?: CareTask['source']
+}
+
+export interface CareLog {
+  id: number
+  plantId: number
+  taskId: number | null
+  /** YYYY-MM-DD */
+  logDate: string
+  kind: string
+  content: string | null
+  imageId: number | null
+  createdAt: string
+}
+
+// ---------------------------------------------------------------------------
 // 图片
 // ---------------------------------------------------------------------------
 
