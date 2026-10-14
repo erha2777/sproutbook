@@ -67,6 +67,14 @@ export interface SpeciesListItem extends Species {
   coverThumb: string | null
   coverPath: string | null
   plantCount: number
+  /**
+   * AI 填过、尚未人工核实的**安全**字段。
+   *
+   * 只有安全字段需要核实 —— 学名、科属这类填错了也不会有危险，
+   * 不该让列表页一直挂着「待核实」的角标。所以这里在仓储层就算好，
+   * 而不是让界面自己去猜哪些算安全字段。
+   */
+  pendingSafetyFields: string[]
 }
 
 export function listSpecies(db: Db, options: SpeciesListOptions = {}): { items: SpeciesListItem[]; total: number } {
@@ -103,19 +111,45 @@ export function listSpecies(db: Db, options: SpeciesListOptions = {}): { items: 
     offset
   )
 
+  // 安全字段清单只查一次，避免逐行查询
+  const safetyKeys = speciesSafetyKeys(db)
+
   const items = rows.map((row) => {
     const plantCount = Number(
       db.scalar<number>('SELECT COUNT(*) AS c FROM plants WHERE species_id = ? AND archived_at IS NULL', row.id) ?? 0
     )
+    const mapped = mapSpecies(row)
     return {
-      ...mapSpecies(row),
+      ...mapped,
       coverThumb: row.cover_thumb ?? null,
       coverPath: row.cover_path ?? null,
-      plantCount
+      plantCount,
+      pendingSafetyFields: filterPendingSafety(mapped, safetyKeys)
     }
   })
 
   return { items, total }
+}
+
+/**
+ * 「AI 填过但还没核实的**安全**字段」。
+ *
+ * 抽成纯函数是为了让列表页、详情页、空记录三处口径一致 ——
+ * 之前列表和详情各算各的，条件还不一样，界面自然会互相矛盾。
+ */
+function filterPendingSafety(species: Species, safetyKeys: Set<string>): string[] {
+  return Object.keys(species.confidence).filter(
+    (k) => safetyKeys.has(k) && !species.verifiedFields.includes(k)
+  )
+}
+
+/** 物种模板里的安全字段标识。列表页只查一次，避免逐行查询。 */
+function speciesSafetyKeys(db: Db): Set<string> {
+  return new Set(
+    db
+      .all<{ key: string }>("SELECT key FROM field_definitions WHERE owner_kind = 'species' AND is_safety = 1")
+      .map((r) => r.key)
+  )
 }
 
 export function getSpecies(db: Db, id: number): SpeciesListItem | null {
@@ -124,7 +158,14 @@ export function getSpecies(db: Db, id: number): SpeciesListItem | null {
   const plantCount = Number(
     db.scalar<number>('SELECT COUNT(*) AS c FROM plants WHERE species_id = ? AND archived_at IS NULL', id) ?? 0
   )
-  return { ...mapSpecies(row), coverThumb: row.cover_thumb ?? null, coverPath: row.cover_path ?? null, plantCount }
+  const mapped = mapSpecies(row)
+  return {
+    ...mapped,
+    coverThumb: row.cover_thumb ?? null,
+    coverPath: row.cover_path ?? null,
+    plantCount,
+    pendingSafetyFields: filterPendingSafety(mapped, speciesSafetyKeys(db))
+  }
 }
 
 export interface SaveSpeciesResult {
@@ -316,7 +357,8 @@ export function emptySpecies(): SpeciesListItem {
     updatedAt: '',
     coverThumb: null,
     coverPath: null,
-    plantCount: 0
+    plantCount: 0,
+    pendingSafetyFields: []
   }
 }
 

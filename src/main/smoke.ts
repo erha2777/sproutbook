@@ -159,16 +159,53 @@ export function runSmoke(outFile: string): number {
 
     // --- 核实 / 撤回核实 ---
     //
-    // 曾经的 bug：批量核实只标记 isSafety 的字段，AI 填的其它字段永远停在
-    // 「待核实」，用户点多少次都没用。这里同时验证「标记」和「撤回」两条路径。
+    // 曾经的 bug 有两个，这里都要钉住：
+    //  1. 批量核实只标记 isSafety 的字段，AI 填的其它字段永远停在「待核实」。
+    //  2. IPC 处理器漏了第三个参数，导致「撤回核实」实际永远走「标记」分支 ——
+    //     界面提示成功，数据却没变。
+    // 现在「需要核实的字段」只有安全字段，所以先写一批 AI 来源（含非安全字段）。
+    const withAi = saveSpecies(db, {
+      id: speciesId,
+      values: { common_name: '月季' },
+      source: 'ai',
+      aiFields: [
+        { key: 'scientific_name', confidence: 0.9 }, // 非安全：不该进待核实
+        { key: 'family', confidence: 0.9 }, // 非安全
+        { key: 'bloom_months', confidence: 0.8 }, // 非安全
+        { key: 'toxicity_level', confidence: 0.6 }, // 安全
+        { key: 'pet_safe', confidence: 0.5 } // 安全
+      ]
+    })
+    check(
+      'AI 来源只把安全字段列为待核实',
+      withAi.pendingReview.join(',') === 'toxicity_level,pet_safe',
+      withAi.pendingReview.join(',')
+    )
+    check(
+      '列表项只统计待核实的安全字段（非安全字段不算）',
+      (getSpecies(db, speciesId)?.pendingSafetyFields ?? []).join(',') === 'toxicity_level,pet_safe',
+      (getSpecies(db, speciesId)?.pendingSafetyFields ?? []).join(',')
+    )
+    check(
+      '全部置信度都被记录（来源可追溯，不因不需要核实就丢掉）',
+      Object.keys(getSpecies(db, speciesId)?.confidence ?? {}).length === 5
+    )
+
     verifySpeciesFields(db, speciesId, ['toxicity_level', 'pet_safe'])
     check('核实后字段进入已核实列表', getSpecies(db, speciesId)?.verifiedFields.length === 2)
+    check('全部核实后不再有待核实的安全字段', (getSpecies(db, speciesId)?.pendingSafetyFields ?? []).length === 0)
+
     verifySpeciesFields(db, speciesId, ['pet_safe'], false)
     const afterUnverify = getSpecies(db, speciesId)?.verifiedFields ?? []
     check(
       '撤回核实会移除指定字段且不影响其它字段',
       afterUnverify.length === 1 && afterUnverify[0] === 'toxicity_level',
       afterUnverify.join(',')
+    )
+    check(
+      '撤回后该字段重新回到待核实',
+      (getSpecies(db, speciesId)?.pendingSafetyFields ?? []).join(',') === 'pet_safe',
+      (getSpecies(db, speciesId)?.pendingSafetyFields ?? []).join(',')
     )
     check('对不存在的记录核实返回 null', verifySpeciesFields(db, 999999, ['x']) === null)
 

@@ -123,7 +123,8 @@ function SpeciesCard({ species, onClick }: { species: SpeciesListItem; onClick: 
   const toxicity = species.attributes.toxicity_level
   const isToxic = toxicity === '有毒' || toxicity === '剧毒'
   const bloom = species.attributes.bloom_months
-  const pendingReview = Object.keys(species.confidence).filter((k) => !species.verifiedFields.includes(k))
+  // 只统计安全字段：非安全字段不需要核实，挂个角标只会制造噪声
+  const pendingReview = species.pendingSafetyFields
 
   return (
     <div className="pixel-card" onClick={onClick} title="点击编辑">
@@ -138,7 +139,9 @@ function SpeciesCard({ species, onClick }: { species: SpeciesListItem; onClick: 
           {isToxic ? <Badge tone="safety">☠ {String(toxicity)}</Badge> : null}
           {bloom ? <Badge tone="ok">花期</Badge> : null}
           {species.plantCount > 0 ? <Badge tone="muted">养了 {species.plantCount} 株</Badge> : null}
-          {pendingReview.length > 0 ? <Badge tone="ai">待核实 {pendingReview.length}</Badge> : null}
+          {pendingReview.length > 0 ? (
+            <Badge tone="safety">安全字段待核实 {pendingReview.length}</Badge>
+          ) : null}
         </div>
       </div>
     </div>

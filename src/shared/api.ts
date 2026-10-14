@@ -30,6 +30,8 @@ export interface SpeciesListItem extends Species {
   coverThumb: string | null
   coverPath: string | null
   plantCount: number
+  /** AI 填过、尚未人工核实的安全字段（非安全字段不需要核实） */
+  pendingSafetyFields: string[]
 }
 
 export interface PlantListItem extends PlantWithSpecies {

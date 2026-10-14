@@ -348,7 +348,9 @@ function registerSpeciesIpc(): void {
       )
   )
 
-  handle('species:verify', (id: number, fieldKeys: string[]) => verifySpeciesFields(getDb(), id, fieldKeys))
+  handle('species:verify', (id: number, fieldKeys: string[], verified = true) =>
+    verifySpeciesFields(getDb(), id, fieldKeys, verified !== false)
+  )
 
   handle('species:delete', (id: number) => archiveSpecies(getDb(), id))
 

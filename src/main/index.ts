@@ -225,7 +225,8 @@ function createWindow(): void {
   // 支持用 --screenshot-click=<文字> 先点一个按钮再截图（仅开发模式），
   // 这样弹窗、二级页面也能被截到 —— 否则只能截到首屏，界面问题靠猜。
   const shot = screenshotPath()
-  const shotClick = isDev ? process.argv.find((a) => a.startsWith('--screenshot-click=')) : undefined
+  // 可以给多个 --screenshot-click，按顺序依次点击（例如先开弹窗、再点里面的按钮）
+  const shotClicks = isDev ? process.argv.filter((a) => a.startsWith('--screenshot-click=')) : []
   const shotScroll = isDev ? process.argv.find((a) => a.startsWith('--screenshot-scroll=')) : undefined
 
   if (shot) {
@@ -233,8 +234,8 @@ function createWindow(): void {
       setTimeout(() => {
         void (async () => {
           try {
-            if (shotClick) {
-              const text = shotClick.slice('--screenshot-click='.length)
+            for (const flag of shotClicks) {
+              const text = flag.slice('--screenshot-click='.length)
               // 在渲染层里找按钮并点击。用 JSON.stringify 转义，避免文字里的引号破坏脚本
               const clicked = await mainWindow?.webContents.executeJavaScript(
                 `(() => {
@@ -247,7 +248,7 @@ function createWindow(): void {
                  })()`
               )
               logStartup('界面自检：点击元素', { text, clicked })
-              // 等弹窗渲染完再截图
+              // 等界面响应完再点下一个 / 截图
               await new Promise((resolve) => setTimeout(resolve, 900))
             }
 
