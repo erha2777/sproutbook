@@ -544,6 +544,23 @@ export function SettingsPage(): ReactNode {
                 placeholder={weatherConfig.hasWeatherKey ? '••••••••（已配置）' : ''}
               />
             </Field>
+            {/*
+              额度提示。用户自己找来的公告：API KEY 自 2027-02-01 起限 1000 次/天，
+              JWT 无限制；超额返回 403/429，继续猛发可能被封 IP。
+
+              写成「你现在用多少、什么时候生效」，而不是只丢一个数字 ——
+              不然看到「1000 次」反而会以为快用完了。
+            */}
+            <Notice tone="info">
+              和风对 <b>API KEY</b> 限制 <b>1000 次/天</b>（<b>2027-02-01</b> 起生效），
+              改用 JWT 认证则无限制。
+              <br />
+              按现在的用法：一个养护位置约 <b>8 次/天</b>（预报缓存 3 小时，地名只解析一次），用不到 1%。
+              养护计划页底部会显示「今天已请求 N 次」，可以随时对照。
+              <br />
+              超额会返回 403 / 429；<b>那时先停下来</b> —— 公告里写明继续大量请求可能被封 IP 或冻结帐号。
+            </Notice>
+
             <div className="row tight">
               <Button size="small" onClick={() => void patchWeather({})} disabled={busy}>
                 保存
