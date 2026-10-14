@@ -148,7 +148,12 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
         /** 用来算显示高度的厘米数 */
         heightCm: height.cm,
         /** 物种性状：同株型的植物靠它区分 */
-        spriteStyle: { leafShape: typeof attrs.leaf_shape === 'string' ? attrs.leaf_shape : null },
+        spriteStyle: {
+          leafShape: typeof attrs.leaf_shape === 'string' ? attrs.leaf_shape : null,
+          foliageColor: typeof attrs.foliage_color === 'string' ? attrs.foliage_color : null,
+          flowerForm: typeof attrs.flower_form === 'string' ? attrs.flower_form : null,
+          spread: typeof attrs.spread === 'string' ? attrs.spread : null
+        },
         /** 带依据的一句话，例如「65 cm（按成株高度 × 苗龄推算）」 */
         heightText: describeEffectiveHeight(heightInput)
       }

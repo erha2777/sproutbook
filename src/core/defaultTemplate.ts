@@ -23,7 +23,14 @@
  */
 
 import type { NewFieldDefinition } from './types'
-import { CULTIVATION_OPTIONS, FLOWER_COLOR_OPTIONS, LEAF_SHAPE_OPTIONS } from './sprite'
+import {
+  CULTIVATION_OPTIONS,
+  FLOWER_COLOR_OPTIONS,
+  FLOWER_FORM_OPTIONS,
+  FOLIAGE_COLOR_OPTIONS,
+  LEAF_SHAPE_OPTIONS,
+  SPREAD_OPTIONS
+} from './sprite'
 
 type Seed = Omit<NewFieldDefinition, 'ownerKind'>
 
@@ -114,6 +121,31 @@ const speciesFields: Seed[] = [
     // 叶子一个是卵形一个是圆形，画出来才不像同一株
     options: [...LEAF_SHAPE_OPTIONS],
     helpText: '决定花园视图里叶片怎么画。留空按株型的默认叶形。'
+  },
+  {
+    key: 'foliage_color',
+    label: '叶色',
+    groupName: '形态',
+    type: 'select',
+    // 「花叶」会把高光画成奶油白，绿萝、吊兰那种斑叶就出来了
+    options: [...FOLIAGE_COLOR_OPTIONS],
+    helpText: '决定花园视图里的叶色。选「花叶」会画出斑叶效果。'
+  },
+  {
+    key: 'flower_form',
+    label: '花形',
+    groupName: '形态',
+    type: 'select',
+    options: [...FLOWER_FORM_OPTIONS],
+    helpText: '决定开花时画成什么样。薰衣草选穗状、雏菊选头状、豆科选蝶形。'
+  },
+  {
+    key: 'spread',
+    label: '株幅',
+    groupName: '形态',
+    type: 'select',
+    options: [...SPREAD_OPTIONS],
+    helpText: '紧凑 = 叶子贴近主茎，开张 = 往外摊。'
   },
   {
     key: 'flower_color',

@@ -400,17 +400,71 @@ function drawBase(c: Canvas, base: SpriteBase): void {
  * 草本、灌木、乔木、藤本、蕨类、附生**永远不开花** ——
  * 花园里最该有看头的阶段反而是空的。
  */
-function drawFlower(c: Canvas, x: number, y: number, kind: GrowthLook['flower']): void {
+function drawFlower(c: Canvas, x: number, y: number, kind: GrowthLook['flower'], form = ''): void {
   if (kind === 'none') return
+
   if (kind === 'bud') {
-    // 花苞：顶上一粒，颜色偏叶绿
+    // 花苞：顶上一粒，颜色偏叶绿。形态还没展开，所以不看 form
     c.px(x, y, 'f')
     c.px(x - 1, y, 'f')
-  } else {
-    // 开花：三格宽两层，中间一点亮色，16×16 下这已经够醒目
-    c.rect(x - 1, y - 1, 3, 2, 'f')
-    c.px(x, y - 1, 'F')
-    c.px(x - 1, y + 1, 'd')
+    return
+  }
+
+  /*
+   * 花形决定开出来是什么样。
+   *
+   * 单瓣是默认：三格宽两层。其余形态各有各的排布 ——
+   * 穗状往上抽一串、头状是圆团、钟形下宽上窄、蝶形左右两片翅。
+   * 16×16 下能表达的就这么多，但足以让薰衣草和月季分得开。
+   */
+  switch ((form ?? '').trim()) {
+    case '穗状':
+      // 竖直一串，自下而上收窄（薰衣草、鼠尾草）
+      c.px(x, y + 1, 'f')
+      c.rect(x - 1, y, 3, 1, 'f')
+      c.px(x - 1, y - 1, 'f')
+      c.px(x + 1, y - 1, 'f')
+      c.px(x, y - 2, 'F')
+      break
+
+    case '头状':
+      // 一个圆团（向日葵、雏菊）
+      c.rect(x - 1, y - 1, 3, 3, 'f')
+      c.px(x, y - 1, 'F')
+      c.px(x, y + 1, 'd')
+      break
+
+    case '钟形':
+      // 下宽上窄，像倒挂的铃（风铃草）
+      c.rect(x - 1, y, 3, 2, 'f')
+      c.px(x - 1, y - 1, 'F')
+      c.px(x + 1, y - 1, 'F')
+      c.px(x, y + 1, 'd')
+      break
+
+    case '蝶形':
+      // 左右两片翅 + 中间一点（豆科）
+      c.px(x - 2, y, 'f')
+      c.px(x + 2, y, 'f')
+      c.px(x - 1, y - 1, 'F')
+      c.px(x + 1, y - 1, 'F')
+      c.px(x, y, 'F')
+      break
+
+    case '重瓣':
+      // 更大一圈，两层颜色（月季、牡丹）
+      c.rect(x - 2, y - 1, 5, 3, 'f')
+      c.rect(x - 1, y - 1, 3, 1, 'F')
+      c.px(x - 2, y + 1, 'd')
+      c.px(x + 2, y + 1, 'd')
+      break
+
+    default:
+      // 单瓣：三格宽两层，中间一点亮色
+      c.rect(x - 1, y - 1, 3, 2, 'f')
+      c.px(x, y - 1, 'F')
+      c.px(x - 1, y + 1, 'd')
+      break
   }
 }
 
@@ -434,11 +488,11 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
       drawLeaf(c, 7, y, -1, 2 + Math.floor(look.leaves / 2), style.leafShape ?? '', sp)
     }
     c.mirror()
-    if (look.flower !== 'none') drawFlower(c, 8, top - 1, look.flower)
+    if (look.flower !== 'none') drawFlower(c, 8, top - 1, look.flower, style.flowerForm ?? '')
   },
 
   /** 灌木：短主干 + 一蓬叶子 */
-  灌木(c, look, base, _style) {
+  灌木(c, look, base, style) {
     drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     c.rect(7, top + 3, 1, GROUND_Y - top - 3, 't')
@@ -452,13 +506,13 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
     c.px(5, top + 1, 'G')
     c.mirror()
     if (look.flower !== 'none') {
-      drawFlower(c, 4, top + 1, look.flower)
-      drawFlower(c, 11, top + 3, look.flower)
+      drawFlower(c, 4, top + 1, look.flower, style.flowerForm ?? '')
+      drawFlower(c, 11, top + 3, look.flower, style.flowerForm ?? '')
     }
   },
 
   /** 乔木：主干 + 圆树冠 */
-  乔木(c, look, base, _style) {
+  乔木(c, look, base, style) {
     drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     c.rect(7, top + 3, 1, GROUND_Y - top - 3, 't')
@@ -470,8 +524,8 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
     }
     c.mirror()
     if (look.flower !== 'none') {
-      drawFlower(c, 4, canopyTop + 2, look.flower)
-      drawFlower(c, 11, canopyTop + 3, look.flower)
+      drawFlower(c, 4, canopyTop + 2, look.flower, style.flowerForm ?? '')
+      drawFlower(c, 11, canopyTop + 3, look.flower, style.flowerForm ?? '')
     }
   },
 
@@ -489,11 +543,11 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
         drawLeaf(c, x, y - 1, 1, 1, style.leafShape ?? '')
       }
     }
-    if (look.flower !== 'none') drawFlower(c, x, top - 1, look.flower)
+    if (look.flower !== 'none') drawFlower(c, x, top - 1, look.flower, style.flowerForm ?? '')
   },
 
   /** 多肉：低矮莲座，一层层往外摊 */
-  多肉(c, look, base, _style) {
+  多肉(c, look, base, style) {
     drawBase(c, base)
     const layers = Math.max(1, Math.min(3, Math.ceil(look.stem / 3)))
     for (let i = 0; i < layers; i++) {
@@ -502,7 +556,7 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
       c.rect(8 - w, y, w, 1, i === layers - 1 ? 'G' : 'g')
     }
     c.mirror()
-    if (look.flower !== 'none') drawFlower(c, 8, GROUND_Y - layers - 3, look.flower)
+    if (look.flower !== 'none') drawFlower(c, 8, GROUND_Y - layers - 3, look.flower, style.flowerForm ?? '')
   },
 
   /** 球根：土面一个球，抽出几片带状叶 */
@@ -532,17 +586,17 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
       }
       if (shape === '带状') c.px(8 + dx, GROUND_Y - 2 - h, 'G')
     }
-    if (look.flower !== 'none') drawFlower(c, 8, GROUND_Y - 3 - look.stem, look.flower)
+    if (look.flower !== 'none') drawFlower(c, 8, GROUND_Y - 3 - look.stem, look.flower, style.flowerForm ?? '')
   },
 
   /** 水生：浮叶 + 立出水面的花。底座由栽种方式决定（睡莲默认水培） */
-  水生(c, look, base, _style) {
+  水生(c, look, base, style) {
     drawBase(c, base)
     c.rect(5, GROUND_Y - 1, 4, 1, 'g') // 浮叶
     c.px(4, GROUND_Y - 1, 'G')
     c.px(9, GROUND_Y - 1, 'G')
     if (look.stem > 3) c.vline(9, GROUND_Y - look.stem, GROUND_Y - 2, 'b')
-    if (look.flower !== 'none') drawFlower(c, 9, GROUND_Y - look.stem - 3, look.flower)
+    if (look.flower !== 'none') drawFlower(c, 9, GROUND_Y - look.stem - 3, look.flower, style.flowerForm ?? '')
   },
 
   /** 蕨类：一根主轴，两侧羽状小叶 */
@@ -554,7 +608,7 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
       drawLeaf(c, 7, y, -1, 2, style.leafShape ?? '', spreadBonus(style.spread))
     }
     c.mirror()
-    if (look.flower !== 'none') drawFlower(c, 8, top - 1, look.flower)
+    if (look.flower !== 'none') drawFlower(c, 8, top - 1, look.flower, style.flowerForm ?? '')
   },
 
   /** 附生：一截木头，叶子贴在木头上 */
@@ -568,7 +622,7 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
       drawLeaf(c, 7, y, -1, 2, style.leafShape ?? '', spreadBonus(style.spread))
     }
     c.mirror()
-    if (look.flower !== 'none') drawFlower(c, 4, top + 1, look.flower)
+    if (look.flower !== 'none') drawFlower(c, 4, top + 1, look.flower, style.flowerForm ?? '')
   }
 }
 
@@ -595,7 +649,14 @@ export function buildPlantSprite(options: SpriteOptions): BuiltSprite {
     c.px(8, GROUND_Y - 2, 'g')
   }
 
-  const leaf = options.leafColor ?? '#5fa832'
+  /*
+   * 叶色：物种填了就用物种的，没填用默认绿。
+   *
+   * 「花叶」（斑叶）要两种颜色交替才像 —— 绿萝、吊兰那种。
+   * 做法是把高光色换成奶油白而不是浅绿，`G` 那一档就变成了斑。
+   */
+  const variegated = isVariegated(options.style?.foliageColor)
+  const leaf = options.leafColor ?? foliageHex(options.style?.foliageColor)
   const flower = options.flowerColor ?? '#e86a8a'
   const wither = look.wither
 
@@ -603,7 +664,7 @@ export function buildPlantSprite(options: SpriteOptions): BuiltSprite {
     ...BASE_PALETTE,
     // 枯萎时绿色整体染向枯黄，茎也一起变
     g: mixColor(leaf, WITHER_TO, wither),
-    G: mixColor(mixColor(leaf, '#ffffff', 0.25), WITHER_TO, wither),
+    G: mixColor(mixColor(leaf, variegated ? '#f2eed4' : '#ffffff', variegated ? 0.95 : 0.25), WITHER_TO, wither),
     d: mixColor(mixColor(leaf, '#000000', 0.25), WITHER_TO, wither),
     b: mixColor('#5a7a34', WITHER_TO, wither),
     B: mixColor('#6f9440', WITHER_TO, wither),

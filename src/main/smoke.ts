@@ -1788,6 +1788,37 @@ export function runSmoke(outFile: string): number {
         }
       }
       {
+        // 花形：同一株型同一阶段，只换花形，开出来必须不同
+        const forms = FLOWER_FORM_OPTIONS.map(
+          (flowerForm) =>
+            buildPlantSprite({ habit: '草本', look: growthLook('blooming'), style: { leafShape: '卵形', flowerForm } }).grid.join('|')
+        )
+        check('六种花形画出来两两不同', new Set(forms).size === FLOWER_FORM_OPTIONS.length, `${new Set(forms).size}/${FLOWER_FORM_OPTIONS.length}`)
+        // 花苞阶段不该受花形影响 —— 还没展开
+        const buds = FLOWER_FORM_OPTIONS.map(
+          (flowerForm) => buildPlantSprite({ habit: '草本', look: growthLook('budding'), style: { flowerForm } }).grid.join('|')
+        )
+        check('花苞阶段不受花形影响（还没展开）', new Set(buds).size === 1)
+        // 不开花的阶段更不该受影响
+        const noFlower = FLOWER_FORM_OPTIONS.map(
+          (flowerForm) => buildPlantSprite({ habit: '草本', look: growthLook('growing'), style: { flowerForm } }).grid.join('|')
+        )
+        check('不开花时花形完全无影响', new Set(noFlower).size === 1)
+
+        // 叶色：换颜色必须换调色板，而不是只改个名字
+        const greens = FOLIAGE_COLOR_OPTIONS.map(
+          (foliageColor) => buildPlantSprite({ habit: '草本', look: growthLook('growing'), style: { foliageColor } }).palette.g
+        )
+        check('六种叶色给出六种颜色', new Set(greens).size === FOLIAGE_COLOR_OPTIONS.length, greens.join(' '))
+        check('深绿确实比浅绿深', parseInt(FOLIAGE_COLOR_HEX.深绿.slice(1, 3), 16) < parseInt(FOLIAGE_COLOR_HEX.浅绿.slice(1, 3), 16))
+        // 花叶要画出斑：高光色和主色拉开距离
+        const plain = buildPlantSprite({ habit: '草本', look: growthLook('growing'), style: { foliageColor: '中绿' } }).palette
+        const vari = buildPlantSprite({ habit: '草本', look: growthLook('growing'), style: { foliageColor: '花叶' } }).palette
+        const contrast = (p: Record<string, string>): number =>
+          Math.abs(parseInt(p.G.slice(1, 3), 16) - parseInt(p.g.slice(1, 3), 16))
+        check('花叶的高光与主色对比更强', contrast(vari) > contrast(plain), `${contrast(plain)} vs ${contrast(vari)}`)
+        check('叶色不影响花色', buildPlantSprite({ habit: '草本', look: growthLook('blooming'), style: { foliageColor: '紫红' }, flowerColor: '#123456' }).palette.f === '#123456')
+      }      {
         const defs = defaultFieldDefinitions()
         const leafField = defs.find((d) => d.key === 'leaf_shape')
         check('物种模板里有叶形字段', leafField !== undefined)

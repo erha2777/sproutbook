@@ -209,6 +209,11 @@ export function growthLook(stage: GrowthStage): GrowthLook {
    * 于是「大株和小株」看起来差不多 —— 用户反馈「看不出变化」就是这个原因。
    *
    * 现在让生长阶段就占到八成高度，开花时接近满格。
+   *
+   * 但茎不能无限加高：花画在茎顶再往上约 3 格，而画布只有 16 格、
+   * 底部 3 格是花盆/地面。第一版把开花茎提到 11 格，结果**花被顶出画布裁掉了** ——
+   * 自检里「六种花形画出来两两不同」报 5/6 才发现。
+   * 10 格是上限（顶部留 3 格给花）。
    */
   switch (stage) {
     case 'seed':
@@ -216,11 +221,11 @@ export function growthLook(stage: GrowthStage): GrowthLook {
     case 'sprout':
       return { stem: 3, leaves: 1, flower: 'none', wither: 0, bare: false }
     case 'growing':
-      return { stem: 9, leaves: 3, flower: 'none', wither: 0, bare: false }
+      return { stem: 8, leaves: 3, flower: 'none', wither: 0, bare: false }
     case 'budding':
-      return { stem: 10, leaves: 4, flower: 'bud', wither: 0, bare: false }
+      return { stem: 9, leaves: 4, flower: 'bud', wither: 0, bare: false }
     case 'blooming':
-      return { stem: 11, leaves: 4, flower: 'open', wither: 0, bare: false }
+      return { stem: 10, leaves: 4, flower: 'open', wither: 0, bare: false }
     case 'dormant':
       return { stem: 6, leaves: 0, flower: 'none', wither: 0.25, bare: true }
     case 'sick':
@@ -230,7 +235,7 @@ export function growthLook(stage: GrowthStage): GrowthLook {
      * 它不该被画小 —— 缓苗说明这株受了伤，不说明它还小。
      */
     case 'recovering':
-      return { stem: 9, leaves: 1, flower: 'none', wither: 0.15, bare: false }
+      return { stem: 8, leaves: 1, flower: 'none', wither: 0.15, bare: false }
     case 'withered':
       return { stem: 4, leaves: 0, flower: 'none', wither: 1, bare: true }
   }
