@@ -31,6 +31,11 @@ const api: SproutbookApi = {
     openDataDir: () => call('app:openDataDir'),
     openImagesDir: () => call('app:openImagesDir')
   },
+  sandbox: {
+    status: () => call('sandbox:status'),
+    createShortcut: (scope) => call('sandbox:createShortcut', scope ?? 'desktop'),
+    removeShortcuts: () => call('sandbox:removeShortcuts')
+  },
   ai: {
     getSettings: () => call('settings:getAi'),
     setSettings: (patch) => call('settings:setAi', patch),

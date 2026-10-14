@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { AiSettings, AppInfo } from '@core/types'
+import type { AiSettings, AppInfo, SandboxStatus } from '@core/types'
 import type { AppPaths, BackupInfo } from '@shared/api'
 import { formatBytes, formatDateTime } from '../lib/util'
 import { Badge, Button, EmptyState, Field, Notice, Panel, SectionTitle, SelectInput, Sign, Spinner, TextInput, useToast } from '../components/ui'
@@ -34,21 +34,24 @@ export function SettingsPage(): ReactNode {
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [backups, setBackups] = useState<BackupInfo[]>([])
   const [busy, setBusy] = useState(false)
+  const [sandbox, setSandbox] = useState<SandboxStatus | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const [s, p, i, b, w] = await Promise.all([
+      const [s, p, i, b, w, sb] = await Promise.all([
         window.api.ai.getSettings(),
         window.api.app.paths(),
         window.api.app.info(),
         window.api.app.backups(),
-        window.api.ai.keyWarning()
+        window.api.ai.keyWarning(),
+        window.api.sandbox.status()
       ])
       setSettings(s)
       setPaths(p)
       setInfo(i)
       setBackups(b)
       setKeyWarning(w)
+      setSandbox(sb)
     } catch (error) {
       toast.push(`加载失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }
@@ -315,6 +318,126 @@ export function SettingsPage(): ReactNode {
         ) : (
           <Spinner />
         )}
+      </Panel>
+
+      <Panel>
+        <SectionTitle
+          right={
+            <Badge tone={sandbox?.disabled ? 'warn' : 'ok'}>
+              {sandbox?.disabled ? '沙箱已关闭' : '沙箱已启用'}
+            </Badge>
+          }
+        >
+          启动兼容性
+        </SectionTitle>
+
+        <div className="content-inner">
+          <div className="small">
+            <div>
+              进程完整性级别：<b>{sandbox?.integrityLevel ?? '未知'}</b>
+            </div>
+            {sandbox?.reason ? <div>关闭沙箱的原因：{sandbox.reason}</div> : null}
+          </div>
+
+          {sandbox?.disabled ? (
+            <Notice tone="warn">
+              当前进程已关闭 Chromium 沙箱。这会让应用能在这台机器上启动，但会降低进程隔离强度。
+              本应用只加载本地文件、CSP 禁止一切远程资源、contextIsolation 开启且 nodeIntegration 关闭，
+              因此实际风险有限。若能排查出根因（常见为低完整性环境或第三方安全软件），建议恢复沙箱。
+            </Notice>
+          ) : (
+            <Notice tone="info">
+              如果双击 <span className="mono">Sproutbook.exe</span> 没有任何反应（无窗口、无报错、
+              事件查看器里是 <span className="mono">0x80000003</span>），
+              通常是 Chromium 沙箱在受限环境下无法初始化。
+              <br />
+              这种崩溃发生在应用代码之前，<b>应用内无法自救</b>（实测确认：即使提前写标记文件，
+              沙箱初始化仍然早于主进程 JavaScript），所以 <span className="mono">--no-sandbox</span>
+              必须出现在命令行上。下面的按钮会创建一个<b>原生快捷方式</b>把这个参数烘焙进去 ——
+              之后双击那个图标即可运行，不需要管理员权限，也没有控制台窗口。
+            </Notice>
+          )}
+
+          {sandbox && sandbox.shortcuts.length > 0 ? (
+            <table className="pixel-table">
+              <thead>
+                <tr>
+                  <th>快捷方式</th>
+                  <th style={{ width: 90 }}>位置</th>
+                  <th style={{ width: 80 }}>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sandbox.shortcuts.map((s) => (
+                  <tr key={s.path}>
+                    <td className="small mono" style={{ wordBreak: 'break-all' }}>
+                      {s.path}
+                    </td>
+                    <td className="small">{s.scope === 'desktop' ? '桌面' : '开始菜单'}</td>
+                    <td className="small">{s.exists ? <Badge tone="ok">已创建</Badge> : '未创建'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+
+          <div className="row">
+            <Button
+              variant="primary"
+              disabled={busy || sandbox?.canCreateShortcut === false}
+              onClick={async () => {
+                setBusy(true)
+                try {
+                  const result = await window.api.sandbox.createShortcut('desktop')
+                  setSandbox(await window.api.sandbox.status())
+                  toast.push(`已创建桌面快捷方式：${result.created.path}`, 'success')
+                } catch (error) {
+                  toast.push(error instanceof Error ? error.message : '创建快捷方式失败', 'error')
+                } finally {
+                  setBusy(false)
+                }
+              }}
+            >
+              在桌面创建兼容模式快捷方式
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy || sandbox?.canCreateShortcut === false}
+              onClick={async () => {
+                setBusy(true)
+                try {
+                  const result = await window.api.sandbox.createShortcut('startMenu')
+                  setSandbox(await window.api.sandbox.status())
+                  toast.push(`已创建开始菜单快捷方式：${result.created.path}`, 'success')
+                } catch (error) {
+                  toast.push(error instanceof Error ? error.message : '创建快捷方式失败', 'error')
+                } finally {
+                  setBusy(false)
+                }
+              }}
+            >
+              在开始菜单创建
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy || !sandbox?.shortcuts.some((s) => s.exists)}
+              onClick={async () => {
+                setBusy(true)
+                try {
+                  const result = await window.api.sandbox.removeShortcuts()
+                  setSandbox(await window.api.sandbox.status())
+                  toast.push(result.removed.length > 0 ? `已删除 ${result.removed.length} 个快捷方式` : '没有需要删除的快捷方式', 'success')
+                } catch (error) {
+                  toast.push(error instanceof Error ? error.message : '删除失败', 'error')
+                } finally {
+                  setBusy(false)
+                }
+              }}
+            >
+              删除快捷方式
+            </Button>
+          </div>
+        </div>
       </Panel>
 
       <Panel>

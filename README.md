@@ -220,25 +220,44 @@ OpenAI、DeepSeek、Moonshot、智谱 GLM、OpenRouter、本地 Ollama / LM Stud
 - 「事件查看器 → Windows 日志 → 应用程序」里能看到 `Sproutbook.exe` 的 `0x80000003`（STATUS_BREAKPOINT）记录
 - **一个几行的最小 Electron 程序在这台机器上同样崩溃** —— 这是区分「应用问题」和「环境问题」的关键实验
 
-崩溃发生在 Chromium 原生启动阶段、**早于主进程 JavaScript**，所以应用内部无法自救：
-`app.commandLine.appendSwitch('no-sandbox')` 根本没机会执行。
+已知触发条件：**低完整性级别（Low Integrity）进程**（沙箱化的执行环境常见）、受限的作业对象、部分安全软件注入。
+沙箱需要创建受限令牌并派生中等完整性子进程，低完整性令牌做不到。
 
-**立即绕过**：使用与 exe 同目录的 `Sproutbook-compat.cmd`（安装包也会带上它），
-或手动加参数：
+**应用内部无法自救 —— 这一点已实测确认。** 曾经实现过「应用启动时自行
+`app.commandLine.appendSwitch('no-sandbox')`，配合标记文件让普通 exe 双击即可用」的方案，
+但实测：带标记文件、不带命令行参数启动，仍然是 `0x80000003`。
+Chromium 的沙箱初始化早于主进程 JavaScript，`appendSwitch` 执行时已经来不及。
+**所以 `--no-sandbox` 必须出现在命令行上**，只能靠启动器或快捷方式。
 
-```
-Sproutbook.exe --no-sandbox
-```
+**两种绕过方式**
+
+1. **兼容模式快捷方式（推荐）**
+   用任意方式先把应用启动起来（见下），然后到
+   `设置 → 启动兼容性 → 在桌面创建兼容模式快捷方式`。
+   它会用 Electron 内置的 `shell.writeShortcutLink` 创建一个原生 `.lnk`，
+   把 `--no-sandbox` 烘焙进参数里。之后**双击桌面图标即可运行**，
+   不需要管理员权限，也没有控制台窗口闪烁。不需要时直接删掉图标即可。
+
+2. **命令行 / 启动器**
+   与 exe 同目录的 `Sproutbook-compat.cmd`（安装包也会带上它），或手动加参数：
+
+   ```
+   Sproutbook.exe --no-sandbox
+   ```
 
 > 安全影响：关闭渲染进程沙箱会降低隔离强度。本应用只加载本地文件、CSP 已禁止一切远程资源、
 > 且 `contextIsolation` 开启、`nodeIntegration` 关闭，因此风险可控；但仍建议按下面排查根因。
 
 **排查根因（按可能性排序）**
 
-1. **第三方安全软件**（360、火绒、腾讯电脑管家等）注入进程、破坏沙箱初始化 —— 最常见。临时退出后测试即可确认。
-2. 尝试**以管理员身份运行**，看是否恢复。
-3. 修复系统文件：`sfc /scannow`，必要时再跑 `DISM /Online /Cleanup-Image /RestoreHealth`。
-4. 检查是否启用了 AppContainer / Device Guard / 应用控制相关策略。
+1. **确认自己不是在受限终端里启动的**。在 PowerShell 里执行 `whoami /groups`，
+   看有没有 `Mandatory Label\Low Mandatory Level`。**如果是 Low，那就是原因** ——
+   沙箱化的执行环境（部分 AI 工具的命令沙箱、CI runner、受限远程会话）都会这样。
+   请在 Windows 资源管理器里直接双击，或换一个普通终端。
+2. **第三方安全软件**（360、火绒、腾讯电脑管家等）注入进程、破坏沙箱初始化。临时退出后测试即可确认。
+3. 尝试**以管理员身份运行**，若恢复正常说明是令牌权限被裁剪。
+4. 修复系统文件：`sfc /scannow`，必要时再跑 `DISM /Online /Cleanup-Image /RestoreHealth`。
+5. 检查是否启用了 AppContainer / Device Guard / 应用控制相关策略。
 
 如果确认是机器环境问题，那么**任何** Electron 应用（VS Code、Slack、Discord 等）在这台机器上都需要同样处理。
 

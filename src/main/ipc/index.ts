@@ -44,12 +44,20 @@ import type {
   FieldOwner,
   IpcResult,
   NewFieldDefinition,
-  FieldDefinitionPatch
+  FieldDefinitionPatch,
+  SandboxStatus
 } from '../../core/types'
 import { autofillSpecies } from '../services/ai/autofill'
 import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } from '../services/ai/client'
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
 import { importImage, removeImageFiles } from '../services/images'
+import {
+  createCompatShortcut,
+  detectIntegrityLevel,
+  getSandboxDecision,
+  listCompatShortcuts,
+  removeCompatShortcuts
+} from '../sandbox'
 
 const AI_SETTINGS_KEY = 'ai'
 
@@ -120,6 +128,7 @@ export function registerIpc(): void {
 function registerAppIpc(): void {
   handle<AppInfo>('app:info', () => {
     const db = getDb()
+    const sandbox = getSandboxDecision()
     return {
       name: app.getName(),
       version: app.getVersion(),
@@ -129,9 +138,34 @@ function registerAppIpc(): void {
       sqlite: String(db.scalar<string>('SELECT sqlite_version() AS v') ?? ''),
       platform: process.platform,
       userDataPath: app.getPath('userData'),
-      dbPath: dbFilePath()
+      dbPath: dbFilePath(),
+      sandboxDisabled: sandbox.disabled,
+      sandboxReason: sandbox.reason,
+      integrityLevel: detectIntegrityLevel()
     }
   })
+
+  // ---- 沙箱兜底 ----
+  // 受限环境（低完整性进程等）下 Chromium 沙箱无法初始化，普通双击会直接崩溃，
+  // 且应用内无法自救（沙箱初始化早于主进程 JS，已实测确认）。
+  // 所以这里提供的是「创建带 --no-sandbox 的原生快捷方式」，让用户双击一个图标即可。
+  handle<SandboxStatus>('sandbox:status', () => ({
+    disabled: getSandboxDecision().disabled,
+    reason: getSandboxDecision().reason,
+    integrityLevel: detectIntegrityLevel(),
+    canCreateShortcut: process.platform === 'win32',
+    shortcuts: listCompatShortcuts()
+  }))
+
+  handle('sandbox:createShortcut', (scope: 'desktop' | 'startMenu' = 'desktop') => {
+    const created = createCompatShortcut(scope)
+    return { created, shortcuts: listCompatShortcuts() }
+  })
+
+  handle('sandbox:removeShortcuts', () => ({
+    removed: removeCompatShortcuts(),
+    shortcuts: listCompatShortcuts()
+  }))
 
   handle('app:openDataDir', async () => {
     await shell.openPath(dataDir())

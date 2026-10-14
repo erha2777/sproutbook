@@ -1,7 +1,8 @@
 /**
  * 主进程入口。
  *
- * 启动顺序很重要：
+ * 启动顺序很重要（顺序错了就会出问题）：
+ *   0. 解析 --data-dir 并决定沙箱策略 —— 两者都必须早于 app ready
  *   1. 自定义协议必须在 app ready **之前**注册特权
  *   2. 单实例锁（避免两个进程同时写同一个 SQLite 文件）
  *   3. ready 之后再初始化数据库（需要 userData 路径）
@@ -15,6 +16,8 @@ import { closeDatabase, getLastReport, initDatabase } from './db'
 import { registerIpc } from './ipc'
 import { handleImageProtocol, registerImageScheme } from './services/images'
 import { runSmoke } from './smoke'
+import { applySandboxDecision } from './sandbox'
+import type { SandboxDecision } from './sandbox'
 
 const isSmoke = process.argv.includes('--smoke')
 const isDev = !app.isPackaged
@@ -28,6 +31,17 @@ if (dataDirArg) {
   const target = resolve(dataDirArg.slice('--data-dir='.length))
   app.setPath('userData', target)
   app.setPath('sessionData', target)
+}
+
+/**
+ * 沙箱策略必须在**最早期**决定：受限环境（低完整性进程等）下 Chromium 沙箱
+ * 无法初始化，进程会在执行任何应用代码之前就崩溃。详见 src/main/sandbox.ts。
+ */
+let sandboxDecision: SandboxDecision = { disabled: false, reason: null }
+try {
+  sandboxDecision = applySandboxDecision()
+} catch (error) {
+  console.error('[sandbox] 处理沙箱策略时出错（继续按默认沙箱启动）:', error)
 }
 
 function smokeOutPath(): string {

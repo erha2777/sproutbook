@@ -28,4 +28,10 @@ if not exist "%~dp0Sproutbook.exe" (
   exit /b 1
 )
 
+rem  Tip:
+rem    If you would rather not keep using this launcher, run it once as usual,
+rem    then open  Settings -> "启动兼容性"  and click
+rem    "在桌面创建兼容模式快捷方式". That creates a normal Windows shortcut
+rem    with --no-sandbox baked in, so you can just double-click a desktop icon.
+
 start "" "%~dp0Sproutbook.exe" --no-sandbox %*

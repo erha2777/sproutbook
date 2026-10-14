@@ -256,6 +256,28 @@ export interface AppInfo {
   platform: string
   userDataPath: string
   dbPath: string
+  /** 是否已关闭 Chromium 沙箱（受限环境下的兜底） */
+  sandboxDisabled: boolean
+  /** 关闭原因，便于排查与支持 */
+  sandboxReason: string | null
+  /** 进程完整性级别；低完整性时 Chromium 沙箱无法初始化 */
+  integrityLevel: string | null
+}
+
+/** 沙箱兜底的诊断与快捷方式状态。 */
+export interface SandboxShortcutStatus {
+  path: string
+  scope: 'desktop' | 'startMenu'
+  exists: boolean
+}
+
+export interface SandboxStatus {
+  disabled: boolean
+  reason: string | null
+  integrityLevel: string | null
+  /** 是否支持创建快捷方式（仅 Windows） */
+  canCreateShortcut: boolean
+  shortcuts: SandboxShortcutStatus[]
 }
 
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string }

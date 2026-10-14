@@ -21,6 +21,8 @@ import type {
   Plant,
   PlantStatus,
   PlantWithSpecies,
+  SandboxShortcutStatus,
+  SandboxStatus,
   Species
 } from '../core/types'
 
@@ -100,6 +102,20 @@ export interface SproutbookApi {
     backupNow(): Promise<BackupInfo | null>
     openDataDir(): Promise<boolean>
     openImagesDir(): Promise<boolean>
+  }
+  /**
+   * 沙箱兜底。
+   * 受限环境（低完整性进程等）下 Chromium 沙箱无法初始化，普通双击会直接崩溃；
+   * 由于沙箱初始化早于主进程 JS，应用内无法自救，只能靠命令行参数 ——
+   * 这里提供「创建带 --no-sandbox 的原生快捷方式」，双击图标即可运行。
+   */
+  sandbox: {
+    status(): Promise<SandboxStatus>
+    createShortcut(scope?: 'desktop' | 'startMenu'): Promise<{
+      created: SandboxShortcutStatus
+      shortcuts: SandboxShortcutStatus[]
+    }>
+    removeShortcuts(): Promise<{ removed: string[]; shortcuts: SandboxShortcutStatus[] }>
   }
   ai: {
     getSettings(): Promise<AiSettings>

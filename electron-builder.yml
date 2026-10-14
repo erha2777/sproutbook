@@ -51,6 +51,11 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Sproutbook
+  # 额外创建一个带 --no-sandbox 的桌面快捷方式：
+  # 受限环境（低完整性进程等）下 Chromium 沙箱无法初始化，普通快捷方式会直接崩溃，
+  # 且应用内部无法自救（沙箱初始化早于主进程 JS，已实测确认）。
+  # 这样至少保证用户装完就有一个能用的入口。详见 build/installer.nsh。
+  include: build/installer.nsh
 
 mac:
   target:
