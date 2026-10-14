@@ -96,6 +96,11 @@ const api: SproutbookApi = {
     kinds: () => call('recipes:kinds'),
     stats: () => call('recipes:stats')
   },
+  weather: {
+    assess: (force) => call('weather:assess', force ?? false),
+    clearCache: () => call('weather:clearCache')
+  },
+
   care: {
     rules: (options) => call('care:rules', options ?? {}),
     saveRule: (input) => call('care:rule.save', input),

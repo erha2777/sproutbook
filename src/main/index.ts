@@ -324,9 +324,9 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (isSmoke) {
-    const code = runSmoke(smokeOutPath())
+    const code = await runSmoke(smokeOutPath())
     app.exit(code)
     return
   }

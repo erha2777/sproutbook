@@ -9,6 +9,7 @@
  */
 
 import { app, dialog, ipcMain, shell } from 'electron'
+import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import type { Db } from '../db/connection'
@@ -468,6 +469,20 @@ function registerImageIpc(): void {
   // -------------------------------------------------------------------------
   // 养护计划
   // -------------------------------------------------------------------------
+
+  /*
+   * 天气预警。
+   *
+   * 这是应用里第一个网络功能，所以刻意做成**拉取式**而不是后台轮询：
+   * 界面打开养护计划页时才问一次，其余时间一个请求都不发。
+   * 而且 assessPlantsWeather 在没有养护位置填城市时会直接返回，
+   * 不填城市 = 完全离线，不是「降级」而是等价的选择。
+   */
+  handle('weather:assess', (force?: boolean) => assessPlantsWeather(getDb(), force === true))
+  handle('weather:clearCache', () => {
+    clearWeatherCache(getDb())
+    return true
+  })
 
   handle('care:rules', (options?: { speciesKey?: string; hemisphere?: CareHemisphere }) =>
     listCareRules(getDb(), options ?? {})

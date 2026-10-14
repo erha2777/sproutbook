@@ -15,7 +15,7 @@ const { require: load } = compileAndLoad(['src/main/smoke.ts'], { label: '自检
 const { runSmoke } = load(join('main', 'smoke.js'))
 
 const reportPath = join(projectRoot, '.cache', 'smoke-report.txt')
-const code = runSmoke(reportPath)
+const code = await runSmoke(reportPath)
 
 console.log(`\n详细报告：${reportPath}`)
 process.exit(code)

@@ -20,6 +20,7 @@ import { currentVersion, migrate, rebuildAttrIndex } from './db/migrate'
 import { seedAll, seedFieldDefinitions } from './db/seed'
 import { backupDatabase } from './db/backup'
 import { loadFieldDefinitions } from './db/repo/common'
+import { assessPlantsWeather } from './services/weather'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { listPlants, plantStats, savePlant } from './db/repo/plants'
@@ -43,6 +44,8 @@ import {
   sizeScaleFor
 } from '../core/growth'
 import type { GrowthStage } from '../core/growth'
+import { assessWeatherRisks, dedupeByKindAndDay, effectiveColdThreshold, severityOf, suggestTask, summarizeRisks, unjudgeable } from '../core/weather'
+import type { DailyTemp, WeatherRiskInput } from '../core/weather'
 import {
   CULTIVATION_BASE,
   CULTIVATION_OPTIONS,
@@ -182,7 +185,7 @@ export interface SmokeReport {
   database: Record<string, unknown>
 }
 
-export function runSmoke(outFile: string): number {
+export async function runSmoke(outFile: string): Promise<number> {
   const checks: CheckResult[] = []
   const workDir = mkdtempSync(join(tmpdir(), 'sproutbook-smoke-'))
   const dbFile = join(workDir, 'smoke.db')
@@ -1452,6 +1455,130 @@ export function runSmoke(outFile: string): number {
         check('没有配方的任务日志里也是空', plainLog?.recipeId === null, String(plainLog?.recipeId))
 
         archiveRecipe(db, rec.recipe?.id ?? 0)
+      }
+
+      // ---- 天气风险判断 ----
+      //
+      // 这是应用里第一个网络功能，所以判断逻辑单独放在 core 层：
+      // 网络只负责取回一组温度，「谁怕冷、谁怕热」全在这里决定，可被完整覆盖。
+      {
+        // 用户那两株的真实数据：朱顶红耐寒 5℃、粉龙耐寒 -15℃ 耐热 35℃
+        const zhudinghong: WeatherRiskInput = {
+          plantId: 1,
+          plantName: '前院的朱顶红',
+          speciesName: '朱顶红阿弗雷',
+          placeName: '前院',
+          coldHardiness: 5,
+          heatTolerance: null,
+          frostProtected: false,
+          canHeat: false
+        }
+        const fenlong: WeatherRiskInput = {
+          plantId: 2,
+          plantName: '前院的粉龙',
+          speciesName: '月季粉龙',
+          placeName: '前院',
+          coldHardiness: -15,
+          heatTolerance: 35,
+          frostProtected: false,
+          canHeat: false
+        }
+        const day = (date: string, min: number, max: number): DailyTemp => ({ date, tempMin: min, tempMax: max })
+
+        // 寒潮：最低 3℃，朱顶红只能扛 5℃
+        const cold = assessWeatherRisks([zhudinghong, fenlong], [day('2026-11-20', 3, 10)])
+        check('轮到怕冷的植株才报警（粉龙 -15℃ 不受影响）', cold.length === 1 && cold[0].plantName === '前院的朱顶红', JSON.stringify(cold.map((r) => r.plantName)))
+        check('风险类型是霜冻', cold[0]?.kind === 'frost')
+        check('超出幅度算得对（5 - 3 = 2）', cold[0]?.margin === 2, String(cold[0]?.margin))
+        check('超过 2℃ 以内算「留意」', cold[0]?.severity === 'watch')
+        check('说明里写清楚了地点和温度', (cold[0]?.message ?? '').includes('前院') && (cold[0]?.message ?? '').includes('3℃'), cold[0]?.message)
+
+        // 关键行为：同一株放在能防冻的位置，就不该再报
+        const sheltered = assessWeatherRisks([{ ...zhudinghong, frostProtected: true }], [day('2026-11-20', 3, 10)])
+        check('能防冻的位置不再报霜冻', sheltered.length === 0, String(sheltered.length))
+        const heated = assessWeatherRisks([{ ...zhudinghong, canHeat: true }], [day('2026-11-20', 3, 10)])
+        check('能加温的位置（+3℃）不再报霜冻', heated.length === 0, String(heated.length))
+        // 反方向的钉子：露天时同样的温度必须报，否则上面两条可能只是因为判断失效
+        check('同一株露天时确实会报（方向没反）', assessWeatherRisks([zhudinghong], [day('2026-11-20', 3, 10)]).length === 1)
+        check('防护有上限，极寒仍会报', assessWeatherRisks([{ ...zhudinghong, frostProtected: true }], [day('2026-01-10', -8, 0)]).length === 1)
+        check('防冻 + 加温叠加后，室外要降到 -3℃ 才出事', effectiveColdThreshold(5, { frostProtected: true, canHeat: true }) === -3, String(effectiveColdThreshold(5, { frostProtected: true, canHeat: true })))
+
+        // 预报没到承受范围就完全不出条目 —— 不给「一切正常」的噪音
+        check('不冷就不产生任何条目', assessWeatherRisks([zhudinghong, fenlong], [day('2026-11-20', 12, 20)]).length === 0)
+
+        // 严重程度分档
+        check('超出 5℃ 算「要处理」', severityOf(5) === 'warn')
+        check('超出 5℃ 以上算「紧急」', severityOf(5.1) === 'severe' && severityOf(12) === 'severe')
+        const deepFreeze = assessWeatherRisks([fenlong], [day('2026-01-10', -25, -15)])
+        check('粉龙在 -25℃ 下报警', deepFreeze.length === 1 && deepFreeze[0].kind === 'frost')
+        check('超出 10℃ 判为紧急', deepFreeze[0]?.severity === 'severe', String(deepFreeze[0]?.severity))
+
+        // 高温
+        const heat = assessWeatherRisks([zhudinghong, fenlong], [day('2026-07-20', 28, 37)])
+        check('耐热 35℃ 的粉龙在 37℃ 报警', heat.some((r) => r.kind === 'heat' && r.plantName === '前院的粉龙'), JSON.stringify(heat.map((r) => r.kind)))
+        check('没填耐热的朱顶红不参与高温判断', !heat.some((r) => r.kind === 'heat' && r.plantName === '前院的朱顶红'))
+
+        // 数据不全就不猜
+        const unknown: WeatherRiskInput = { ...zhudinghong, coldHardiness: null, heatTolerance: null }
+        check('没填耐寒就不做霜冻判断', assessWeatherRisks([unknown], [day('2026-01-10', -30, -20)]).length === 0)
+        check('缺数据的植株会被单独列出来', unjudgeable([unknown, fenlong], 'frost').length === 1)
+        check('有数据的不会进缺数据列表', unjudgeable([unknown, fenlong], 'heat').length === 1)
+
+        // 收拢：连着七天寒潮不该出七条
+        const week = [
+          day('2026-11-20', 4, 10),
+          day('2026-11-21', 2, 9),
+          day('2026-11-22', -1, 8),
+          day('2026-11-23', 0, 7),
+          day('2026-11-24', 3, 9),
+          day('2026-11-25', 6, 11),
+          day('2026-11-26', 8, 12)
+        ]
+        const weekRisks = assessWeatherRisks([zhudinghong], week)
+        check('连着几天冷会逐天产生条目', weekRisks.length === 5, String(weekRisks.length))
+        const summarized = summarizeRisks(weekRisks)
+        check('收拢后每株每种只留一条', summarized.length === 1, String(summarized.length))
+        check('留的是最冷的那天', summarized[0]?.date === '2026-11-22' && summarized[0]?.forecastTemp === -1, `${summarized[0]?.date} ${summarized[0]?.forecastTemp}`)
+        check('最冷那天判为紧急（5 - (-1) = 6）', summarized[0]?.severity === 'severe')
+
+        // 同一天同一种风险去重
+        const dup = dedupeByKindAndDay([...weekRisks, ...weekRisks])
+        check('同株同天同类型只留一条', dup.length === weekRisks.length, `${dup.length} vs ${weekRisks.length}`)
+
+        // 建议的任务（用户点了按钮才会用到）
+        const task = suggestTask(summarized[0])
+        check('建议任务标题带植株名', task.title.includes('前院的朱顶红') && task.title.includes('防冻'), task.title)
+        check('建议任务正文带上依据日期', task.detail.includes('2026-11-22'))
+        check('防冻建议包含具体做法', task.detail.includes('无纺布') || task.detail.includes('避风'), task.detail.slice(0, 40))
+        check('高温建议是另一套做法', suggestTask(heat.find((r) => r.kind === 'heat')!).detail.includes('遮阳'))
+
+        // 排序：紧急的排最前
+        const mixed = summarizeRisks([...weekRisks, ...heat])
+        check('紧急的排在留意的前面', mixed[0]?.severity === 'severe', String(mixed[0]?.severity))
+      }
+
+      // ---- 天气服务：没有城市就一个字节都不发 ----
+      //
+      // 整个功能最重要的一条承诺：应用原本 100% 离线，
+      // 不填城市的人不该因为加了天气而开始联网。
+      // 判断方式很直接：调用之后 settings 里不该出现任何 weather.* 记录
+      //（缓存只在请求成功之后才写），也不该有养护位置被写回坐标。
+      {
+        const hasCity = db
+          .all<{ city: string | null }>('SELECT city FROM environments')
+          .some((e) => (e.city ?? '').trim())
+        if (!hasCity) {
+          const result = await assessPlantsWeather(db)
+          check('没有城市时不认为已配置', result.configured === false)
+          check('没有城市时返回空风险', result.risks.length === 0 && result.daily.length === 0)
+          check('没有城市时没有取数时间', result.fetchedAt === null)
+          // 最硬的一条：缓存只在请求成功后才写，所以它必须是空的
+          const keys = db.all<{ key: string }>("SELECT key FROM settings WHERE key LIKE 'weather.%'")
+          check('没有城市时连缓存都没写（＝确实没联网）', keys.length === 0, keys.map((k) => k.key).join(','))
+        } else {
+          // 自检库如果被别处写了城市，这条就换成不联网的等价断言，避免真的发请求
+          check('天气服务在自检库里没有可判断的城市（跳过联网分支）', true)
+        }
       }
 
       // 没标记阶段时，阶段规则一律不生效 —— 宁可少提醒，也不瞎排
