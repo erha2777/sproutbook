@@ -1411,6 +1411,49 @@ export function runSmoke(outFile: string): number {
         archiveRecipe(db, recipe.recipe?.id ?? 0)
       }
 
+      // ---- 任务记得规则与配方，完成后写进日志 ----
+      {
+        const rec = saveRecipe(db, {
+          name: '自检日志配方',
+          kind: '底肥',
+          note: null,
+          items: [{ materialId: null, name: '羊粪', ratioPart: 5, amount: null, unit: null, note: null, sortOrder: 0 }]
+        })
+        const plant = db.get<{ id: number }>('SELECT id FROM plants LIMIT 1')
+        const withRecipe = createCareTask(db, {
+          plantId: plant?.id ?? null,
+          actionType: 'fertilize',
+          title: '自检带配方的任务',
+          detail: null,
+          dueDate: '2026-10-15',
+          windowDays: 3,
+          ruleId: 77,
+          recipeId: rec.recipe?.id ?? null,
+          source: 'generated'
+        })
+        check('任务记得自己来自哪条规则', withRecipe.ruleId === 77, String(withRecipe.ruleId))
+        check('任务记得自己绑的配方', withRecipe.recipeId === rec.recipe?.id, String(withRecipe.recipeId))
+
+        completeCareTask(db, withRecipe.id, '埋好了', '2026-10-16')
+        const log = listCareLogs(db, { plantId: plant?.id ?? 0, limit: 5 }).find((l) => l.taskId === withRecipe.id)
+        check('完成后日志记下了当时用的配方', log?.recipeId === rec.recipe?.id, String(log?.recipeId))
+
+        // 没有配方的手动任务，日志里不该凭空多出一个配方
+        const plain = createCareTask(db, {
+          plantId: plant?.id ?? null,
+          actionType: 'water',
+          title: '自检无配方任务',
+          detail: null,
+          dueDate: '2026-10-16',
+          source: 'manual'
+        })
+        completeCareTask(db, plain.id, null, '2026-10-16')
+        const plainLog = listCareLogs(db, { plantId: plant?.id ?? 0, limit: 5 }).find((l) => l.taskId === plain.id)
+        check('没有配方的任务日志里也是空', plainLog?.recipeId === null, String(plainLog?.recipeId))
+
+        archiveRecipe(db, rec.recipe?.id ?? 0)
+      }
+
       // 没标记阶段时，阶段规则一律不生效 —— 宁可少提醒，也不瞎排
       check('未标记阶段时阶段规则不生效', generateTasks([growthOnly], null, 2026, { phase: null }).length === 0)
       check('不传 phase 时同样不生效', generateTasks([growthOnly], null, 2026).length === 0)

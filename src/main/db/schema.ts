@@ -472,6 +472,18 @@ ALTER TABLE care_tasks ADD COLUMN rule_id INTEGER;
 ALTER TABLE care_tasks ADD COLUMN recipe_id INTEGER;
 `
 
+/**
+ * 完成后记录当时用的是哪个配方。
+ *
+ * 任务卡片已经显示了配方，但那是「打算怎么做」；日志记的是「实际怎么做的」。
+ * 过一年回头看「这盆当时埋的什么」，只有日志能回答。
+ *
+ * 存的是配方 id 而不是名字的副本：配方改了名字，历史记录的仍是同一份配方。
+ */
+const V10_LOG_RECIPE = /* sql */ `
+ALTER TABLE care_logs ADD COLUMN recipe_id INTEGER;
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -481,7 +493,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 6, name: 'multi_species', sql: V6_MULTI_SPECIES },
   { version: 7, name: 'field_visibility', run: migrateFieldVisibility },
   { version: 8, name: 'rule_frequency_recipe', sql: V8_RULE_FREQUENCY_AND_RECIPE },
-  { version: 9, name: 'task_rule_recipe', sql: V9_TASK_RULE_AND_RECIPE }
+  { version: 9, name: 'task_rule_recipe', sql: V9_TASK_RULE_AND_RECIPE },
+  { version: 10, name: 'log_recipe', sql: V10_LOG_RECIPE }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

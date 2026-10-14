@@ -429,6 +429,12 @@ export interface CareLog {
   logDate: string
   kind: string
   content: string | null
+  /**
+   * 完成时用的配方。
+   * 任务卡片说的是「打算怎么做」，日志记的是「实际怎么做的」——
+   * 过一年回头看「这盆当时埋的什么」，只有它能回答。为空表示与配方无关。
+   */
+  recipeId: number | null
   imageId: number | null
   createdAt: string
 }

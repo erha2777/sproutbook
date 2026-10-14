@@ -432,12 +432,18 @@ export function completeCareTask(db: Db, id: number, note?: string | null, date?
 
     if (task.plantId !== null) {
       db.run(
-        `INSERT INTO care_logs (plant_id, task_id, log_date, kind, content) VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO care_logs (plant_id, task_id, log_date, kind, content, recipe_id) VALUES (?, ?, ?, ?, ?, ?)`,
         task.plantId,
         id,
         when,
         task.actionType,
-        note?.trim() || task.title
+        note?.trim() || task.title,
+        /*
+         * 记下当时用的是哪份配方。
+         * 任务卡片说的是「打算怎么做」，日志记的是「实际怎么做的」——
+         * 过一年回头看「这盆当时埋的什么」，只有日志能回答。
+         */
+        task.recipeId ?? null
       )
     }
     return getCareTask(db, id)
@@ -623,7 +629,24 @@ export function generateTasksForPlant(
 
     // 2) 补上还没有的
     for (const task of generated) {
-      if (existingBySignature.has(taskSignature(task))) {
+      const already = existingBySignature.get(taskSignature(task))
+      if (already) {
+        /*
+         * 签名相同 = 这条任务已经在了，不重复生成。
+         *
+         * 但要**回填规则与配方的链接**：迁移之前生成的任务没有这两个字段，
+         * 而「签名没变就一律不动」会让它们永远拿不到配方 ——
+         * 用户明明给规则绑了配方，任务卡片上却一直是空的。
+         * 值相同时不写库，所以仍然幂等。
+         */
+        if (already.rule_id !== task.ruleId || already.recipe_id !== task.recipeId) {
+          db.run(
+            'UPDATE care_tasks SET rule_id = ?, recipe_id = ? WHERE id = ?',
+            task.ruleId,
+            task.recipeId,
+            already.id
+          )
+        }
         kept++
         continue
       }
@@ -681,6 +704,7 @@ interface CareLogRow {
   log_date: string
   kind: string
   content: string | null
+  recipe_id: number | null
   image_id: number | null
   created_at: string
 }
@@ -693,6 +717,7 @@ function mapLog(row: CareLogRow): CareLog {
     logDate: row.log_date,
     kind: row.kind,
     content: row.content,
+    recipeId: row.recipe_id ?? null,
     imageId: row.image_id,
     createdAt: row.created_at
   }
