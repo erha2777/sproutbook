@@ -343,11 +343,33 @@ ALTER TABLE care_rules ADD COLUMN repeat_days INTEGER;
 ALTER TABLE care_rules ADD COLUMN rotation_json TEXT;
 `
 
+/**
+ * 物候阶段：让「什么时候停」能被表达出来。
+ *
+ * 起因：用户的施肥方案里有三处停用条件 ——「花芽分化期停用所有高氮肥」
+ * 「花苞显色开放后全部停肥」「冬季落叶休眠后所有水溶追肥全部停止」。
+ * 而规则原只能「增加」任务，不能「抑制」。
+ *
+ * 做法上有一个取舍：**不单独做一套「停用规则」**，而是给规则加
+ * active_phases（限定生效阶段）。于是「休眠期停止水溶追肥」就变成
+ * 「这条追肥规则只在生长期/花芽分化期生效」—— 停用是限定生效阶段的
+ * 自然结果，不需要第二张表和第二套冲突解决逻辑。
+ *
+ * 阶段是「观察到的状态」而不是月份，所以记在植株上，由人来标记。
+ * 没标记阶段时一切照旧按月份走，不会影响现有用法。
+ */
+const V5_PHASES = /* sql */ `
+ALTER TABLE care_rules ADD COLUMN active_phases TEXT;
+ALTER TABLE plants ADD COLUMN phase TEXT;
+ALTER TABLE plants ADD COLUMN phase_changed_at TEXT;
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
   { version: 3, name: 'month_sets', run: migrateMonthRangesToSets },
-  { version: 4, name: 'care_cycle', sql: V4_CARE_CYCLE }
+  { version: 4, name: 'care_cycle', sql: V4_CARE_CYCLE },
+  { version: 5, name: 'phenology', sql: V5_PHASES }
 ]
 
 export const LATEST_VERSION = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0)

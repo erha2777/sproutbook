@@ -592,6 +592,49 @@ img {
   border: 1px solid var(--wood-outline);
 }
 
+/* ---------- 植株阶段 ---------- */
+
+.phase-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.phase-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 2px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+}
+
+/* 阶段选择：每个选项带一句「什么时候算进入这个阶段」 */
+.phase-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+.phase-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 8px 10px;
+  font-family: inherit;
+  border: 2px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+  cursor: pointer;
+}
+.phase-choice:hover {
+  background: #fff8dc;
+}
+.phase-choice.on {
+  background: #dff0d8;
+  box-shadow: inset 0 0 0 2px var(--leaf-dark);
+}
+
 .pixel-card {
   background: var(--wood-panel);
   border: var(--step) solid var(--wood-outline);

@@ -9,12 +9,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { CareLog, CareTask } from '@core/types'
-import type { CareOverview, CareTaskListItem } from '@shared/api'
+import type { CareLog, CarePhase, CareTask } from '@core/types'
+import type { CareOverview, CareTaskListItem, PlantPhaseInfo } from '@shared/api'
 import {
   CARE_ACTION_ICONS,
   CARE_ACTION_LABELS,
   CARE_ACTION_OPTIONS,
+  CARE_PHASE_HINTS,
+  CARE_PHASE_ICONS,
+  CARE_PHASE_LABELS,
+  CARE_PHASE_OPTIONS,
   CARE_URGENCY_LABELS,
   dueDescription,
   summarizeTasks,
@@ -22,7 +26,7 @@ import {
   urgencyOf
 } from '@core/care'
 import type { CareUrgency } from '@core/care'
-import { Badge, Button, EmptyState, Notice, Panel, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
+import { Badge, Button, EmptyState, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
 import { CareRuleManager } from '../components/CareRuleManager'
@@ -66,6 +70,10 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   const [highlight, setHighlight] = useState<number | null>(null)
   /** 从月历空白日点「＋」新增任务时的预设日期 */
   const [draftDate, setDraftDate] = useState<string | undefined>(undefined)
+  /** 每株植物的物候阶段 */
+  const [plantPhases, setPlantPhases] = useState<Record<number, PlantPhaseInfo>>({})
+  const [phaseTarget, setPhaseTarget] = useState<{ id: number; name: string } | null>(null)
+  const [phaseNote, setPhaseNote] = useState('')
 
   const bounds = useMemo(() => monthBounds(year, month), [year, month])
 
@@ -93,6 +101,10 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         }))
       )
       setSpeciesNames(speciesList.items.map((s) => s.commonName))
+      {
+        const infos = await Promise.all(plantList.items.map((p) => window.api.care.plantPhase(p.id)))
+        setPlantPhases(Object.fromEntries(infos.map((i) => [i.plantId, i])))
+      }
       // 侧栏角标和这里的统计是同一份数据，一起刷新才不会出现
       //「页面上写着该做 0、侧栏还挂着红点」这种自相矛盾
       onCareChanged?.()
@@ -138,8 +150,31 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
     }
   }
 
-  const removeTask = async (task: CareTaskListItem): Promise<void> => {
-    if (!window.confirm(`确定删除任务「${task.title}」吗？`)) return
+  /**
+   * 标记植株阶段。
+   *
+   * 标完要重新生成 —— 限定阶段的规则会随之生效或失效，
+   * 不重新生成的话任务列表和实际阶段就对不上了。
+   */
+  const applyPhase = async (plantId: number, phase: CarePhase | null): Promise<void> => {
+    try {
+      await window.api.care.setPlantPhase(plantId, phase, phaseNote.trim() || null)
+      setPhaseTarget(null)
+      setPhaseNote('')
+      const generated = await window.api.care.generate(plantId, year)
+      toast.push(
+        phase
+          ? `已标记为「${CARE_PHASE_LABELS[phase]}」，计划已更新（新建 ${generated.created} 项）`
+          : '已清除阶段标记，计划已更新',
+        'success'
+      )
+      await reload()
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : '标记失败', 'error')
+    }
+  }
+
+  const removeTask = async (task: CareTaskListItem): Promise<void> => {    if (!window.confirm(`确定删除任务「${task.title}」吗？`)) return
     try {
       await window.api.care.removeTask(task.id)
       toast.push('已删除', 'success')
@@ -340,6 +375,48 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         </Panel>
       ) : null}
 
+      {/*
+        物候阶段。它是「观察到的状态」而不是月份 —— 同一个月里，
+        南阳台的可能已经现蕾，北窗台的还没动。所以放在待办页最上面，
+        由你看到什么就标什么；标了之后限定阶段的规则会立刻跟着变。
+      */}
+      <Panel>
+        <SectionTitle
+          right={
+            <span className="small muted">
+              阶段决定「什么时候停」：追肥规则限定在生长期时，休眠期就自动不提醒了
+            </span>
+          }
+        >
+          植株阶段
+        </SectionTitle>
+        {plants.length === 0 ? (
+          <div className="small muted">还没有植株。</div>
+        ) : (
+          <div className="phase-list">
+            {plants.map((p) => {
+              const info = plantPhases[p.id]
+              const phase = info?.phase ?? null
+              return (
+                <div key={p.id} className="phase-row">
+                  <span style={{ flex: 1, minWidth: 0 }}>{p.label}</span>
+                  {phase ? (
+                    <Badge tone="ok">
+                      {CARE_PHASE_ICONS[phase]} {CARE_PHASE_LABELS[phase]}
+                    </Badge>
+                  ) : (
+                    <Badge tone="muted">未标记</Badge>
+                  )}
+                  <Button size="small" onClick={() => setPhaseTarget({ id: p.id, name: p.label })}>
+                    {phase ? '改阶段' : '标记'}
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Panel>
+
       {loading ? (
         <Panel>
           <Spinner label="加载中…" />
@@ -412,7 +489,9 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
                     <div className="log-date">{log.logDate}</div>
                     <div style={{ flex: 1 }}>
                       <div>
-                        <Badge tone="info">{CARE_ACTION_LABELS[log.kind as 'water'] ?? log.kind}</Badge>
+                        <Badge tone="info">
+                          {log.kind === 'phase' ? '🌿 阶段' : (CARE_ACTION_LABELS[log.kind as 'water'] ?? log.kind)}
+                        </Badge>
                         {plant ? <span className="small muted">{plant.label}</span> : null}
                       </div>
                       {log.content ? <div className="small">{log.content}</div> : null}
@@ -444,6 +523,59 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
       ) : null}
 
       {showRules ? <CareRuleManager speciesNames={speciesNames} onClose={() => setShowRules(false)} /> : null}
+
+      {phaseTarget ? (
+        <Modal
+          title={`标记阶段 · ${phaseTarget.name}`}
+          onClose={() => {
+            setPhaseTarget(null)
+            setPhaseNote('')
+          }}
+          footer={
+            <>
+              <span className="spacer" />
+              <Button
+                onClick={() => {
+                  setPhaseTarget(null)
+                  setPhaseNote('')
+                }}
+              >
+                取消
+              </Button>
+            </>
+          }
+        >
+          <div className="content-inner">
+            <Notice tone="info">
+              阶段是<b>你观察到的状态</b>，不是从日期推算的 —— 同一个月里，
+              南阳台的可能已经现蕾，北窗台的还没动。标记之后，
+              限定阶段的规则会立刻跟着生效或停止。
+            </Notice>
+            <Field label="记一句（会写进养护日志，可留空）">
+              <TextInput value={phaseNote} onChange={setPhaseNote} placeholder="例如：看到花苞了" />
+            </Field>
+            <div className="phase-choices">
+              {CARE_PHASE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  className={`phase-choice${plantPhases[phaseTarget.id]?.phase === opt.value ? ' on' : ''}`}
+                  onClick={() => void applyPhase(phaseTarget.id, opt.value as CarePhase)}
+                >
+                  <b>
+                    {CARE_PHASE_ICONS[opt.value as CarePhase]} {CARE_PHASE_LABELS[opt.value as CarePhase]}
+                  </b>
+                  <span className="small muted">{CARE_PHASE_HINTS[opt.value as CarePhase]}</span>
+                </button>
+              ))}
+            </div>
+            {plantPhases[phaseTarget.id]?.phase ? (
+              <div className="row" style={{ marginTop: 10 }}>
+                <Button onClick={() => void applyPhase(phaseTarget.id, null)}>清除阶段标记</Button>
+              </div>
+            ) : null}
+          </div>
+        </Modal>
+      ) : null}
 
       {/* 动作类型图例：让图标不至于全靠猜 */}
       <div className="small muted" style={{ marginTop: 10 }}>

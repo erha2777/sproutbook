@@ -276,6 +276,9 @@ export type CareActionType =
 
 export type CareHemisphere = 'N' | 'S'
 
+/** 植株的物候阶段。是「观察到的状态」而不是月份，所以由人标记。 */
+export type CarePhase = 'growing' | 'budding' | 'blooming' | 'dormant' | 'recovering'
+
 /**
  * 物种养护规则。
  *
@@ -303,6 +306,12 @@ export interface CareRule {
    * 「追肥 · 花多多1号」「追肥 · 海藻精」「追肥 · 腐植酸水溶肥」再循环。
    */
   rotation: string[] | null
+  /**
+   * 限定生效的物候阶段。为空＝按月份生效；
+   * 非空时忽略月份，只在植株处于这些阶段之一时生效。
+   * 「休眠期停止水溶追肥」就是靠这个表达的。
+   */
+  activePhases: CarePhase[] | null
   actionType: CareActionType
   title: string
   detail: string | null

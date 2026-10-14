@@ -62,16 +62,19 @@ import {
   deleteCareTask,
   generateTasksForAll,
   generateTasksForPlant,
+  getPlantPhase,
   listCareLogs,
   listCareRules,
   listCareTasks,
   reopenCareTask,
   saveCareRule,
+  setPlantPhase,
   skipCareTask,
   updateCareTask
 } from '../db/repo/care'
 import type { CareTaskPatch, CareTaskQuery } from '../../shared/api'
-import type { CareHemisphere, CareRuleInput, CareTaskInput } from '../../core/types'
+import { CARE_PHASE_LABELS } from '../../core/care'
+import type { CareHemisphere, CarePhase, CareRuleInput, CareTaskInput } from '../../core/types'
 import {
   applyImport,
   buildExport,
@@ -485,6 +488,13 @@ function registerImageIpc(): void {
   handle('care:generate', (plantId: number, year: number) => generateTasksForPlant(getDb(), plantId, year))
   handle('care:generateAll', (year: number) => generateTasksForAll(getDb(), year))
   handle('care:overview', (year: number) => careOverview(getDb(), year))
+
+  // 物候阶段：切换会立刻改变任务生成结果，也会写一条养护日志
+  handle('care:plantPhase', (plantId: number) => getPlantPhase(getDb(), plantId))
+  handle('care:setPlantPhase', (plantId: number, phase: CarePhase | null, note?: string | null) =>
+    setPlantPhase(getDb(), plantId, phase, note)
+  )
+  handle('care:phases', () => Object.keys(CARE_PHASE_LABELS) as CarePhase[])
 
   handle('care:logs', (plantId?: number, limit?: number) => listCareLogs(getDb(), { plantId, limit }))
   handle('care:log.add', (input: Parameters<typeof addCareLog>[1]) => addCareLog(getDb(), input))

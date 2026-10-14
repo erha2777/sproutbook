@@ -25,7 +25,8 @@ import type {
   CareTaskPatch,
   CareTaskQuery
 } from '../../../shared/api'
-import { addDays, generateTasks, summarizeTasks, todayIso } from '../../../core/care'
+import { CARE_PHASE_LABELS, addDays, generateTasks, isCarePhase, normalizePhases, summarizeTasks, todayIso } from '../../../core/care'
+import type { CarePhase } from '../../../core/types'
 
 // ---------------------------------------------------------------------------
 // 规则库
@@ -40,6 +41,7 @@ interface CareRuleRow {
   month_to: number | null
   repeat_days: number | null
   rotation_json: string | null
+  active_phases: string | null
   action_type: string
   title: string
   detail: string | null
@@ -59,6 +61,7 @@ function mapRule(row: CareRuleRow): CareRule {
     monthTo: row.month_to,
     repeatDays: row.repeat_days,
     rotation: parseRotation(row.rotation_json),
+    activePhases: parsePhases(row.active_phases),
     actionType: row.action_type as CareActionType,
     title: row.title,
     detail: row.detail,
@@ -77,6 +80,16 @@ function parseRotation(raw: string | null): string[] | null {
     if (!Array.isArray(parsed)) return null
     const list = parsed.map((s) => String(s).trim()).filter(Boolean)
     return list.length > 0 ? list : null
+  } catch {
+    return null
+  }
+}
+
+/** 生效阶段同样存成 JSON 数组，非法值直接丢掉。 */
+function parsePhases(raw: string | null): CareRule['activePhases'] {
+  if (!raw) return null
+  try {
+    return normalizePhases(JSON.parse(raw))
   } catch {
     return null
   }
@@ -112,12 +125,15 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
 
   const rotation = input.rotation && input.rotation.length > 0 ? input.rotation : null
   const rotationJson = rotation ? JSON.stringify(rotation) : null
+  const activePhases = normalizePhases(input.activePhases)
+  const phasesJson = activePhases ? JSON.stringify(activePhases) : null
   const repeatDays = input.repeatDays ?? null
 
   if (input.id) {
     db.run(
       `UPDATE care_rules SET species_key=?, hemisphere=?, climate_zone=?, month_from=?, month_to=?,
-         repeat_days=?, rotation_json=?, action_type=?, title=?, detail=?, priority=?, source=?, verified=?
+         repeat_days=?, rotation_json=?, active_phases=?, action_type=?, title=?, detail=?, priority=?,
+         source=?, verified=?
        WHERE id=?`,
       input.speciesKey.trim() || '*',
       input.hemisphere,
@@ -126,6 +142,7 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
       input.monthTo,
       repeatDays,
       rotationJson,
+      phasesJson,
       input.actionType,
       title,
       input.detail,
@@ -141,8 +158,8 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
 
   const r = db.run(
     `INSERT INTO care_rules (species_key, hemisphere, climate_zone, month_from, month_to,
-       repeat_days, rotation_json, action_type, title, detail, priority, source, verified)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       repeat_days, rotation_json, active_phases, action_type, title, detail, priority, source, verified)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.speciesKey.trim() || '*',
     input.hemisphere,
     input.climateZone,
@@ -150,6 +167,7 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
     input.monthTo,
     repeatDays,
     rotationJson,
+    phasesJson,
     input.actionType,
     title,
     input.detail,
@@ -423,6 +441,55 @@ export function deleteCareTask(db: Db, id: number): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// 物候阶段
+// ---------------------------------------------------------------------------
+
+export interface PlantPhaseInfo {
+  plantId: number
+  phase: CarePhase | null
+  changedAt: string | null
+}
+
+export function getPlantPhase(db: Db, plantId: number): PlantPhaseInfo {
+  const row = db.get<{ id: number; phase: string | null; phase_changed_at: string | null }>(
+    'SELECT id, phase, phase_changed_at FROM plants WHERE id = ?',
+    plantId
+  )
+  return {
+    plantId,
+    phase: isCarePhase(row?.phase) ? row.phase : null,
+    changedAt: row?.phase_changed_at ?? null
+  }
+}
+
+/**
+ * 标记植株当前处于哪个物候阶段。
+ *
+ * 同时写一条养护日志 ——「3 月 15 日标记为现蕾」本身就是这株植物经历过的事实，
+ * 和「浇了水」「施了肥」一样属于时间线。分开记迟早会对不上。
+ *
+ * 阶段变化会立刻改变后续生成的任务（限定阶段的规则会随之生效或失效），
+ * 所以这里只负责记录状态，重新生成由调用方决定。
+ */
+export function setPlantPhase(db: Db, plantId: number, phase: CarePhase | null, note?: string | null): PlantPhaseInfo {
+  return db.transaction(() => {
+    const now = new Date().toISOString()
+    db.run('UPDATE plants SET phase = ?, phase_changed_at = ? WHERE id = ?', phase, now, plantId)
+
+    if (phase !== null) {
+      db.run(
+        'INSERT INTO care_logs (plant_id, task_id, log_date, kind, content) VALUES (?, NULL, ?, ?, ?)',
+        plantId,
+        todayIso(),
+        'phase',
+        note?.trim() || `标记为「${CARE_PHASE_LABELS[phase]}」`
+      )
+    }
+    return getPlantPhase(db, plantId)
+  })
+}
+
+// ---------------------------------------------------------------------------
 // 生成
 // ---------------------------------------------------------------------------
 
@@ -461,8 +528,8 @@ export function generateTasksForPlant(
   } = {}
 ): CareGenerateResult {
   return db.transaction(() => {
-    const plant = db.get<{ id: number; nickname: string; species_id: number | null }>(
-      'SELECT id, nickname, species_id FROM plants WHERE id = ? AND archived_at IS NULL',
+    const plant = db.get<{ id: number; nickname: string; species_id: number | null; phase: string | null }>(
+      'SELECT id, nickname, species_id, phase FROM plants WHERE id = ? AND archived_at IS NULL',
       plantId
     )
     if (!plant) return { created: 0, kept: 0, removed: 0, plants: 0 }
@@ -477,7 +544,9 @@ export function generateTasksForPlant(
       hemisphere: options.hemisphere ?? 'N',
       defaultWindowDays: options.windowDays ?? 15,
       // 按植株错开锚点日：否则七株的任务全挤在同一天，月历就没法看了
-      spreadSeed: plantId
+      spreadSeed: plantId,
+      // 植株当前阶段决定「限定阶段的规则」是否生效 —— 这就是停用的实现
+      phase: isCarePhase(plant.phase) ? plant.phase : null
     })
 
     // 时间窗已经走完的月份不再生成：那些日子计划还不存在，不该记成欠账

@@ -14,6 +14,7 @@ import type {
   CareActionType,
   CareHemisphere,
   CareLog,
+  CarePhase,
   CareRule,
   CareRuleInput,
   CareTask,
@@ -257,6 +258,12 @@ export interface SproutbookApi {
     generateAll(year: number): Promise<CareGenerateResult>
     overview(year: number): Promise<CareOverview>
 
+    /** 植株当前物候阶段 */
+    plantPhase(plantId: number): Promise<PlantPhaseInfo>
+    /** 标记阶段；会写一条养护日志。phase 传 null 表示清除 */
+    setPlantPhase(plantId: number, phase: CarePhase | null, note?: string | null): Promise<PlantPhaseInfo>
+    phases(): Promise<CarePhase[]>
+
     logs(plantId?: number, limit?: number): Promise<CareLog[]>
     addLog(input: {
       plantId: number
@@ -306,6 +313,12 @@ export interface CareGenerateResult {
   kept: number
   removed: number
   plants: number
+}
+
+export interface PlantPhaseInfo {
+  plantId: number
+  phase: CarePhase | null
+  changedAt: string | null
 }
 
 export interface CareOverview {

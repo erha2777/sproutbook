@@ -27,7 +27,7 @@ import { listEnvironments } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
-import type { CareTask, CareTaskStatus, RecipeItem } from '../core/types'
+import type { CarePhase, CareTask, CareTaskStatus, RecipeItem } from '../core/types'
 import {
   addDays,
   compareTasks,
@@ -35,7 +35,9 @@ import {
   daysBetween,
   dueDescription,
   generateTasks,
+  isCarePhase,
   monthsCovered,
+  normalizePhases,
   spreadDay,
   summarizeTasks,
   urgencyOf,
@@ -53,11 +55,13 @@ import {
   generateTasksForAll,
   generateTasksForPlant,
   getCareTask,
+  getPlantPhase,
   listCareLogs,
   listCareRules,
   listCareTasks,
   reopenCareTask,
   saveCareRule,
+  setPlantPhase,
   skipCareTask,
   updateCareTask
 } from './db/repo/care'
@@ -728,7 +732,8 @@ export function runSmoke(outFile: string): number {
         verified: true,
         createdAt: '',
         repeatDays: null,
-        rotation: null
+        rotation: null,
+        activePhases: null
       }
       const testRules = [
         { ...ruleBase, id: 1, speciesKey: '*', monthFrom: 3, monthTo: 4, actionType: 'fertilize' as const, title: '通用追肥', detail: null },
@@ -886,6 +891,7 @@ export function runSmoke(outFile: string): number {
         monthTo: 8,
         repeatDays: null,
         rotation: null,
+        activePhases: null,
         actionType: 'water',
         title: '自检浇水规则',
         detail: '两天一次',
@@ -1066,6 +1072,170 @@ export function runSmoke(outFile: string): number {
 
       deleteCareRule(db, myRule.id)
       check('可删除规则', listCareRules(db, { speciesKey: '照护月季' }).every((r) => r.id !== myRule.id))
+    }
+
+    // --- 物候阶段（停用条件的实现方式）---
+    {
+      const phaseRule = (activePhases: CarePhase[] | null, id = 30) => ({
+        id,
+        speciesKey: '*',
+        hemisphere: 'N' as const,
+        climateZone: null,
+        monthFrom: 3,
+        monthTo: 6,
+        repeatDays: null,
+        rotation: null,
+        activePhases,
+        actionType: 'fertilize' as const,
+        title: '追肥',
+        detail: null,
+        priority: 2,
+        source: 'seed' as const,
+        verified: true,
+        createdAt: ''
+      })
+
+      // ---- 阶段工具 ----
+      check('isCarePhase 只认已知阶段', isCarePhase('growing') && !isCarePhase('flowering') && !isCarePhase(null))
+      check('normalizePhases 过滤非法值', JSON.stringify(normalizePhases(['growing', 'xx', 'dormant'])) === '["growing","dormant"]')
+      check('normalizePhases 去重', JSON.stringify(normalizePhases(['growing', 'growing'])) === '["growing"]')
+      check('normalizePhases 空数组返回 null', normalizePhases([]) === null)
+      check('normalizePhases 非数组返回 null', normalizePhases('growing') === null && normalizePhases(undefined) === null)
+
+      // ---- 限定阶段的规则：只在对应阶段生效 ----
+      //
+      // 这就是「停用」的实现：「休眠期停止水溶追肥」＝
+      // 「这条追肥规则只在生长期/花芽分化期生效」。
+      const growthOnly = phaseRule(['growing', 'budding'])
+
+      check(
+        '生长期时追肥规则生效',
+        generateTasks([growthOnly], null, 2026, { phase: 'growing' }).length === 4,
+        String(generateTasks([growthOnly], null, 2026, { phase: 'growing' }).length)
+      )
+      check('花芽分化期仍生效', generateTasks([growthOnly], null, 2026, { phase: 'budding' }).length === 4)
+      check('休眠期自动不生效（这就是停用）', generateTasks([growthOnly], null, 2026, { phase: 'dormant' }).length === 0)
+      check('花期自动不生效（花苞显色后停肥）', generateTasks([growthOnly], null, 2026, { phase: 'blooming' }).length === 0)
+      check('缓苗期自动不生效', generateTasks([growthOnly], null, 2026, { phase: 'recovering' }).length === 0)
+
+      // 没标记阶段时，阶段规则一律不生效 —— 宁可少提醒，也不瞎排
+      check('未标记阶段时阶段规则不生效', generateTasks([growthOnly], null, 2026, { phase: null }).length === 0)
+      check('不传 phase 时同样不生效', generateTasks([growthOnly], null, 2026).length === 0)
+
+      // 不限定阶段的规则不受影响
+      check('不限阶段的规则照常按月份生效', generateTasks([phaseRule(null)], null, 2026, { phase: 'dormant' }).length === 4)
+      check('不限阶段的规则在未标记时也生效', generateTasks([phaseRule(null)], null, 2026, { phase: null }).length === 4)
+
+      // 阶段规则忽略月份区间：缓苗期可能在任何月份发生
+      const anyMonth = { ...phaseRule(['recovering']), monthFrom: 1, monthTo: 12 }
+      check('缓苗期规则可在 12 月生效', generateTasks([anyMonth], null, 2026, { phase: 'recovering' }).length === 12)
+
+      // 阶段与周期可以叠加
+      const cyclePhase = { ...phaseRule(['growing']), repeatDays: 10, rotation: ['甲', '乙'] }
+      const cyc = generateTasks([cyclePhase], null, 2026, { phase: 'growing' })
+      check('阶段 + 周期可叠加', cyc.length > 5 && cyc[0].title === '追肥 · 甲', `${cyc.length} ${cyc[0]?.title}`)
+      check('阶段 + 周期在休眠期归零', generateTasks([cyclePhase], null, 2026, { phase: 'dormant' }).length === 0)
+
+      // ---- 仓储：规则的生效阶段能存能取 ----
+      const saved = saveCareRule(db, {
+        speciesKey: '阶段测试株',
+        hemisphere: 'N',
+        climateZone: null,
+        monthFrom: 3,
+        monthTo: 6,
+        repeatDays: null,
+        rotation: null,
+        activePhases: ['growing', 'budding'],
+        actionType: 'fertilize',
+        title: '自检阶段规则',
+        detail: null,
+        priority: 2,
+        source: 'manual',
+        verified: true
+      })
+      check('规则的生效阶段能存下来', JSON.stringify(saved.activePhases) === '["growing","budding"]', JSON.stringify(saved.activePhases))
+      check(
+        '重新读出来一致',
+        JSON.stringify(listCareRules(db, { speciesKey: '阶段测试株' }).find((r) => r.id === saved.id)?.activePhases) ===
+          '["growing","budding"]'
+      )
+
+      const noPhase = saveCareRule(db, {
+        speciesKey: '阶段测试株',
+        hemisphere: 'N',
+        climateZone: null,
+        monthFrom: 3,
+        monthTo: 6,
+        repeatDays: null,
+        rotation: null,
+        activePhases: [],
+        actionType: 'water',
+        title: '自检无阶段规则',
+        detail: null,
+        priority: 2,
+        source: 'manual',
+        verified: true
+      })
+      check('空阶段数组存成 null（＝不限阶段）', noPhase.activePhases === null)
+
+      // ---- 仓储：植株阶段 ----
+      const careSpecies2 = saveSpecies(db, { values: { common_name: '阶段测试株' } })
+      const carePlant2 = savePlant(db, {
+        speciesId: careSpecies2.species.id,
+        nickname: '阶段测试株',
+        values: { nickname: '阶段测试株' }
+      })
+      const pid = carePlant2.plant?.id ?? 0
+      check('建好了阶段测试植株', pid > 0, JSON.stringify(carePlant2.errors))
+
+      check('新建植株默认没有阶段', getPlantPhase(db, pid).phase === null)
+
+      const logsBefore = listCareLogs(db, { plantId: pid }).length
+      const setResult = setPlantPhase(db, pid, 'budding')
+      check('可标记植株阶段', setResult.phase === 'budding')
+      check('阶段变化会写一条养护日志', listCareLogs(db, { plantId: pid }).length === logsBefore + 1)
+      {
+        const log = listCareLogs(db, { plantId: pid })[0]
+        check('日志类型标为 phase', log.kind === 'phase', log.kind)
+        check('日志内容记录了阶段名', (log.content ?? '').includes('花芽分化期'), log.content ?? '')
+      }
+      check('重新读取阶段一致', getPlantPhase(db, pid).phase === 'budding')
+      check('阶段变化时间被记下', getPlantPhase(db, pid).changedAt !== null)
+
+      setPlantPhase(db, pid, 'dormant', '叶子掉光了')
+      check('可改成别的阶段', getPlantPhase(db, pid).phase === 'dormant')
+      check('自定义备注被记进日志', listCareLogs(db, { plantId: pid })[0].content === '叶子掉光了')
+
+      setPlantPhase(db, pid, null)
+      check('可清除阶段', getPlantPhase(db, pid).phase === null)
+      check('清除阶段不写日志', listCareLogs(db, { plantId: pid }).length === logsBefore + 2)
+
+      // ---- 端到端：阶段决定生成什么 ----
+      //
+      // 这是用户施肥方案的核心诉求：「休眠期所有水溶追肥全部停止」
+      const pidRules = listCareRules(db, { speciesKey: '阶段测试株' })
+      const inGrowing = generateTasks(pidRules, '阶段测试株', 2026, { phase: 'growing' })
+      const inDormant = generateTasks(pidRules, '阶段测试株', 2026, { phase: 'dormant' })
+      check('生长期有追肥任务', inGrowing.some((t) => t.title === '自检阶段规则'))
+      check('休眠期没有追肥任务', !inDormant.some((t) => t.title === '自检阶段规则'))
+      check('休眠期仍保留不限阶段的任务', inDormant.some((t) => t.title === '自检无阶段规则'))
+
+      // 生成时确实按植株阶段过滤
+      setPlantPhase(db, pid, 'dormant')
+      const genDormant = generateTasksForPlant(db, pid, 2026, { today: '2026-01-01' })
+      const listDormant = listCareTasks(db, { plantId: pid })
+      check('生成时按植株阶段过滤', !listDormant.some((t) => t.title === '自检阶段规则'), JSON.stringify(genDormant))
+      check('生成时保留可生效的规则', listDormant.some((t) => t.title === '自检无阶段规则'))
+
+      setPlantPhase(db, pid, 'growing')
+      generateTasksForPlant(db, pid, 2026, { today: '2026-01-01' })
+      check(
+        '改成生长期后追肥任务出现',
+        listCareTasks(db, { plantId: pid }).some((t) => t.title === '自检阶段规则')
+      )
+
+      deleteCareRule(db, saved.id)
+      deleteCareRule(db, noPhase.id)
     }
 
     // --- CSV 编解码（导出导入的地基，必须精确）---

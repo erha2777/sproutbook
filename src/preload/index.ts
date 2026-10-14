@@ -113,6 +113,10 @@ const api: SproutbookApi = {
     generateAll: (year) => call('care:generateAll', year),
     overview: (year) => call('care:overview', year),
 
+    plantPhase: (plantId) => call('care:plantPhase', plantId),
+    setPlantPhase: (plantId, phase, note) => call('care:setPlantPhase', plantId, phase, note ?? null),
+    phases: () => call('care:phases'),
+
     logs: (plantId, limit) => call('care:logs', plantId, limit),
     addLog: (input) => call('care:log.add', input),
     removeLog: (id) => call('care:log.delete', id)

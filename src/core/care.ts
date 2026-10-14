@@ -10,7 +10,7 @@
  * 都要用同一套判断，两处各写一份必然会出现「列表说逾期、日历说还早」。
  */
 
-import type { CareActionType, CareRule, CareTask, CareTaskStatus } from './types'
+import type { CareActionType, CarePhase, CareRule, CareTask, CareTaskStatus } from './types'
 
 export const CARE_ACTION_LABELS: Record<CareActionType, string> = {
   water: '浇水',
@@ -41,6 +41,64 @@ export const CARE_ACTION_OPTIONS = (Object.keys(CARE_ACTION_LABELS) as CareActio
 
 /** 通用规则的 key：所有植物都适用。 */
 export const UNIVERSAL_SPECIES_KEY = '*'
+
+// ---------------------------------------------------------------------------
+// 物候阶段
+// ---------------------------------------------------------------------------
+
+/**
+ * 植株的物候阶段。
+ *
+ * 这些东西是**观察到的状态**，不是月份 —— 同一个月里，南阳台的可能已经现蕾，
+ * 北窗台的还没动。所以它记在植株上、由人来标记，而不是从日期推算。
+ *
+ * 它的主要用途是表达「什么时候停」：把「生长期追肥」限定在
+ * growing / budding，休眠期它就自动不生效了 —— 停用不需要另一套机制。
+ */
+export type { CarePhase }
+
+const PHASE_KEYS = ['growing', 'budding', 'blooming', 'dormant', 'recovering'] as const satisfies readonly CarePhase[]
+
+export const CARE_PHASE_LABELS: Record<CarePhase, string> = {
+  growing: '生长期',
+  budding: '花芽分化期',
+  blooming: '花期',
+  dormant: '休眠期',
+  recovering: '缓苗期'
+}
+
+export const CARE_PHASE_ICONS: Record<CarePhase, string> = {
+  growing: '🌱',
+  budding: '🔍',
+  blooming: '🌸',
+  dormant: '😴',
+  recovering: '🩹'
+}
+
+/** 界面上的说明：这个阶段什么时候算开始。 */
+export const CARE_PHASE_HINTS: Record<CarePhase, string> = {
+  growing: '春萌芽后，到花芽分化之前',
+  budding: '现蕾之前，需要停高氮、改磷钾',
+  blooming: '花苞显色开放，通常需要全部停肥',
+  dormant: '落叶或低温停滞，水溶肥一律停',
+  recovering: '缓苗、暴雨、换盆之后，只做恢复性处理'
+}
+
+export const CARE_PHASE_OPTIONS = (Object.keys(CARE_PHASE_LABELS) as CarePhase[]).map((value) => ({
+  value,
+  label: `${CARE_PHASE_ICONS[value]} ${CARE_PHASE_LABELS[value]}`
+}))
+
+export function isCarePhase(value: unknown): value is CarePhase {
+  return typeof value === 'string' && (PHASE_KEYS as readonly string[]).includes(value)
+}
+
+/** 把任意输入收敛成合法的阶段数组；空数组返回 null（＝不限阶段）。 */
+export function normalizePhases(input: unknown): CarePhase[] | null {
+  if (!Array.isArray(input)) return null
+  const list = [...new Set(input.filter(isCarePhase))]
+  return list.length > 0 ? list : null
+}
 
 // ---------------------------------------------------------------------------
 // 日期（不引依赖，也不碰时区：全部按「本地日历日」处理）
@@ -184,22 +242,42 @@ export interface GeneratedTask {
  *
  * 规则填了 rotation 时，每次取序列里的下一步，标题变成「追肥 · 花多多1号」，
  * 循环使用 —— 对应施肥方案里的三肥轮换。
+ *
+ * 规则填了 activePhases 时，只在该植株正处于这些阶段之一时才生效
+ * （且忽略月份区间）—— 这就是「停用」的实现方式：
+ * 「休眠期停止水溶追肥」＝「这条追肥规则只在生长期/花芽分化期生效」。
  */
 export function generateTasks(
   rules: CareRule[],
   speciesName: string | null,
   year: number,
-  options: { hemisphere?: 'N' | 'S'; defaultWindowDays?: number; spreadSeed?: number } = {}
+  options: {
+    hemisphere?: 'N' | 'S'
+    defaultWindowDays?: number
+    spreadSeed?: number
+    /** 植株当前阶段。为空＝未标记，一切按月份走（不影响原有用法） */
+    phase?: CarePhase | null
+  } = {}
 ): GeneratedTask[] {
   const hemisphere = options.hemisphere ?? 'N'
   const defaultWindow = options.defaultWindowDays ?? 15
   const name = speciesName?.trim().toLowerCase() ?? ''
   const seed = options.spreadSeed ?? 0
+  const phase = options.phase ?? null
 
   const applicable = rules.filter((r) => {
     if (r.hemisphere !== hemisphere) return false
     const key = r.speciesKey.trim().toLowerCase()
-    return key === UNIVERSAL_SPECIES_KEY || (name !== '' && key === name)
+    const speciesOk = key === UNIVERSAL_SPECIES_KEY || (name !== '' && key === name)
+    if (!speciesOk) return false
+
+    // 限定了阶段：只有植株正处于其中某个阶段时才生效。
+    // 注意「没标记阶段」的情况：这时阶段规则一律不生效 ——
+    // 宁可少提醒，也不要在一个你不知道处于什么状态的植株上瞎排任务。
+    if (r.activePhases && r.activePhases.length > 0) {
+      return phase !== null && r.activePhases.includes(phase)
+    }
+    return true
   })
 
   const out: GeneratedTask[] = []

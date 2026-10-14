@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 养护规则库管理。
  *
  * 规则是「哪个月该做什么」的知识，不是排期 —— 所以这里只填月份区间，
@@ -7,8 +7,16 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { CareActionType, CareRule } from '@core/types'
-import { CARE_ACTION_LABELS, CARE_ACTION_OPTIONS, UNIVERSAL_SPECIES_KEY, monthsCovered } from '@core/care'
+import type { CareActionType, CarePhase, CareRule } from '@core/types'
+import {
+  CARE_ACTION_LABELS,
+  CARE_ACTION_OPTIONS,
+  CARE_PHASE_HINTS,
+  CARE_PHASE_LABELS,
+  CARE_PHASE_OPTIONS,
+  UNIVERSAL_SPECIES_KEY,
+  monthsCovered
+} from '@core/care'
 import { Badge, Button, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextArea, TextInput, useToast } from './ui'
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `${i + 1} 月` }))
@@ -21,6 +29,8 @@ interface Draft {
   repeatDays: string
   /** 每行一个轮换步骤 */
   rotationText: string
+  /** 限定生效的阶段；空＝按月份生效 */
+  phases: CarePhase[]
   actionType: CareActionType
   title: string
   detail: string
@@ -34,6 +44,7 @@ const BLANK: Draft = {
   monthTo: '',
   repeatDays: '',
   rotationText: '',
+  phases: [],
   actionType: 'fertilize',
   title: '',
   detail: '',
@@ -90,6 +101,7 @@ export function CareRuleManager({
         monthTo: draft.monthTo ? Number(draft.monthTo) : null,
         repeatDays: draft.repeatDays.trim() ? Number(draft.repeatDays) : null,
         rotation: rotation.length > 0 ? rotation : null,
+        activePhases: draft.phases.length > 0 ? draft.phases : null,
         actionType: draft.actionType,
         title: draft.title.trim(),
         detail: draft.detail.trim() || null,
@@ -213,6 +225,46 @@ export function CareRuleManager({
                 .map((m) => `${m}月`)
                 .join('、') || '—'}
             </div>
+
+            {/*
+              限定生效阶段 = 「停用」的实现方式：
+              把追肥规则限定在生长期/花芽分化期，休眠期它就自动不生效了。
+            */}
+            <Field
+              label="限定生效阶段"
+              help="不勾＝按上面的月份生效。勾了就忽略月份，只在植株处于所选阶段时生效 —— 这就是「什么时候停」的做法。"
+            >
+              <div className="row tight" style={{ flexWrap: 'wrap' }}>
+                {CARE_PHASE_OPTIONS.map((opt) => {
+                  const on = draft.phases.includes(opt.value as CarePhase)
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`tag-toggle${on ? ' on' : ''}`}
+                      title={CARE_PHASE_HINTS[opt.value as CarePhase]}
+                      onClick={() =>
+                        setDraft({
+                          ...draft,
+                          phases: on
+                            ? draft.phases.filter((p) => p !== opt.value)
+                            : [...draft.phases, opt.value as CarePhase]
+                        })
+                      }
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
+            {draft.phases.length > 0 ? (
+              <Notice tone="warn">
+                这条规则只在植株被标记为
+                <b>{draft.phases.map((p) => CARE_PHASE_LABELS[p]).join(' 或 ')}</b>
+                时生效，且<b>不再看月份</b>。植株没标记阶段时它不会产生任何任务。
+              </Notice>
+            ) : null}
             <div className="row">
               <Button variant="primary" onClick={() => void save()} disabled={saving}>
                 {saving ? '保存中…' : '保存'}
@@ -278,6 +330,7 @@ export function CareRuleManager({
                             monthTo: rule.monthTo === null ? '' : String(rule.monthTo),
                             repeatDays: rule.repeatDays === null ? '' : String(rule.repeatDays),
                             rotationText: (rule.rotation ?? []).join('\n'),
+                            phases: rule.activePhases ?? [],
                             actionType: rule.actionType,
                             title: rule.title,
                             detail: rule.detail ?? '',
