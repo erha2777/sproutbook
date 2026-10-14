@@ -167,6 +167,7 @@ function WeatherPanel({
         {/* 这里**不能写死**，配了和风就不是 Open-Meteo 了 */}
         <span className="small muted">
           {result.providerLabel ? `数据来自 ${result.providerLabel}` : '天气数据'}，只在打开这一页时请求一次
+          {result.requestsToday > 0 ? `　·　今天已请求 ${result.requestsToday} 次` : ''}
         </span>
       </div>
     </div>
