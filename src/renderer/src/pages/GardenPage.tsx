@@ -1,24 +1,63 @@
 /**
- * 花园页 —— 植株列表、搜索、筛选、统计。
+ * 花园页 —— 植株管理。
+ *
+ * 两种视图，不是替代关系：
+ *  - **花园**：一眼看到每株长到哪一步了、哪盆该浇水了。回答「我的花园现在什么样」
+ *  - **列表**：搜索、筛选、批量管理。回答「我要找某一株」
+ *
+ * 场景里的每株都是用 `src/core/sprite.ts` 现画的像素图，
+ * 形状由物种的株型决定，大小和颜色由生长阶段决定。
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { Environment, PlantStatus } from '@core/types'
-import type { PlantListItem, PlantListItemStats } from '@shared/api'
+import type { Environment, PlantStatus, Species } from '@core/types'
+import type { CareTaskListItem, PlantListItem, PlantListItemStats, PlantPhaseInfo } from '@shared/api'
+import {
+  GROWTH_SOURCE_LABELS,
+  GROWTH_STAGE_LABELS,
+  deriveGrowthStage,
+  growthLook,
+  readMonthSet
+} from '@core/growth'
+import { CARE_ACTION_ICONS, CARE_PHASE_ICONS, CARE_PHASE_LABELS, dueDescription, urgencyOf } from '@core/care'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
+import { todayIso } from '@core/care'
+import { PlantSprite } from '../components/PlantSprite'
 import { Badge, Button, EmptyState, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 import { PlantEditorModal } from './PlantEditor'
+
+/**
+ * 花色按物种名散列取一个。
+ *
+ * 物种模板里目前没有「花色」字段，但整片花园用同一种花太死板。
+ * 散列保证同名同色、不会每次刷新都变。以后加了花色字段，
+ * 这里换成读字段即可。
+ */
+const FLOWER_COLORS = ['#e86a8a', '#f0c040', '#c060d0', '#e07050', '#80b0f0', '#f5f0e0', '#d04040', '#60c0a0', '#a0e060']
+
+export function flowerColorFor(name: string | null | undefined): string {
+  const s = name ?? ''
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return FLOWER_COLORS[h % FLOWER_COLORS.length]
+}
 
 export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactNode {
   const toast = useToast()
   const [items, setItems] = useState<PlantListItem[]>([])
   const [stats, setStats] = useState<PlantListItemStats | null>(null)
   const [environments, setEnvironments] = useState<Environment[]>([])
+  const [speciesList, setSpeciesList] = useState<Species[]>([])
+  /** 每株最近一条待办，场景里直接标出来「这盆该做什么」 */
+  const [nextTask, setNextTask] = useState<Record<number, CareTaskListItem>>({})
+  const [phases, setPhases] = useState<Record<number, PlantPhaseInfo>>({})
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<'' | PlantStatus>('')
   const [envId, setEnvId] = useState<string>('')
+  const [view, setView] = useState<'scene' | 'list'>('scene')
+  const [selected, setSelected] = useState<number | null>(null)
   const [editing, setEditing] = useState<PlantListItem | 'new' | null>(null)
 
   const debouncedQuery = useDebounced(query)
@@ -26,18 +65,34 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [list, stat, envs] = await Promise.all([
+      const [list, stat, envs, species, openTasks] = await Promise.all([
         window.api.plants.list({
           query: debouncedQuery || undefined,
           status: status || undefined,
           envId: envId ? Number(envId) : undefined
         }),
         window.api.plants.stats(currentMonth()),
-        window.api.env.list()
+        window.api.env.list(),
+        window.api.species.list({ limit: 500 }),
+        window.api.care.tasks({ status: 'open' })
       ])
       setItems(list.items)
       setStats(stat)
       setEnvironments(envs)
+      setSpeciesList(species.items)
+
+      // 每株只留最近的一条待办：地块上放不下更多，也没必要
+      const byPlant: Record<number, CareTaskListItem> = {}
+      for (const t of openTasks) {
+        if (t.plantId === null) continue
+        const cur = byPlant[t.plantId]
+        const rank = { overdue: 0, due: 1, soon: 2, later: 3, closed: 4 }
+        if (!cur || rank[urgencyOf(t, todayIso())] < rank[urgencyOf(cur, todayIso())]) byPlant[t.plantId] = t
+      }
+      setNextTask(byPlant)
+
+      const infos = await Promise.all(list.items.map((p) => window.api.care.plantPhase(p.id)))
+      setPhases(Object.fromEntries(infos.map((i) => [i.plantId, i])))
     } catch (error) {
       toast.push(`加载失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     } finally {
@@ -59,6 +114,34 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
     []
   )
 
+  /** 物种 id → 生长相关的属性 */
+  const speciesById = useMemo(() => new Map(speciesList.map((s) => [s.id, s])), [speciesList])
+
+  const growthOf = useCallback(
+    (plant: PlantListItem) => {
+      const sp = plant.species ? speciesById.get(plant.species.id) : undefined
+      const attrs = sp?.attributes ?? {}
+      const habitRaw = attrs.growth_habit
+      return {
+        habit: typeof habitRaw === 'string' ? habitRaw : null,
+        bloomMonths: readMonthSet(attrs.bloom_months),
+        dormancyMonths: readMonthSet(attrs.dormancy_months)
+      }
+    },
+    [speciesById]
+  )
+
+  /** 送人的植株不留在花园里 —— 它已经不在你这儿了。 */
+  const gardenItems = useMemo(() => items.filter((p) => p.status !== 'gifted'), [items])
+
+  const selectedPlant = gardenItems.find((p) => p.id === selected) ?? null
+
+  const patch = (p: Partial<{ query: string; status: '' | PlantStatus; envId: string }>): void => {
+    if (p.query !== undefined) setQuery(p.query)
+    if (p.status !== undefined) setStatus(p.status)
+    if (p.envId !== undefined) setEnvId(p.envId)
+  }
+
   return (
     <>
       <div className="content-inner">
@@ -69,64 +152,39 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
               <div className="label">在养植株</div>
             </div>
             <div className="stat-tile">
-              <div className="num" style={{ color: 'var(--green-dark)' }}>
-                {stats.bloomingThisMonth}
-              </div>
-              <div className="label">{currentMonth()} 月开花</div>
+              <div className="num">{stats.bloomingThisMonth}</div>
+              <div className="label">本月开花</div>
             </div>
             <div className="stat-tile">
-              <div className="num">{environments.length}</div>
+              <div className="num">{stats.byEnv.length}</div>
               <div className="label">养护位置</div>
             </div>
-            <div className="stat-tile" style={{ flex: 1, minWidth: 220 }}>
-              <div className="label" style={{ marginBottom: 6 }}>
-                位置分布
-              </div>
-              {stats.byEnv.length === 0 ? (
-                <div className="small muted">还没有植株</div>
-              ) : (
-                stats.byEnv.map((row) => (
-                  <div className="bar-row" key={`${row.envId ?? 'none'}`}>
-                    <span className="ellipsis">{row.envName}</span>
-                    <span className="bar-track">
-                      <span
-                        className="bar-fill"
-                        style={{ width: `${stats.total ? (row.count / stats.total) * 100 : 0}%` }}
-                      />
-                    </span>
-                    <span style={{ textAlign: 'right' }}>{row.count}</span>
-                  </div>
-                ))
-              )}
+            <div className="stat-tile">
+              <div className="num">{stats.byFamily.length}</div>
+              <div className="label">涉及科属</div>
             </div>
           </div>
         ) : null}
 
         <Panel>
-          <div className="row">
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <TextInput value={query} onChange={setQuery} placeholder="搜索昵称、物种、备注…" />
+          <div className="row" style={{ flexWrap: 'nowrap' }}>
+            <div style={{ width: 190 }}>
+              <TextInput value={query} onChange={(v) => patch({ query: v })} placeholder="搜索昵称 / 物种 / 别名…" />
             </div>
-            <div style={{ width: 160 }}>
-              <SelectInput value={status} onChange={(v) => setStatus(v as '' | PlantStatus)} options={statusOptions} />
+            <div style={{ width: 158 }}>
+              <SelectInput value={status} onChange={(v) => patch({ status: v as '' | PlantStatus })} options={statusOptions} />
             </div>
-            <div style={{ width: 170 }}>
-              <SelectInput value={envId} onChange={setEnvId} options={envOptions} />
+            <div style={{ width: 158 }}>
+              <SelectInput value={envId} onChange={(v) => patch({ envId: v })} options={envOptions} />
             </div>
-            {(query || status || envId) && (
-              <Button
-                size="small"
-                variant="ghost"
-                onClick={() => {
-                  setQuery('')
-                  setStatus('')
-                  setEnvId('')
-                }}
-              >
-                清空筛选
-              </Button>
-            )}
             <span className="spacer" />
+            {/* 两种视图：花园看状态，列表做管理 */}
+            <Button size="small" variant={view === 'scene' ? 'primary' : 'ghost'} onClick={() => setView('scene')}>
+              🌿 花园
+            </Button>
+            <Button size="small" variant={view === 'list' ? 'primary' : 'ghost'} onClick={() => setView('list')}>
+              ▦ 列表
+            </Button>
             <Button variant="primary" onClick={() => setEditing('new')}>
               ＋ 新增植株
             </Button>
@@ -137,7 +195,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
           <Panel>
             <Spinner label="加载中…" />
           </Panel>
-        ) : items.length === 0 ? (
+        ) : gardenItems.length === 0 ? (
           <Panel>
             <EmptyState
               icon="🪴"
@@ -157,6 +215,51 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
               }
             />
           </Panel>
+        ) : view === 'scene' ? (
+          <Panel>
+            <SectionTitle
+              right={<span className="small muted">共 {gardenItems.length} 株 · 点一株看它在什么阶段</span>}
+            >
+              我的花园
+            </SectionTitle>
+            <div className="garden-scene">
+              {gardenItems.map((plant) => {
+                const g = growthOf(plant)
+                const phase = phases[plant.id]?.phase ?? null
+                const result = deriveGrowthStage({
+                  status: plant.status,
+                  phase,
+                  bloomMonths: g.bloomMonths,
+                  dormancyMonths: g.dormancyMonths,
+                  acquiredAt: plant.acquiredAt,
+                  today: todayIso()
+                })
+                const task = nextTask[plant.id]
+                return (
+                  <button
+                    key={plant.id}
+                    className={`garden-plot${selected === plant.id ? ' selected' : ''}`}
+                    onClick={() => setSelected(selected === plant.id ? null : plant.id)}
+                    title={`${plant.nickname} · ${GROWTH_STAGE_LABELS[result.stage]}`}
+                  >
+                    <PlantSprite
+                      habit={g.habit}
+                      look={growthLook(result.stage)}
+                      flowerColor={flowerColorFor(plant.species?.commonName)}
+                      size={58}
+                    />
+                    <div className="plot-name ellipsis">{plant.nickname}</div>
+                    <div className="plot-stage">{GROWTH_STAGE_LABELS[result.stage]}</div>
+                    {task ? (
+                      <div className={`plot-task ${urgencyOf(task, todayIso())}`}>
+                        {CARE_ACTION_ICONS[task.actionType]} {task.title}
+                      </div>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          </Panel>
         ) : (
           <>
             <SectionTitle right={<span className="small muted">共 {items.length} 株</span>}>我的植物</SectionTitle>
@@ -167,6 +270,76 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
             </div>
           </>
         )}
+
+        {/* 选中某株后的详情：把「为什么是这个阶段」讲清楚 */}
+        {selectedPlant
+          ? (() => {
+              const g = growthOf(selectedPlant)
+              const info = phases[selectedPlant.id]
+              const result = deriveGrowthStage({
+                status: selectedPlant.status,
+                phase: info?.phase ?? null,
+                bloomMonths: g.bloomMonths,
+                dormancyMonths: g.dormancyMonths,
+                acquiredAt: selectedPlant.acquiredAt,
+                today: todayIso()
+              })
+              const task = nextTask[selectedPlant.id]
+              return (
+                <Panel>
+                  <SectionTitle
+                    right={
+                      <Button size="small" onClick={() => setEditing(selectedPlant)}>
+                        编辑这株
+                      </Button>
+                    }
+                  >
+                    {selectedPlant.nickname}
+                  </SectionTitle>
+                  <div className="row" style={{ alignItems: 'flex-start' }}>
+                    <PlantSprite
+                      habit={g.habit}
+                      look={growthLook(result.stage)}
+                      flowerColor={flowerColorFor(selectedPlant.species?.commonName)}
+                      size={96}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="row tight" style={{ flexWrap: 'wrap' }}>
+                        <Badge tone="ok">🌱 {GROWTH_STAGE_LABELS[result.stage]}</Badge>
+                        <span className="small muted">
+                          {GROWTH_SOURCE_LABELS[result.source]} —— {result.reason}
+                        </span>
+                      </div>
+                      <div className="small muted" style={{ marginTop: 4 }}>
+                        {selectedPlant.species?.commonName ?? '未关联物种'}
+                        {g.habit ? ` · ${g.habit}` : ''}
+                        {selectedPlant.envName ? ` · ${selectedPlant.envName}` : ''}
+                        {` · ${PLANT_STATUS_ICONS[selectedPlant.status]} ${PLANT_STATUS_LABELS[selectedPlant.status]}`}
+                      </div>
+                      {info?.phase ? (
+                        <div className="small" style={{ marginTop: 4 }}>
+                          你标记的阶段：{CARE_PHASE_ICONS[info.phase]} {CARE_PHASE_LABELS[info.phase]}
+                        </div>
+                      ) : (
+                        <div className="small muted" style={{ marginTop: 4 }}>
+                          还没标记物候阶段 —— 到「养护计划」页标记后，这里会更准。
+                        </div>
+                      )}
+                      <div className="small" style={{ marginTop: 4 }}>
+                        {task ? (
+                          <>
+                            下一件事：<b>{task.title}</b>（{task.dueDate} · {dueDescription(task, todayIso())}）
+                          </>
+                        ) : (
+                          <span className="muted">暂时没有待办</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </Panel>
+              )
+            })()
+          : null}
       </div>
 
       {editing ? (

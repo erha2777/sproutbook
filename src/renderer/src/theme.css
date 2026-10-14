@@ -1101,6 +1101,68 @@ img {
   font-size: 13px;
 }
 
+/* ---------- 花园场景 ---------- */
+
+/*
+ * 地块：每株一格。草地感靠渐变 + 泥土色的边框，
+ * 和整体木框风格一致，不至于像贴了张别处的图。
+ */
+.garden-scene {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(106px, 1fr));
+  gap: 8px;
+}
+.garden-plot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 7px 4px 6px;
+  font-family: inherit;
+  cursor: pointer;
+  border: 2px solid #6b7a3a;
+  background: linear-gradient(#d8ecb0, #a9cd76);
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+}
+.garden-plot:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 0 var(--wood-outline);
+}
+.garden-plot.selected {
+  border-color: var(--leaf-dark);
+  box-shadow: inset 0 0 0 2px var(--leaf-dark);
+  background: linear-gradient(#e8f8c8, #bce08a);
+}
+.plot-name {
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.plot-stage {
+  font-size: 11px;
+  color: #4a5a20;
+}
+/* 地块上直接标出「这盆该做什么」，不用点进去也知道 */
+.plot-task {
+  max-width: 100%;
+  margin-top: 2px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 15px;
+  color: #fff;
+  background: #8a7a5f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plot-task.overdue {
+  background: var(--danger);
+}
+.plot-task.due {
+  background: #b8860b;
+}
+
 /* ---------- 表格 ---------- */
 
 .pixel-table {

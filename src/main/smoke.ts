@@ -29,6 +29,15 @@ import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
 import type { CarePhase, CareTask, CareTaskStatus, RecipeItem } from '../core/types'
 import {
+  GROWTH_SOURCE_LABELS,
+  GROWTH_STAGE_LABELS,
+  GROWTH_STAGE_PROGRESS,
+  deriveGrowthStage,
+  growthLook
+} from '../core/growth'
+import type { GrowthStage } from '../core/growth'
+import { SPRITE_HABITS, SPRITE_SIZE, buildPlantSprite, countPixels, mixColor, normalizeHabit } from '../core/sprite'
+import {
   addDays,
   compareTasks,
   dateSpansFor,
@@ -1356,6 +1365,137 @@ export function runSmoke(outFile: string): number {
 
       deleteCareRule(db, saved.id)
       deleteCareRule(db, noPhase.id)
+    }
+
+    // --- 生长阶段推导 ---
+    {
+      const base = { today: '2026-06-15' }
+
+      check('枯死是事实，盖过一切', deriveGrowthStage({ ...base, status: 'dead', phase: 'blooming', bloomMonths: [6] }).stage === 'withered')
+      check('生病同样盖过人工标记', deriveGrowthStage({ ...base, status: 'sick', phase: 'growing' }).stage === 'sick')
+      check('状态休眠优先于月份', deriveGrowthStage({ ...base, status: 'dormant' }).stage === 'dormant')
+      check('推导来源标为 status', deriveGrowthStage({ ...base, status: 'dead' }).source === 'status')
+
+      // 人工标记优先于月份推算：同一个月里，南阳台的可能已经现蕾、北窗台的还没动
+      check(
+        '人工标记优先于开花月份',
+        deriveGrowthStage({ ...base, phase: 'growing', bloomMonths: [6] }).stage === 'growing'
+      )
+      check('推导来源标为 phase', deriveGrowthStage({ ...base, phase: 'blooming' }).source === 'phase')
+      check(
+        '阶段的说明用中文而不是内部键名',
+        deriveGrowthStage({ ...base, phase: 'blooming' }).reason.includes('花期') &&
+          !deriveGrowthStage({ ...base, phase: 'blooming' }).reason.includes('blooming'),
+        deriveGrowthStage({ ...base, phase: 'blooming' }).reason
+      )
+      check('缓苗期画成幼苗（根没缓过来、叶面积小）', deriveGrowthStage({ ...base, phase: 'recovering' }).stage === 'sprout')
+
+      check('当月开花 → 开花', deriveGrowthStage({ ...base, bloomMonths: [5, 6, 7] }).stage === 'blooming')
+      check('下月开花 → 现蕾', deriveGrowthStage({ ...base, bloomMonths: [7] }).stage === 'budding')
+      check('12 月的下一个月是 1 月（跨年）', deriveGrowthStage({ today: '2026-12-10', bloomMonths: [1] }).stage === 'budding')
+      check('休眠月份 → 休眠', deriveGrowthStage({ today: '2026-01-10', dormancyMonths: [1, 2] }).stage === 'dormant')
+      check(
+        '休眠期不判现蕾',
+        deriveGrowthStage({ today: '2026-01-10', bloomMonths: [2], dormancyMonths: [1] }).stage === 'dormant'
+      )
+      check('入手 10 天 → 幼苗', deriveGrowthStage({ ...base, acquiredAt: '2026-06-05' }).stage === 'sprout')
+      check('入手 200 天 → 生长', deriveGrowthStage({ ...base, acquiredAt: '2025-11-27' }).stage === 'growing')
+      check('没有入手日期不报错', deriveGrowthStage({ ...base, acquiredAt: null }).stage === 'growing')
+      check('入手日期格式不对不报错', deriveGrowthStage({ ...base, acquiredAt: '不是日期' }).stage === 'growing')
+      check('未来日期不会被当成幼苗', deriveGrowthStage({ ...base, acquiredAt: '2027-01-01' }).stage === 'growing')
+      check('什么都没有时给默认值', deriveGrowthStage(base).stage === 'growing')
+      check('默认来源标为 default', deriveGrowthStage(base).source === 'default')
+      check('每种来源都有中文说明', Object.values(GROWTH_SOURCE_LABELS).every((s) => s.length > 0))
+      check('每个阶段都有中文名', Object.values(GROWTH_STAGE_LABELS).every((s) => s.length > 0))
+
+      // 渲染参数：阶段之间必须真的有区别，否则花园里看不出变化
+      const stages: GrowthStage[] = ['seed', 'sprout', 'growing', 'budding', 'blooming', 'dormant', 'sick', 'withered']
+      check('每个阶段都能给出渲染参数', stages.every((s) => growthLook(s) !== undefined))
+      check('开花阶段有花，生长期没有', growthLook('blooming').flower === 'open' && growthLook('growing').flower === 'none')
+      check('现蕾阶段是花苞不是开花', growthLook('budding').flower === 'bud')
+      check('休眠落叶', growthLook('dormant').bare && growthLook('dormant').leaves === 0)
+      check('枯死程度最高', growthLook('withered').wither === 1)
+      check('生长阶段比幼苗高', growthLook('growing').stem > growthLook('sprout').stem)
+      check('开花阶段最高', growthLook('blooming').stem >= growthLook('growing').stem)
+      check('进度值在 0~1 之间', stages.every((s) => GROWTH_STAGE_PROGRESS[s] >= 0 && GROWTH_STAGE_PROGRESS[s] <= 1))
+    }
+
+    // --- 像素精灵 ---
+    {
+      check('未知株型退回草本', normalizeHabit(null) === '草本' && normalizeHabit('不存在的株型') === '草本')
+      check('已知株型原样返回', normalizeHabit('乔木') === '乔木')
+      check('九种株型都在列表里', SPRITE_HABITS.length === 9)
+
+      check('颜色混合：混 0 不变', mixColor('#5fa832', '#a8895c', 0) === '#5fa832')
+      check('颜色混合：混 1 到目标', mixColor('#5fa832', '#a8895c', 1) === '#a8895c')
+      check('颜色混合：越界被夹住', mixColor('#000000', '#ffffff', 5) === '#ffffff')
+      {
+        const mid = mixColor('#000000', '#ffffff', 0.5)
+        const v = parseInt(mid.slice(1, 3), 16)
+        check('颜色混合：中点是灰', Math.abs(v - 128) <= 1, mid)
+      }
+
+      const stages: GrowthStage[] = ['seed', 'sprout', 'growing', 'budding', 'blooming', 'dormant', 'sick', 'withered']
+      let allOk = true
+      let badCase = ''
+      const pixelCounts: Record<string, number> = {}
+
+      for (const habit of SPRITE_HABITS) {
+        for (const stage of stages) {
+          const built = buildPlantSprite({ habit, look: growthLook(stage), flowerColor: '#e86a8a' })
+          // 尺寸必须恒定，否则花园里的对齐会乱
+          if (built.grid.length !== SPRITE_SIZE || built.grid.some((r) => r.length !== SPRITE_SIZE)) {
+            allOk = false
+            badCase = `${habit}/${stage} 尺寸不对`
+            break
+          }
+          const n = countPixels(built.grid)
+          if (n === 0) {
+            allOk = false
+            badCase = `${habit}/${stage} 一个像素都没画`
+            break
+          }
+          pixelCounts[stage] = (pixelCounts[stage] ?? 0) + n
+        }
+        if (!allOk) break
+      }
+      check('9 株型 × 8 阶段全部能画出来且尺寸一致', allOk, badCase)
+      check('开花阶段比生长期像素多（花是画上去的）', pixelCounts.blooming > pixelCounts.growing, JSON.stringify(pixelCounts))
+      check('幼苗比成株矮（像素更少）', pixelCounts.sprout < pixelCounts.growing)
+
+      // 第一版 mirror() 写反了，所有植物只长半边：左右必须大致对称
+      {
+        const built = buildPlantSprite({ habit: '草本', look: growthLook('blooming') })
+        let asymmetric = 0
+        for (const row of built.grid) {
+          for (let x = 0; x < SPRITE_SIZE / 2; x++) {
+            const left = row[x] !== '.'
+            const right = row[SPRITE_SIZE - 1 - x] !== '.'
+            if (left !== right) asymmetric++
+          }
+        }
+        // 花是画在正中间的，允许极少数不对称；大面积不对称说明镜像又坏了
+        check('对称株型左右基本对称（镜像生效）', asymmetric <= 4, `不对称像素 ${asymmetric}`)
+      }
+
+      // 枯萎要真的变枯黄，不能只是换了个名字。
+      // 注意方向：枯黄是「红升、绿降」，只盯一个通道容易把方向搞反。
+      {
+        const rgb = (hex: string): [number, number, number] => [
+          parseInt(hex.slice(1, 3), 16),
+          parseInt(hex.slice(3, 5), 16),
+          parseInt(hex.slice(5, 7), 16)
+        ]
+        const alive = buildPlantSprite({ habit: '草本', look: growthLook('growing'), leafColor: '#5fa832' })
+        const dead = buildPlantSprite({ habit: '草本', look: growthLook('withered'), leafColor: '#5fa832' })
+        const [ar, ag] = rgb(alive.palette.g)
+        const [dr, dg] = rgb(dead.palette.g)
+        check('枯萎后绿色通道下降', dg < ag, `绿 ${ag} → ${dg}`)
+        check('枯萎后红色通道上升（转枯黄）', dr > ar, `红 ${ar} → ${dr}`)
+      }
+
+      check('花色跟着参数走', buildPlantSprite({ habit: '草本', look: growthLook('blooming'), flowerColor: '#123456' }).palette.f === '#123456')
+      check('不传花色有默认值', buildPlantSprite({ habit: '草本', look: growthLook('blooming') }).palette.f.length === 7)
     }
 
     // --- CSV 编解码（导出导入的地基，必须精确）---
