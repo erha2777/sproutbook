@@ -169,7 +169,11 @@ export function getSpecies(db: Db, id: number): SpeciesListItem | null {
 }
 
 export interface SaveSpeciesResult {
-  species: SpeciesListItem
+  /**
+   * 保存后的物种；**失败时为 null**。
+   * 界面必须判断它 —— 不然会拿着 null 去 setState 然后报「已保存」。
+   */
+  species: SpeciesListItem | null
   errors: Record<string, string>
   /** 实际被 AI 之类外部来源写入、且需要人工核实的字段 */
   pendingReview: string[]
@@ -193,7 +197,8 @@ export function saveSpecies(
     if (errors && Object.keys(errors).length > 0) {
       const existing = input.id ? getSpecies(db, input.id) : null
       return {
-        species: existing ?? emptySpecies(),
+        // 校验没过就别递一个 id:0 的假物种回去 —— null 才是实话
+        species: existing,
         errors,
         pendingReview: []
       }
@@ -228,7 +233,8 @@ export function saveSpecies(
     const requiredIssues = requiredErrors(defs, finalValue)
     if (Object.keys(requiredIssues).length > 0) {
       return {
-        species: id ? (getSpecies(db, id) ?? emptySpecies()) : emptySpecies(),
+        // 同上：拿不到就是拿不到
+        species: id ? getSpecies(db, id) : null,
         errors: requiredIssues,
         pendingReview: []
       }
@@ -256,7 +262,7 @@ export function saveSpecies(
 
     let savedId = id
     if (savedId) {
-      db.run(
+      const r = db.run(
         `UPDATE species SET common_name=?, scientific_name=?, family=?, genus=?, aliases_json=?,
            attributes_json=?, source=?, confidence_json=?, search_blob=?, updated_at=datetime('now')
          WHERE id=?`,
@@ -271,6 +277,23 @@ export function saveSpecies(
         searchBlob,
         savedId
       )
+      /*
+       * **检查影响行数。**
+       *
+       * 目标行不存在时这里是 0 行受影响，SQLite 不报错；接着 getSpecies 返回 null，
+       * 由下面的 `?? emptySpecies()` 递回一个 id:0 / 空名、**看起来完全正常**的对象，
+       * 编辑器照单全收：标题变成「未命名」，还弹绿色的「已保存」。
+       *
+       * 这正是「改了却看不出改了什么」那类问题的来源。
+       * 植株那边（savePlant）本来就有 null 分支，物种这边漏了 —— 同一个问题修了一半。
+       */
+      if (Number(r.changes) === 0) {
+        return {
+          species: null,
+          errors: { common_name: '这条物种已不存在，可能已被删除。请返回列表刷新后再试。' },
+          pendingReview: []
+        }
+      }
     } else {
       const r = db.run(
         `INSERT INTO species (common_name, scientific_name, family, genus, aliases_json, attributes_json, source, confidence_json, search_blob)

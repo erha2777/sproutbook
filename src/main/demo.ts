@@ -204,14 +204,14 @@ export function seedDemoData(db: Db): DemoResult {
   // 每个物种一个事务，失败不影响其它，便于定位问题数据
   for (const demo of DEMO_SPECIES) {
     const saved = saveSpecies(db, { values: demo.values, source: 'seed' }, 'import')
-    if (Object.keys(saved.errors).length > 0 || saved.species.id === 0) continue
+    if (Object.keys(saved.errors).length > 0 || saved.species!.id === 0) continue
     speciesCount++
 
     demo.plants.forEach((p, index) => {
       const envName = index % 2 === 0 ? '南向阳台' : '露台'
       const envId = envByName.get(envName) ?? environments[0]?.id ?? null
       const result = savePlant(db, {
-        speciesId: saved.species.id,
+        speciesId: saved.species!.id,
         envId,
         status: (p.status as never) ?? 'growing',
         nickname: p.nickname,
