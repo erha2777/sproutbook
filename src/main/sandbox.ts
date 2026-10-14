@@ -33,8 +33,8 @@
 
 import { app, shell } from 'electron'
 import { execFileSync } from 'node:child_process'
-import { existsSync, unlinkSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, unlinkSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 export interface SandboxDecision {
   /** 当前进程是否已关闭沙箱 */
@@ -96,6 +96,91 @@ export function applySandboxDecision(): SandboxDecision {
 
 export function getSandboxDecision(): SandboxDecision {
   return lastDecision
+}
+
+// ---------------------------------------------------------------------------
+// 软件渲染兜底（图形栈问题）
+// ---------------------------------------------------------------------------
+
+export const DISABLE_GPU_MARKER = 'disable-gpu.txt'
+
+/**
+ * 是否应当禁用硬件加速。
+ *
+ * 与沙箱不同，这一项**可以在应用内自救**：`app.disableHardwareAcceleration()`
+ * 只要在 ready 之前调用就有效，而 GPU 进程是 ready 之后才启动的。
+ *
+ * 触发条件：
+ *  - 命令行传了 --disable-gpu，或
+ *  - 存在标记文件（应用在检测到「窗口画不出来」后会自动写入并重启自己）
+ */
+export function shouldDisableGpu(): { disabled: boolean; reason: string | null } {
+  if (process.argv.includes('--disable-gpu')) {
+    return { disabled: true, reason: '命令行参数 --disable-gpu' }
+  }
+  for (const path of markerPaths(DISABLE_GPU_MARKER)) {
+    if (existsSync(path)) return { disabled: true, reason: `标记文件 ${path}` }
+  }
+  return { disabled: false, reason: null }
+}
+
+function markerPaths(name: string): string[] {
+  const list: string[] = []
+  try {
+    list.push(join(dirname(process.execPath), name))
+  } catch {
+    /* 忽略 */
+  }
+  try {
+    list.push(join(app.getPath('userData'), name))
+  } catch {
+    /* 忽略 */
+  }
+  return list
+}
+
+/**
+ * 写入软件渲染标记。下次启动时应用会调用 disableHardwareAcceleration()。
+ * 返回写入路径；exe 目录不可写（例如装在 Program Files）时退到用户数据目录。
+ */
+export function enableGpuFallback(): string {
+  const candidates = markerPaths(DISABLE_GPU_MARKER).map((path) => {
+    let writable = false
+    try {
+      const probe = join(dirname(path), `.probe-${process.pid}`)
+      writeFileSync(probe, '')
+      unlinkSync(probe)
+      writable = true
+    } catch {
+      writable = false
+    }
+    return { path, writable }
+  })
+
+  const target = candidates.find((c) => c.writable)
+  if (!target) throw new Error('没有可写入标记文件的位置')
+
+  writeFileSync(
+    target.path,
+    [
+      'This marker tells Sproutbook to run Chromium with software rendering',
+      '(hardware acceleration disabled).',
+      '',
+      'Why: Sproutbook wrote this file automatically because the previous launch',
+      'started successfully but never managed to show a window. On some machines',
+      'the GPU / DirectX stack fails for a normal (non-elevated) process, so the',
+      'renderer never paints its first frame and the window stays invisible.',
+      '',
+      'Delete this file to let Sproutbook try hardware acceleration again.',
+      ''
+    ].join('\n'),
+    'utf-8'
+  )
+  return target.path
+}
+
+export function isGpuFallbackActive(): boolean {
+  return shouldDisableGpu().disabled
 }
 
 // ---------------------------------------------------------------------------

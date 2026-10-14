@@ -214,52 +214,109 @@ OpenAI、DeepSeek、Moonshot、智谱 GLM、OpenRouter、本地 Ollama / LM Stud
 
 **双击 `Sproutbook.exe` 没反应 / 一闪就没了（异常码 `0x80000003`）**
 
-这是 **Chromium 进程沙箱无法初始化**导致的，属于运行环境问题，与本应用代码无关。判断特征：
+按下面的顺序排查。**第 ① 步最容易被忽略，也最容易被误判成「Chromium 沙箱坏了」——
+但它是真实项目里最常见的原因，先查它。**
 
-- 没有任何窗口、没有任何报错，连 `<用户数据目录>` 都不会被创建
-- 「事件查看器 → Windows 日志 → 应用程序」里能看到 `Sproutbook.exe` 的 `0x80000003`（STATUS_BREAKPOINT）记录
-- **一个几行的最小 Electron 程序在这台机器上同样崩溃** —— 这是区分「应用问题」和「环境问题」的关键实验
+### ① 先查程序目录的权限（最常见）
 
-已知触发条件：**低完整性级别（Low Integrity）进程**（沙箱化的执行环境常见）、受限的作业对象、部分安全软件注入。
-沙箱需要创建受限令牌并派生中等完整性子进程，低完整性令牌做不到。
+在 PowerShell 里对**程序所在目录**执行：
 
-**应用内部无法自救 —— 这一点已实测确认。** 曾经实现过「应用启动时自行
-`app.commandLine.appendSwitch('no-sandbox')`，配合标记文件让普通 exe 双击即可用」的方案，
-但实测：带标记文件、不带命令行参数启动，仍然是 `0x80000003`。
-Chromium 的沙箱初始化早于主进程 JavaScript，`appendSwitch` 执行时已经来不及。
-**所以 `--no-sandbox` 必须出现在命令行上**，只能靠启动器或快捷方式。
+```powershell
+icacls "C:\你的\程序目录"
+```
 
-**两种绕过方式**
+输出里只要出现下面任意一项，就是这个问题：
 
-1. **兼容模式快捷方式（推荐）**
-   用任意方式先把应用启动起来（见下），然后到
-   `设置 → 启动兼容性 → 在桌面创建兼容模式快捷方式`。
-   它会用 Electron 内置的 `shell.writeShortcutLink` 创建一个原生 `.lnk`，
-   把 `--no-sandbox` 烘焙进参数里。之后**双击桌面图标即可运行**，
-   不需要管理员权限，也没有控制台窗口闪烁。不需要时直接删掉图标即可。
+| 看到什么 | 含义 |
+|---|---|
+| `Mandatory Label\Low Mandatory Level` | 可执行文件被打上了低完整性标签 |
+| `S-1-4-...`（AppContainer 能力 SID） | 文件被某个沙箱环境标记过 |
+| `Everyone:(DENY)(DC)` | 显式拒绝删除子项 |
 
-2. **命令行 / 启动器**
-   与 exe 同目录的 `Sproutbook-compat.cmd`（安装包也会带上它），或手动加参数：
+**典型症状：同一个 `Sproutbook.exe`，右键「以管理员身份运行」能起来，普通双击不行。**
+这是因为管理员令牌能绕开这些限制。同一个原因还会导致：
 
-   ```
-   Sproutbook.exe --no-sandbox
-   ```
+- 安装程序报「Sproutbook 无法关闭」—— 它没法替换被 `DENY Delete Child` 保护的文件
+- 事件查看器里出现 `0x80000003`（STATUS_BREAKPOINT），看起来像沙箱崩溃
+
+**这些标记是怎么来的**：如果在**受限/沙箱化的环境里构建**（低完整性终端、某些 CI runner、
+带目录沙箱的 Agent 工具等），构建过程产生的**每一个**文件都会带上这些标记 ——
+包括 `node_modules` 里的 `electron.exe`。打包时它被原样复制成产物里的 `Sproutbook.exe`，
+于是污染代代相传，**换目录重新 `git clone` 也没用，因为 `node_modules` 会被重新装成脏的**。
+
+**修复（管理员 PowerShell）**：
+
+```powershell
+$dir = "C:\你的\程序目录"
+icacls $dir /reset /T /C /Q
+icacls $dir /setintegritylevel "(OI)(CI)Medium" /T /C /Q
+```
+
+> ⚠️ `"(OI)(CI)Medium"` 的括号**必须加引号**。不加的话 PowerShell 会把 `(OI)` 当成命令，
+> 报「无法将"OI"项识别为 cmdlet」。
+
+修完用 `icacls` 复查，确认 `Low Mandatory Level` / `S-1-4-` / `DENY` 都消失了，
+然后**重新执行完整构建**：
+
+```bash
+rmdir /s /q release
+pnpm install        # 必须重装：node_modules 是污染源
+pnpm dist:win
+```
+
+> 只删 `release` 重打包是不够的 —— `node_modules` 里的 `electron.exe` 还是脏的，
+> 而它会被原样复制成 `Sproutbook.exe`。
+
+### ② 检查是不是在受限终端里启动的
+
+```powershell
+whoami /groups | Select-String "Mandatory"
+```
+
+- `Medium Mandatory Level` = 正常
+- `Low Mandatory Level` = 你正处在一个受限环境里（沙箱化终端、部分远程会话、CI runner）。
+  Chromium 的进程沙箱需要创建受限令牌并派生中等完整性的子进程，低完整性令牌做不到，
+  **必然崩溃**。换一个普通终端，或在 Windows 资源管理器里直接双击即可。
+
+### ③ 检查安全软件
+
+360、火绒、腾讯电脑管家等会注入进程、破坏沙箱初始化。临时退出后测试即可确认。
+
+### ④ 以上都排除了，才考虑沙箱兜底
+
+与 exe 同目录的 `Sproutbook-compat.cmd` 会额外传入 `--no-sandbox` 与 `--disable-gpu`：
+
+```
+Sproutbook.exe --no-sandbox --disable-gpu
+```
+
+或者用**兼容模式快捷方式**：`设置 → 启动兼容性 → 在桌面创建兼容模式快捷方式`，
+它用 Electron 内置的 `shell.writeShortcutLink` 生成一个原生 `.lnk`，
+把参数烘焙进去，之后双击桌面图标即可。
 
 > 安全影响：关闭渲染进程沙箱会降低隔离强度。本应用只加载本地文件、CSP 已禁止一切远程资源、
-> 且 `contextIsolation` 开启、`nodeIntegration` 关闭，因此风险可控；但仍建议按下面排查根因。
+> `contextIsolation` 开启、`nodeIntegration` 关闭，因此风险可控；但**它是绕过症状，不是修复**，
+> 请务必先走完 ①②③。
 
-**排查根因（按可能性排序）**
+**补充事实（已实测）**：应用**无法**在启动时自救 —— 曾经实现过「标记文件 +
+`app.commandLine.appendSwitch('no-sandbox')`」，实测仍然是 `0x80000003`，
+因为 Chromium 的沙箱初始化早于主进程 JavaScript。所以 `--no-sandbox` 只能出现在命令行上。
 
-1. **确认自己不是在受限终端里启动的**。在 PowerShell 里执行 `whoami /groups`，
-   看有没有 `Mandatory Label\Low Mandatory Level`。**如果是 Low，那就是原因** ——
-   沙箱化的执行环境（部分 AI 工具的命令沙箱、CI runner、受限远程会话）都会这样。
-   请在 Windows 资源管理器里直接双击，或换一个普通终端。
-2. **第三方安全软件**（360、火绒、腾讯电脑管家等）注入进程、破坏沙箱初始化。临时退出后测试即可确认。
-3. 尝试**以管理员身份运行**，若恢复正常说明是令牌权限被裁剪。
-4. 修复系统文件：`sfc /scannow`，必要时再跑 `DISM /Online /Cleanup-Image /RestoreHealth`。
-5. 检查是否启用了 AppContainer / Device Guard / 应用控制相关策略。
+### ⑤ 其他
 
-如果确认是机器环境问题，那么**任何** Electron 应用（VS Code、Slack、Discord 等）在这台机器上都需要同样处理。
+- 修复系统文件：`sfc /scannow`，必要时再跑 `DISM /Online /Cleanup-Image /RestoreHealth`
+- 检查是否启用了 AppContainer / Device Guard / 应用控制相关策略
+
+### 仍然无解时
+
+应用会写启动日志，里面记录了启动参数、三个关键路径、**每个目录的可写性探测**，
+以及窗口是否成功显示：
+
+```
+%APPDATA%\Sproutbook\startup.log
+```
+
+把它发出来通常一眼就能定位。
 
 **Windows 提示「已保护你的电脑」/ macOS 提示「已损坏」**
 安装包没有代码签名，这是正常现象。Windows：点「更多信息 → 仍要运行」。

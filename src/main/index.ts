@@ -16,7 +16,7 @@ import { closeDatabase, dataDir, dbFilePath, getLastReport, imagesDir, initDatab
 import { registerIpc } from './ipc'
 import { handleImageProtocol, registerImageScheme } from './services/images'
 import { runSmoke } from './smoke'
-import { applySandboxDecision } from './sandbox'
+import { applySandboxDecision, enableGpuFallback, isGpuFallbackActive, shouldDisableGpu } from './sandbox'
 import type { SandboxDecision } from './sandbox'
 import { logStartup, logWritability, startupLogPath } from './startupLog'
 
@@ -53,6 +53,26 @@ logStartup('应用启动', {
   sandboxDisabled: sandboxDecision.disabled,
   sandboxReason: sandboxDecision.reason
 })
+
+/**
+ * 软件渲染兜底。
+ *
+ * 与沙箱不同，这一项能在应用内自救：`disableHardwareAcceleration()` 只要在 ready
+ * 之前调用就有效（GPU 进程是 ready 之后才启动的）。
+ *
+ * 典型场景：应用起来了、数据库也正常，但窗口始终画不出来 —— 机器上 GPU/DirectX
+ * 栈对普通（非管理员）进程不工作时就会这样。看门狗检测到后会写入标记并自动重启。
+ */
+const gpuFallbackWasActive = isGpuFallbackActive()
+try {
+  const gpu = shouldDisableGpu()
+  if (gpu.disabled) {
+    app.disableHardwareAcceleration()
+    logStartup('已禁用硬件加速（改用软件渲染）', gpu.reason)
+  }
+} catch (error) {
+  logStartup('处理软件渲染策略时出错（继续使用默认设置）', error)
+}
 
 function smokeOutPath(): string {
   const arg = process.argv.find((a) => a.startsWith('--smoke-out='))
@@ -343,16 +363,24 @@ app.whenReady().then(() => {
 
   /**
    * 看门狗：界面初始化走完后，若始终没有可见窗口，说明前面某一步悄悄失败了。
-   * 宁可弹窗退出，也绝不留下一个用户看不见的进程。
+   * 宁可明确报错，也绝不留下一个用户看不见的进程。
+   *
+   * 处理顺序（尽量自救，而不是直接甩错误给用户）：
+   *   1. 窗口存在但没显示 → 强制显示
+   *   2. 还没试过软件渲染 → 写入标记并**自动重启**（下次启动即用软件渲染）
+   *   3. 已经用软件渲染还是不行 → 只能弹窗报错
    */
   const windowWatchdog = setTimeout(() => {
     const windows = BrowserWindow.getAllWindows()
     const visible = windows.filter((w) => w.isVisible())
     if (visible.length > 0) return
 
-    logStartup('看门狗：启动 10 秒后仍无可见窗口', { windowCount: windows.length })
+    logStartup('看门狗：启动 10 秒后仍无可见窗口', {
+      windowCount: windows.length,
+      gpuFallbackAlreadyActive: gpuFallbackWasActive
+    })
+
     if (windows.length > 0) {
-      // 窗口存在只是没显示：强制显示它，并记一笔
       for (const win of windows) {
         win.show()
         win.focus()
@@ -361,10 +389,23 @@ app.whenReady().then(() => {
       return
     }
 
+    // 还没试过软件渲染：写上标记后自动重启一次
+    if (!gpuFallbackWasActive) {
+      try {
+        const marker = enableGpuFallback()
+        logStartup('看门狗：疑似图形栈问题，已写入软件渲染标记并自动重启', { marker })
+        app.relaunch()
+        app.exit(0)
+        return
+      } catch (error) {
+        logStartup('看门狗：写入软件渲染标记失败', error)
+      }
+    }
+
     dialog.showErrorBox(
       '窗口未能创建',
       [
-        '应用已启动，但 10 秒后仍然没有任何窗口。',
+        '应用已启动，但始终没有出现窗口。',
         '',
         `启动日志：${startupLogPath() ?? '(无法写入)'}`,
         '',
