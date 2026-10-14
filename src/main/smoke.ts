@@ -1707,6 +1707,56 @@ export async function runSmoke(outFile: string): Promise<number> {
         check('完全不是 JSON 时返回空', parseIdentifyResponse('').length === 0)
       }
 
+      // ---- 删字段时不能误伤同名异类的投影行 ----
+      //
+      // 物种模板和植株模板**可以各有同名字段**（唯一性只在各自 owner_kind 内校验）。
+      // 原来那句 DELETE FROM attr_index WHERE field_key = ? 少了 owner_kind 条件，
+      // 删一个没人用过的植株字段会连带删掉同名物种字段的全部投影行。
+      //
+      // 后果是连锁的、而且全程无提示：
+      //   ①「本月开花」这类索引筛选静默少算
+      //   ② 那个物种字段的 fieldUsage 从此报 0，
+      //      于是「有数据只能归档不能删」「有数据不许改类型」两道保护同时失效
+      {
+        const fPlant = createField(db, { ownerKind: 'plant', key: 'dup_check', label: '同名字段', groupName: '其他', type: 'text' })
+        const fSpecies = createField(db, { ownerKind: 'species', key: 'dup_check', label: '同名字段', groupName: '其他', type: 'text' })
+        check('同名字段可以分别建在植株与物种上', Boolean(fPlant.id) && Boolean(fSpecies.id))
+
+        /*
+         * 只给**物种**那侧种一条投影行 —— 这正是真实场景：
+         * 植株字段没人用过（于是允许真删），物种字段有数据。
+         * 要是两边都种，deleteField 会按「有数据只能归档」拒绝删植株字段，
+         * 那测的就不是 owner_kind 限定，而是另一条规矩了。
+         */
+        db.run(
+          "INSERT OR REPLACE INTO attr_index (owner_kind, owner_id, field_key, value_text) VALUES ('species', 90002, 'dup_check', '物种的值')"
+        )
+
+        deleteField(db, fPlant.id)
+
+        const leftPlant = db.scalar<number>(
+          "SELECT COUNT(*) AS c FROM attr_index WHERE owner_kind = 'plant' AND field_key = 'dup_check'"
+        )
+        const leftSpecies = db.scalar<number>(
+          "SELECT COUNT(*) AS c FROM attr_index WHERE owner_kind = 'species' AND field_key = 'dup_check'"
+        )
+        check('该字段本来就没有投影行（所以允许真删）', Number(leftPlant) === 0, String(leftPlant))
+        check('同名物种字段的投影行不受影响', Number(leftSpecies) === 1, String(leftSpecies))
+
+        /*
+         * 收尾：把自检自己造的残留清掉。
+         * 这里**故意吞掉异常** —— 物种那个字段还留着一条投影行，
+         * deleteField 会按「有数据只能归档」拒绝。那是它该有的行为，
+         * 不是本次要验证的东西，不该让整轮自检因此判失败。
+         */
+        db.run("DELETE FROM attr_index WHERE field_key = 'dup_check'")
+        try {
+          deleteField(db, fSpecies.id)
+        } catch {
+          db.run('DELETE FROM field_definitions WHERE id = ?', fSpecies.id)
+        }
+      }
+
       // ---- 地名解析的缓存 ----
       //
       // 这条能在**不联网**的情况下验证：往缓存里塞一个特征明显的假结果，

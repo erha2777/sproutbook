@@ -141,7 +141,17 @@ export function deleteField(db: Db, id: number): boolean {
   }
 
   db.run('DELETE FROM field_definitions WHERE id = ?', id)
-  db.run('DELETE FROM attr_index WHERE field_key = ?', field.key)
+  /*
+   * 清投影行时**必须限定 owner_kind**。
+   *
+   * 物种模板和植株模板可以各有同名字段（唯一性只在各自 owner_kind 内校验），
+   * 少了这个条件，删一个没人用过的植株字段会连带删掉同名物种字段的投影行。
+   * 后果是连锁的、而且全程没有提示：
+   *   ①「本月开花」这类索引筛选静默少算
+   *   ② 那个物种字段的 fieldUsage 从此报 0，
+   *      于是「有数据只能归档不能删」「有数据不许改类型」两道保护同时失效
+   */
+  db.run('DELETE FROM attr_index WHERE owner_kind = ? AND field_key = ?', field.ownerKind, field.key)
   return true
 }
 
