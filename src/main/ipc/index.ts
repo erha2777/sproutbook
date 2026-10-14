@@ -744,6 +744,8 @@ function registerAiIpc(): void {
         model,
         imageDataUrl: dataUrl,
         hint: payload.hint,
+        // 库里已有的名字当线索 —— 把开放问题变成选择题，但它只是线索不是答案
+        knownNames: listSpecies(db, { limit: 200 }).items.map((s) => s.commonName),
         temperature: settings.temperature,
         timeoutMs: settings.timeoutMs,
         maxRetries: settings.maxRetries,
@@ -799,6 +801,8 @@ function registerAiIpc(): void {
         model,
         imageDataUrl: prepareImageDataUrl(file),
         hint: payload.hint,
+        // 库里已有的名字当线索 —— 把开放问题变成选择题，但它只是线索不是答案
+        knownNames: listSpecies(db, { limit: 200 }).items.map((s) => s.commonName),
         temperature: settings.temperature,
         timeoutMs: settings.timeoutMs,
         maxRetries: settings.maxRetries,

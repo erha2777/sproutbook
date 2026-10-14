@@ -1610,6 +1610,57 @@ export async function runSmoke(outFile: string): Promise<number> {
         check('按置信度从高到低', normal[0].name === '绿萝' && normal[2].name === '合果芋')
         check('学名为空串时归一成 null', normal[1].scientificName === null)
 
+        /*
+         * 品种名与识别层级。
+         *
+         * 起因是用户拿自己的朱顶红阿弗雷试：模型认出「朱顶红（重瓣白花品种）」，
+         * 属和种都对、理由也说得准（花葶、重瓣白花、喉部淡绿、大鳞茎），
+         * 但没到「阿弗雷」。品种级本来就难 —— 关键是不能让用户以为认到了。
+         */
+        {
+          const withCultivar = parseIdentifyResponse(
+            '{"candidates":[{"name":"朱顶红","scientificName":"Hippeastrum","cultivar":"阿弗雷","level":"cultivar","confidence":0.8}]}'
+          )
+          check('品种名被单独解析出来', withCultivar[0].cultivar === '阿弗雷', String(withCultivar[0].cultivar))
+          check('识别层级被解析出来', withCultivar[0].level === 'cultivar')
+
+          const speciesOnly = parseIdentifyResponse(
+            '{"candidates":[{"name":"朱顶红","scientificName":"Hippeastrum","cultivar":"","level":"species","confidence":0.9}]}'
+          )
+          check('认不到品种时 cultivar 为空', speciesOnly[0].cultivar === null)
+          check('层级如实停在种', speciesOnly[0].level === 'species')
+
+          // 模型没给 level：按有没有品种名推断，比丢掉强
+          check(
+            '没给 level 但有品种名时推为 cultivar',
+            parseIdentifyResponse('{"candidates":[{"name":"月季","cultivar":"粉龙"}]}')[0].level === 'cultivar'
+          )
+          check(
+            '没给 level 也没有品种名时为 null',
+            parseIdentifyResponse('{"candidates":[{"name":"月季"}]}')[0].level === null
+          )
+          // 乱写的 level 不能被当成合法值
+          check(
+            '无法识别的 level 被丢掉',
+            parseIdentifyResponse('{"candidates":[{"name":"月季","level":"kingdom"}]}')[0].level === null
+          )
+        }
+
+        /*
+         * 已知品种当线索：把开放问题变成选择题。
+         * 用户库里已经有「朱顶红阿弗雷」，识图时把它捎上会准得多。
+         */
+        {
+          const withKnown = buildIdentifyMessages(dataUrl, null, ['朱顶红阿弗雷', '月季粉龙'])
+          const text = JSON.stringify(withKnown[1].content)
+          check('已知品种名被写进提示里', text.includes('朱顶红阿弗雷') && text.includes('月季粉龙'))
+          check('明确说了「不在里面就自己判断」', text.includes('不要硬套'))
+          // 没给已知品种时不该凭空多出这一段
+          check('没有已知品种时不出现参考段落', !JSON.stringify(buildIdentifyMessages(dataUrl)[1].content).includes('已经录过'))
+          // 空数组 / 空白名字要被过滤掉，否则会写出一串顿号
+          check('空白名字被过滤', !JSON.stringify(buildIdentifyMessages(dataUrl, null, ['', '  '])[1].content).includes('已经录过'))
+        }
+
         // 模型爱犯的几种格式毛病，都不该让结果丢掉
         check(
           'confidence 写成百分数会换算',

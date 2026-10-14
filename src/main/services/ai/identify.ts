@@ -18,11 +18,30 @@ import { extractJsonObject } from './autofill'
 import { chat } from './client'
 import type { ChatMessage } from './client'
 
+/** 认到了哪一层。品种级最难，认不到就该老实停在种。 */
+export type IdentifyLevel = 'genus' | 'species' | 'cultivar'
+
+export const LEVEL_LABELS: Record<IdentifyLevel, string> = {
+  genus: '只到属',
+  species: '到种',
+  cultivar: '到品种'
+}
+
 export interface IdentifyCandidate {
   /** 中文俗名，最常用的那个 */
   name: string
   /** 学名。模型不确定时为空 */
   scientificName: string | null
+  /**
+   * 园艺品种名，例如「阿弗雷」或 'Alfresco'。
+   *
+   * 单独一个字段，因为它和「是什么植物」是两回事：
+   * 认出是朱顶红不难，认出是哪个品种很难 ——
+   * 上千个园艺品种在照片上常常看不出差别，人也不行。
+   */
+  cultivar: string | null
+  /** 认到了哪一层。界面要说出来，别让用户以为认到品种了 */
+  level: IdentifyLevel | null
   /** 0~1。模型给百分数时会换算 */
   confidence: number
   /** 一句话依据，让用户判断模型是不是在瞎猜 */
@@ -40,27 +59,55 @@ export interface IdentifyResult {
 const SYSTEM_PROMPT = `你是植物识别助手。用户会给你一张植物照片，你要判断它最可能是什么。
 
 只输出一个 JSON 对象，不要任何解释文字，格式：
-{"candidates":[{"name":"中文俗名","scientificName":"学名或空字符串","confidence":0.85,"reason":"一句话依据"}]}
+{"candidates":[{"name":"中文名","scientificName":"学名或空字符串","cultivar":"园艺品种名或空字符串","level":"genus|species|cultivar","confidence":0.85,"reason":"一句话依据"}]}
+
+关于 level —— 要如实说认到了哪一层：
+- cultivar：能确定是哪个园艺品种（例如「阿弗雷」/'Alfresco'）
+- species：只知道是什么种（例如「朱顶红」Hippeastrum）
+- genus：只到属
+
+**园艺品种是最难的一层**：同一个属里常有成百上千个品种，照片上往往看不出差别。
+认不出品种就老实填 species，把 cultivar 留空 —— **不要编一个听起来像的品种名**。
+用户宁可看到「朱顶红（到种）」，也不要看到一个错的「阿弗雷」。
 
 规则：
 - 最多 3 个候选，按可能性从高到低。
 - confidence 是 0 到 1 之间的小数，不是百分数。
-- reason 要写你凭什么这么判断（叶形、叶序、花色、株型等），一句话即可。
+- reason 要写你凭什么这么判断（叶形、叶序、花色、花型、株型等），一句话即可。
 - **看不清或没有把握时，少给候选并降低 confidence**，不要为了凑数编造。
   只有一个候选也行，甚至给空数组也行 —— 猜错比说不知道更糟。
 - 不要输出养护建议、毒性等额外字段，这一步只认品种。`
 
 /** 把一张图（data URL）和可选提示拼成消息。抽出来是为了能脱机自检。 */
-export function buildIdentifyMessages(imageDataUrl: string, hint?: string | null): ChatMessage[] {
-  const text = hint?.trim()
-    ? `请识别这张植物照片。用户补充：${hint.trim()}`
-    : '请识别这张植物照片。'
+export function buildIdentifyMessages(
+  imageDataUrl: string,
+  hint?: string | null,
+  /**
+   * 用户库里已有的物种名。
+   *
+   * 这是**把开放问题变成选择题**：他可能正在识别一株自己已经录过的植物，
+   * 或者同类的另一个品种。把候选范围先收窄，比让模型从全世界的植物里挑准得多。
+   * 但它只是线索不是答案 —— 提示词里写明了「不在里面就自己判断」。
+   */
+  knownNames?: string[]
+): ChatMessage[] {
+  const lines: string[] = []
+  lines.push(hint?.trim() ? `请识别这张植物照片。用户补充：${hint.trim()}` : '请识别这张植物照片。')
+
+  const known = (knownNames ?? []).map((n) => n.trim()).filter(Boolean).slice(0, 50)
+  if (known.length > 0) {
+    lines.push('')
+    lines.push(`用户已经录过这些植物，供参考：${known.join('、')}`)
+    lines.push('如果这张照片属于其中某一种，**优先用那个名字**，并把 level 填成对应的层级；')
+    lines.push('如果明显不是其中任何一种，就按你自己的判断回答，不要硬套。')
+  }
+
   return [
     { role: 'system', content: SYSTEM_PROMPT },
     {
       role: 'user',
       content: [
-        { type: 'text', text },
+        { type: 'text', text: lines.join('\n') },
         { type: 'image_url', image_url: { url: imageDataUrl } }
       ]
     }
@@ -140,9 +187,21 @@ export function parseIdentifyResponse(content: string): IdentifyCandidate[] {
     conf = Math.min(1, Math.max(0, conf))
 
     const sci = String(o.scientificName ?? o.scientific_name ?? '').trim()
+    const cultivar = String(o.cultivar ?? o.cultivarName ?? o.variety ?? '').trim()
+    const levelRaw = String(o.level ?? '').trim().toLowerCase()
+    const level: IdentifyLevel | null =
+      levelRaw === 'genus' || levelRaw === 'species' || levelRaw === 'cultivar'
+        ? levelRaw
+        : // 模型没给 level 时按「有没有品种名」推断，比丢掉强
+          cultivar !== ''
+          ? 'cultivar'
+          : null
+
     out.push({
       name,
       scientificName: sci === '' ? null : sci,
+      cultivar: cultivar === '' ? null : cultivar,
+      level,
       confidence: Math.round(conf * 100) / 100,
       reason: String(o.reason ?? o.why ?? o.basis ?? '').trim()
     })
@@ -159,6 +218,8 @@ export interface IdentifyParams {
   model: string
   imageDataUrl: string
   hint?: string | null
+  /** 用户库里已有的物种名，作为线索传给模型 */
+  knownNames?: string[]
   temperature?: number
   timeoutMs?: number
   maxRetries?: number
@@ -170,7 +231,7 @@ export async function identifyPlant(params: IdentifyParams): Promise<IdentifyRes
     baseUrl: params.baseUrl,
     apiKey: params.apiKey,
     model: params.model,
-    messages: buildIdentifyMessages(params.imageDataUrl, params.hint),
+    messages: buildIdentifyMessages(params.imageDataUrl, params.hint, params.knownNames),
     // 识别要的是稳定答案，不是创造力
     temperature: params.temperature ?? 0.1,
     // 图片比纯文本慢，超时给宽一点

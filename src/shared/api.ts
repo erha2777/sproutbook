@@ -425,6 +425,10 @@ export interface TransferResult {
 export interface AiIdentifyCandidate {
   name: string
   scientificName: string | null
+  /** 园艺品种名。认不出品种时为空 */
+  cultivar: string | null
+  /** 认到了哪一层。界面要如实说，别让用户以为认到品种了 */
+  level: 'genus' | 'species' | 'cultivar' | null
   /** 0~1 */
   confidence: number
   reason: string
