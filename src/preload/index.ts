@@ -43,10 +43,8 @@ const api: SproutbookApi = {
     keyWarning: () => call('settings:keyWarning'),
     test: () => call('settings:testAi'),
     autofill: (payload) => call('ai:autofill', payload),
-    identify: (payload) => call('ai:identify', payload),
     identifyFile: (payload) => call('ai:identifyFile', payload),
     cancel: (requestId) => call('ai:cancel', requestId),
-    runs: (limit) => call('ai:runs', limit)
   },
   fields: {
     list: (ownerKind, includeArchived) => call('fields:list', ownerKind, includeArchived ?? false),
@@ -67,7 +65,6 @@ const api: SproutbookApi = {
   },
   plants: {
     list: (options) => call('plants:list', options ?? {}),
-    get: (id) => call('plants:get', id),
     save: (payload) => call('plants:save', payload),
     remove: (id) => call('plants:delete', id),
     stats: (month) => call('plants:stats', month)
@@ -81,7 +78,6 @@ const api: SproutbookApi = {
     list: (owner) => call('images:list', owner),
     pick: (owner) => call('images:pick', owner),
     remove: (id) => call('images:delete', id),
-    reveal: (fileName) => call('images:reveal', fileName)
   },
   materials: {
     list: (query) => call('materials:list', query),
@@ -91,7 +87,6 @@ const api: SproutbookApi = {
   },
   recipes: {
     list: (options) => call('recipes:list', options ?? {}),
-    get: (id) => call('recipes:get', id),
     save: (input) => call('recipes:save', input),
     archive: (id) => call('recipes:archive', id),
     restore: (id) => call('recipes:restore', id),
@@ -125,7 +120,6 @@ const api: SproutbookApi = {
 
     plantPhase: (plantId) => call('care:plantPhase', plantId),
     setPlantPhase: (plantId, phase, note) => call('care:setPlantPhase', plantId, phase, note ?? null),
-    phases: () => call('care:phases'),
 
     logs: (plantId, limit) => call('care:logs', plantId, limit),
     addLog: (input) => call('care:log.add', input),
