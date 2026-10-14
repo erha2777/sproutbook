@@ -80,6 +80,12 @@ const api: SproutbookApi = {
     pick: (owner) => call('images:pick', owner),
     remove: (id) => call('images:delete', id),
     reveal: (fileName) => call('images:reveal', fileName)
+  },
+  transfer: {
+    export: (kind, format) => call('transfer:export', kind, format),
+    previewImport: (kind) => call('transfer:previewImport', kind),
+    applyImport: (token, options) => call('transfer:applyImport', token, options ?? {}),
+    discardImport: (token) => call('transfer:discardImport', token)
   }
 }
 

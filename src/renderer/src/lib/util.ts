@@ -6,25 +6,9 @@ export function imageUrl(fileName: string | null | undefined): string | null {
   return `plantimg://local/${encodeURIComponent(fileName)}`
 }
 
-export const PLANT_STATUS_LABELS: Record<PlantStatus, string> = {
-  growing: '生长中',
-  dormant: '休眠',
-  sick: '有状况',
-  dead: '已枯死',
-  gifted: '已送人'
-}
-
-export const PLANT_STATUS_ICONS: Record<PlantStatus, string> = {
-  growing: '🌿',
-  dormant: '💤',
-  sick: '🤒',
-  dead: '🥀',
-  gifted: '🎁'
-}
-
-export const PLANT_STATUS_OPTIONS: Array<{ value: PlantStatus; label: string }> = (
-  Object.keys(PLANT_STATUS_LABELS) as PlantStatus[]
-).map((value) => ({ value, label: `${PLANT_STATUS_ICONS[value]} ${PLANT_STATUS_LABELS[value]}` }))
+// 植株状态的词汇统一放在 core（主进程的导入导出也要用），这里只做转出，
+// 避免出现第二份定义导致两边翻译不一致。
+export { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS } from '@core/status'
 
 export const ENV_KIND_LABELS: Record<string, string> = {
   indoor: '室内',

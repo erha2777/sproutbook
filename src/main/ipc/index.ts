@@ -10,6 +10,7 @@
 
 import { app, dialog, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
+import { writeFileSync } from 'node:fs'
 import type { Db } from '../db/connection'
 import { backupsDir, dataDir, dbFilePath, getDb, imagesDir, makeManualBackup } from '../db'
 import { listBackups } from '../db/backup'
@@ -36,6 +37,13 @@ import {
   setSetting
 } from '../db/repo/misc'
 import type { EnvironmentInput } from '../../core/types'
+import {
+  applyImport,
+  buildExport,
+  discardImport,
+  previewImport
+} from '../services/transfer'
+import type { TransferImportOptions, TransferFormat, TransferKind } from '../../shared/api'
 import type {
   AiConnectionResult,
   AiSettings,
@@ -417,6 +425,43 @@ function registerImageIpc(): void {
       }
     }
     return { imported, canceled: false, failures }
+  })
+
+  // -------------------------------------------------------------------------
+  // 导入导出
+  // -------------------------------------------------------------------------
+
+  handle('transfer:export', async (kind: TransferKind, format: TransferFormat) => {
+    const built = buildExport(getDb(), kind, format)
+    const result = await dialog.showSaveDialog({
+      title: '导出数据',
+      defaultPath: built.suggestedName,
+      filters:
+        format === 'csv'
+          ? [{ name: 'CSV 表格', extensions: ['csv'] }]
+          : [{ name: 'JSON 数据', extensions: ['json'] }]
+    })
+    if (result.canceled || !result.filePath) return { canceled: true, count: 0, path: null }
+    writeFileSync(result.filePath, built.content, 'utf8')
+    return { canceled: false, count: built.count, path: result.filePath }
+  })
+
+  handle('transfer:previewImport', async (kind: TransferKind) => {    const result = await dialog.showOpenDialog({
+      title: '选择要导入的文件',
+      properties: ['openFile'],
+      filters: [{ name: '数据文件', extensions: ['csv', 'json'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return previewImport(getDb(), kind, result.filePaths[0])
+  })
+
+  handle('transfer:applyImport', (token: string, options: TransferImportOptions) =>
+    applyImport(getDb(), token, options)
+  )
+
+  handle('transfer:discardImport', (token: string) => {
+    discardImport(token)
+    return true
   })
 
   handle('images:delete', (id: number) => {

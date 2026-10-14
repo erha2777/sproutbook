@@ -23,6 +23,9 @@ import { loadFieldDefinitions } from './db/repo/common'
 import { createField, deleteField, fieldUsage, setFieldArchived } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { listPlants, plantStats, savePlant } from './db/repo/plants'
+import { listEnvironments } from './db/repo/misc'
+import { toCsv, parseCsv } from '../core/csv'
+import { applyImport, buildExport, previewImport } from './services/transfer'
 
 interface CheckResult {
   name: string
@@ -493,6 +496,141 @@ export function runSmoke(outFile: string): number {
       )
 
       oldDb.close()
+    }
+
+    // --- CSV 编解码（导出导入的地基，必须精确）---
+    {
+      const tricky = [
+        { a: '普通', b: '含,逗号', c: '含"引号', d: '含\n换行', e: '' },
+        { a: ' 前后空格 ', b: 'a"b"c', c: '""', d: '尾随逗号,', e: 'x' }
+      ]
+      const text = toCsv(['a', 'b', 'c', 'd', 'e'], tricky)
+      const back = parseCsv(text)
+      check('CSV 表头往返一致', back.headers.join(',') === 'a,b,c,d,e', back.headers.join(','))
+      check('CSV 行数往返一致', back.rows.length === 2, String(back.rows.length))
+      check(
+        'CSV 逗号被正确转义',
+        back.rows[0][1] === '含,逗号',
+        JSON.stringify(back.rows[0][1])
+      )
+      check('CSV 引号被正确转义', back.rows[0][2] === '含"引号', JSON.stringify(back.rows[0][2]))
+      check('CSV 字段内换行被保留', back.rows[0][3] === '含\n换行', JSON.stringify(back.rows[0][3]))
+      check('CSV 空字段往返一致', back.rows[0][4] === '', JSON.stringify(back.rows[0][4]))
+      check('CSV 连续引号被还原', back.rows[1][2] === '""', JSON.stringify(back.rows[1][2]))
+      check(
+        'CSV 带 BOM 的文件能正确解析',
+        parseCsv(`\ufeffa,b\r\n1,2\r\n`).headers[0] === 'a'
+      )
+      check('CSV 忽略末尾空行', parseCsv('a\n1\n\n').rows.length === 1)
+      check('CSV 容忍 CRLF 与 LF 混用', parseCsv('a\r\n1\n2\r\n').rows.length === 2)
+    }
+
+    // --- 导出 → 导入 到另一个库，逐字段比对 ---
+    //
+    // 这是导入导出最要紧的性质：**数据出去了还能原样回来**。
+    // 所以不测「导出成功」，直接导进一个新库再比字段值。
+    {
+      const oddName = '月季,"斗雪红"' // 名称里同时有逗号和引号，专门恶心 CSV
+      const exportSpecies = saveSpecies(db, {
+        values: {
+          common_name: oddName,
+          scientific_name: 'Rosa chinensis',
+          family: '蔷薇科',
+          bloom_months: [4, 5, 6, 9, 10, 11],
+          light_requirement: ['全日照', '半阴'],
+          aliases: ['月月红', '四季花'],
+          needs_vernalization: false,
+          cold_hardiness: -15,
+          light_hours: { min: 6, max: 8 },
+          toxicity_level: '无毒',
+          care_notes: '含逗号的备注, 还有"引号"'
+        }
+      })
+      check('可创建用于导出测试的物种', exportSpecies.species.id > 0, JSON.stringify(exportSpecies.errors))
+
+      const envs = listEnvironments(db, true)
+      savePlant(db, {
+        speciesId: exportSpecies.species.id,
+        envId: envs[0]?.id ?? null,
+        nickname: '阳台那盆',
+        status: 'dormant',
+        values: { nickname: '阳台那盆', env_id: envs[0]?.id ?? null, status: 'dormant', pot_size: '25cm' }
+      })
+
+      // 目标库：全新空库，只跑迁移 + 种子
+      const targetFile = join(workDir, 'import-target.db')
+      const target = new Db(targetFile)
+      migrate(target)
+      seedAll(target)
+
+      for (const kind of ['species', 'plants'] as const) {
+        const built = buildExport(db, kind, 'csv')
+        const csvPath = join(workDir, `export-${kind}.csv`)
+        writeFileSync(csvPath, built.content, 'utf8')
+        check(`导出 ${kind} 产出内容`, built.content.length > 0 && built.count > 0, `${built.count} 条`)
+
+        const preview = previewImport(target, kind, csvPath)
+        check(`预览 ${kind}：行数与导出条数一致`, preview.total === built.count, `${preview.total} vs ${built.count}`)
+        check(`预览 ${kind}：列都能匹配到字段`, preview.mapping.every((m) => m.fieldKey !== null),
+          preview.mapping.filter((m) => !m.fieldKey).map((m) => m.header).join(',') || '全部匹配')
+        check(`预览 ${kind}：没有校验错误`, preview.issues.length === 0, JSON.stringify(preview.issues.slice(0, 2)))
+        check(`预览 ${kind}：全部行可导入`, preview.ready === preview.total, `${preview.ready}/${preview.total}`)
+
+        const result = applyImport(target, preview.token, { createMissing: true })
+        check(`导入 ${kind} 成功`, result.imported > 0 && result.failed === 0,
+          `imported=${result.imported} failed=${result.failed} err=${result.errors[0]?.message ?? ''}`)
+      }
+
+      // 逐字段比对
+      const reimported = listSpecies(target, { query: '月季' }).items[0]
+      check('往返后物种存在', Boolean(reimported))
+      check('往返后名称（含逗号与引号）完全一致', reimported?.commonName === oddName, JSON.stringify(reimported?.commonName))
+      check('往返后科名一致', reimported?.family === '蔷薇科')
+      check(
+        '往返后多段月份一致',
+        JSON.stringify(reimported?.attributes.bloom_months) === JSON.stringify([4, 5, 6, 9, 10, 11]),
+        JSON.stringify(reimported?.attributes.bloom_months)
+      )
+      check(
+        '往返后多选字段一致',
+        JSON.stringify(reimported?.attributes.light_requirement) === JSON.stringify(['全日照', '半阴']),
+        JSON.stringify(reimported?.attributes.light_requirement)
+      )
+      check('往返后布尔字段仍为 false（不是字符串）', reimported?.attributes.needs_vernalization === false)
+      check('往返后数字字段仍为数字', reimported?.attributes.cold_hardiness === -15)
+      check(
+        '往返后区间字段一致',
+        JSON.stringify(reimported?.attributes.light_hours) === JSON.stringify({ min: 6, max: 8 }),
+        JSON.stringify(reimported?.attributes.light_hours)
+      )
+      check('往返后含逗号引号的备注一致', reimported?.attributes.care_notes === '含逗号的备注, 还有"引号"')
+
+      const reimportedPlant = listPlants(target, { query: '阳台那盆' }).items[0]
+      check('往返后植株存在', Boolean(reimportedPlant))
+      check(
+        '植株的「所属物种」按名字解析回了新库的 ID',
+        reimportedPlant?.speciesId === reimported?.id,
+        `${reimportedPlant?.speciesId} vs ${reimported?.id}`
+      )
+      check(
+        '植株的「养护位置」按名字解析回了新库的 ID',
+        reimportedPlant?.envId === envs[0]?.id,
+        `${reimportedPlant?.envId} vs ${envs[0]?.id}`
+      )
+      check(
+        '状态「休眠」被翻译回存储键 dormant',
+        reimportedPlant?.status === 'dormant',
+        String(reimportedPlant?.status)
+      )
+
+      // 重复导入：默认跳过而不是造重复记录
+      const again = previewImport(target, 'species', join(workDir, 'export-species.csv'))
+      check('重复导入时能识别出重名', again.duplicates > 0, String(again.duplicates))
+      const second = applyImport(target, again.token, { updateExisting: false })
+      check('重复导入默认跳过而非新建', second.imported === 0 && second.skipped > 0,
+        `imported=${second.imported} skipped=${second.skipped}`)
+
+      target.close()
     }
 
     // --- 版本一致性 ---

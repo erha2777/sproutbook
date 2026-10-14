@@ -197,6 +197,71 @@ export interface SproutbookApi {
     remove(id: number): Promise<ImageRecord | null>
     reveal(fileName: string): Promise<boolean>
   }
+  transfer: {
+    export(
+      kind: TransferKind,
+      format: TransferFormat
+    ): Promise<{ canceled: boolean; count: number; path: string | null }>
+    /** 弹文件选择框并解析；取消返回 null。不写库。 */
+    previewImport(kind: TransferKind): Promise<TransferPreview | null>
+    applyImport(token: string, options?: TransferImportOptions): Promise<TransferResult>
+    discardImport(token: string): Promise<boolean>
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 导入导出（跨进程契约，放这里而不是 main 里，避免共享层反向依赖主进程）
+// ---------------------------------------------------------------------------
+
+export type TransferKind = 'species' | 'plants'
+export type TransferFormat = 'csv' | 'json'
+
+export interface TransferMappingEntry {
+  /** 文件里的列名（CSV 表头 / JSON 的键） */
+  header: string
+  /** 匹配到的字段 key；null 表示这一列会被忽略 */
+  fieldKey: string | null
+  label: string | null
+}
+
+export interface TransferIssue {
+  /** 数据行号，从 1 开始（不含表头） */
+  row: number
+  field: string
+  message: string
+}
+
+export interface TransferPreview {
+  token: string
+  kind: TransferKind
+  format: TransferFormat
+  fileName: string
+  mapping: TransferMappingEntry[]
+  total: number
+  /** 按当前映射可以顺利导入的行数 */
+  ready: number
+  duplicates: number
+  issues: TransferIssue[]
+  samples: string[][]
+  headers: string[]
+  /** 导入时会自动新建的关联对象（表格里的名字在库里不存在） */
+  willCreate: string[]
+}
+
+export interface TransferImportOptions {
+  /** 同名记录：跳过（默认）还是覆盖更新 */
+  updateExisting?: boolean
+  /** 关联目标不存在时是否自动新建（默认 true） */
+  createMissing?: boolean
+}
+
+export interface TransferResult {
+  imported: number
+  updated: number
+  skipped: number
+  failed: number
+  created: string[]
+  errors: TransferIssue[]
 }
 
 export type { Plant, PlantListItem as PlantCard }
