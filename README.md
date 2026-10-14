@@ -212,6 +212,36 @@ OpenAI、DeepSeek、Moonshot、智谱 GLM、OpenRouter、本地 Ollama / LM Stud
 
 ## 常见问题
 
+**双击 `Sproutbook.exe` 没反应 / 一闪就没了（异常码 `0x80000003`）**
+
+这是 **Chromium 进程沙箱无法初始化**导致的，属于运行环境问题，与本应用代码无关。判断特征：
+
+- 没有任何窗口、没有任何报错，连 `<用户数据目录>` 都不会被创建
+- 「事件查看器 → Windows 日志 → 应用程序」里能看到 `Sproutbook.exe` 的 `0x80000003`（STATUS_BREAKPOINT）记录
+- **一个几行的最小 Electron 程序在这台机器上同样崩溃** —— 这是区分「应用问题」和「环境问题」的关键实验
+
+崩溃发生在 Chromium 原生启动阶段、**早于主进程 JavaScript**，所以应用内部无法自救：
+`app.commandLine.appendSwitch('no-sandbox')` 根本没机会执行。
+
+**立即绕过**：使用与 exe 同目录的 `Sproutbook-compat.cmd`（安装包也会带上它），
+或手动加参数：
+
+```
+Sproutbook.exe --no-sandbox
+```
+
+> 安全影响：关闭渲染进程沙箱会降低隔离强度。本应用只加载本地文件、CSP 已禁止一切远程资源、
+> 且 `contextIsolation` 开启、`nodeIntegration` 关闭，因此风险可控；但仍建议按下面排查根因。
+
+**排查根因（按可能性排序）**
+
+1. **第三方安全软件**（360、火绒、腾讯电脑管家等）注入进程、破坏沙箱初始化 —— 最常见。临时退出后测试即可确认。
+2. 尝试**以管理员身份运行**，看是否恢复。
+3. 修复系统文件：`sfc /scannow`，必要时再跑 `DISM /Online /Cleanup-Image /RestoreHealth`。
+4. 检查是否启用了 AppContainer / Device Guard / 应用控制相关策略。
+
+如果确认是机器环境问题，那么**任何** Electron 应用（VS Code、Slack、Discord 等）在这台机器上都需要同样处理。
+
 **Windows 提示「已保护你的电脑」/ macOS 提示「已损坏」**
 安装包没有代码签名，这是正常现象。Windows：点「更多信息 → 仍要运行」。
 macOS：右键点图标选「打开」，或执行 `xattr -dr com.apple.quarantine /Applications/Sproutbook.app`。

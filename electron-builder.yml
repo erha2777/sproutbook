@@ -36,6 +36,13 @@ win:
     - target: nsis
       arch: [x64]
   artifactName: ${productName}-${version}-win-${arch}.${ext}
+  # 兼容模式启动器：随应用一起放到 exe 同级目录。
+  # 某些 Windows 环境下 Chromium 沙箱无法初始化，Electron 会在原生启动阶段
+  # 直接崩溃（0x80000003），表现为「双击没反应」，且应用内部无法自救
+  # （主进程 JS 根本没执行）。详见 README 的常见问题与该 .cmd 内的注释。
+  extraFiles:
+    - from: build/Sproutbook-compat.cmd
+      to: Sproutbook-compat.cmd
 
 nsis:
   oneClick: false
