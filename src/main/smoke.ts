@@ -13,7 +13,7 @@
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Db } from './db/connection'
+import { Db, countPlaceholders } from './db/connection'
 import { formatMonthSet, normalizeMonths } from '../core/fieldTypes'
 import { LATEST_VERSION, MIGRATIONS } from './db/schema'
 import { currentVersion, migrate, rebuildAttrIndex } from './db/migrate'
@@ -1755,6 +1755,63 @@ export async function runSmoke(outFile: string): Promise<number> {
         } catch {
           db.run('DELETE FROM field_definitions WHERE id = ?', fSpecies.id)
         }
+      }
+
+      // ---- 占位符计数（Db 层校验的基石）----
+      //
+      // Db.stmt 现在会比对「SQL 里几个 ?」和「传了几个参数」，不符就当场抛。
+      // 那层保护的前提是**计数本身是对的** —— 数错了就会冤枉正确的代码，
+      // 或者放过真正错位的语句。所以先钉住计数函数。
+      {
+        check('空语句是 0 个', countPlaceholders('SELECT 1') === 0)
+        check('两个占位符', countPlaceholders('INSERT INTO t (a, b) VALUES (?, ?)') === 2)
+        // SET 里 3 个 + WHERE 里 1 个 = 4 个（我一开始写成 3，是断言错了不是函数错了）
+        check('SET 加 WHERE 共四个', countPlaceholders('UPDATE t SET a = ?, b = ?, c = ? WHERE id = ?') === 4)
+
+        // 引号里的问号不是占位符 —— 这是最容易数错的地方
+        check(
+          "单引号里的 ? 不算",
+          countPlaceholders("SELECT * FROM t WHERE note = '几点了?'") === 0,
+          String(countPlaceholders("SELECT * FROM t WHERE note = '几点了?'"))
+        )
+        check(
+          "引号里带 ? 的同时外面还有一个真的",
+          countPlaceholders("SELECT * FROM t WHERE note = 'a?b' AND id = ?") === 1
+        )
+        check('双引号标识符里的 ? 不算', countPlaceholders('SELECT "a?b" FROM t') === 0)
+        check('反引号里的 ? 不算', countPlaceholders('SELECT `a?b` FROM t') === 0)
+        check('方括号里的 ? 不算', countPlaceholders('SELECT [a?b] FROM t') === 0)
+        check('单引号里的双写转义', countPlaceholders("SELECT * FROM t WHERE a = 'it''s ?' AND b = ?") === 1)
+
+        // 注释
+        check('行注释里的 ? 不算', countPlaceholders('SELECT 1 -- 这里有个 ?\nWHERE a = ?') === 1)
+        check('块注释里的 ? 不算', countPlaceholders('SELECT 1 /* ? ? */ WHERE a = ?') === 1)
+
+        // 编号占位符按不同编号计数
+        check('编号占位符 ?1 ?2', countPlaceholders('SELECT * FROM t WHERE a = ?1 AND b = ?2') === 2)
+        check('同一个编号重复出现只算一次', countPlaceholders('SELECT * FROM t WHERE a = ?1 OR b = ?1') === 1)
+
+        // 真正的防线：数量不符要当场抛，而不是悄悄写错数据
+        let threw = ''
+        try {
+          db.run('SELECT ? AS a, ? AS b', 1)
+        } catch (e) {
+          threw = e instanceof Error ? e.message : String(e)
+        }
+        check('少传参数时当场抛出', threw.includes('占位符'))
+        check('错误信息里说清了数量', threw.includes('2 个占位符') && threw.includes('1 个参数'), threw.split('\n')[0])
+
+        let threw2 = ''
+        try {
+          db.get('SELECT 1 AS a', '多余参数')
+        } catch (e) {
+          threw2 = e instanceof Error ? e.message : String(e)
+        }
+        check('多传参数时也抛出', threw2.includes('占位符'))
+
+        // 正常语句不能被冤枉
+        const ok = db.get<{ n: number }>('SELECT ? AS n', 42)
+        check('数量相符时正常执行', ok?.n === 42, String(ok?.n))
       }
 
       // ---- 地名解析的缓存 ----
