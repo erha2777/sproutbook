@@ -44,6 +44,7 @@ const api: SproutbookApi = {
     test: () => call('settings:testAi'),
     autofill: (payload) => call('ai:autofill', payload),
     identify: (payload) => call('ai:identify', payload),
+    identifyFile: (payload) => call('ai:identifyFile', payload),
     cancel: (requestId) => call('ai:cancel', requestId),
     runs: (limit) => call('ai:runs', limit)
   },

@@ -5,12 +5,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { AiAutofillResult, FieldDefinition } from '@core/types'
-import type { SpeciesListItem } from '@shared/api'
+import type { AiIdentifyResult, SpeciesListItem } from '@shared/api'
 import { makeRequestId } from '../lib/util'
 import { Badge, Button, Field, Modal, Notice, Panel, SectionTitle, Sign, Spinner, TextInput, cx, useToast } from '../components/ui'
 import { DynamicForm } from '../components/DynamicForm'
 import type { FormValues } from '../components/DynamicForm'
 import { AiDraftDialog } from '../components/AiDraftDialog'
+import { IdentifyDialog } from '../components/IdentifyDialog'
 import { ImageStripWithHint } from '../components/ImageStrip'
 
 export interface SpeciesEditorProps {
@@ -32,6 +33,10 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
   // AI 相关
   const [aiAvailable, setAiAvailable] = useState<{ hasKey: boolean; model: string }>({ hasKey: false, model: '' })
   const [showHints, setShowHints] = useState(false)
+  /** 识图对话框。它只认品种，认出来之后接着走下面那条 AI 补全 */
+  const [showIdentify, setShowIdentify] = useState(false)
+  const [identifyBusy, setIdentifyBusy] = useState(false)
+  const [identifyResult, setIdentifyResult] = useState<AiIdentifyResult | null>(null)
   const [hints, setHints] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const [aiRequestId, setAiRequestId] = useState<string | null>(null)
@@ -124,7 +129,54 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
     }
   }
 
+  /**
+   * 选一张本地图片去识别。
+   *
+   * 用 identifyFile 而不是 identify：识图最该用的地方是**录入新物种**，
+   * 那时相册里还没有这张图。文件对话框在主进程弹，界面不碰路径。
+   */
+  const runIdentify = async (hint: string): Promise<void> => {
+    const requestId = makeRequestId()
+    setAiRequestId(requestId)
+    setIdentifyBusy(true)
+    try {
+      const result = await window.api.ai.identifyFile({ requestId, hint: hint.trim() || undefined })
+      // 用户取消选择不算错误，别弹一个红条吓人
+      if (!result.ok && result.message === '没有选择图片。') return
+      setIdentifyResult(result)
+    } catch (error) {
+      setIdentifyResult({
+        ok: false,
+        candidates: [],
+        message: error instanceof Error ? error.message : '识别失败',
+        model: null
+      })
+    } finally {
+      setIdentifyBusy(false)
+      setAiRequestId(null)
+    }
+  }
+
+  /**
+   * 选定候选：填上名字，**接着跑现有的 AI 补全**。
+   *
+   * 这一步是整个设计的关键 —— 识图只负责「认出是什么」，
+   * 认出来之后交给原有那条「草稿 → 逐字段勾选 → 写入」的路。
+   * 那条路的规矩（永不自动写、安全字段强制人工确认）一个字都不用改。
+   */
+  const pickCandidate = async (candidate: { name: string; scientificName: string | null }): Promise<void> => {
+    setShowIdentify(false)
+    setValue('common_name', candidate.name)
+    // 学名一起带上，比只给中文名准得多
+    const clue = candidate.scientificName ? `${candidate.name}（${candidate.scientificName}）` : candidate.name
+    await runAutofillFor(clue)
+  }
+
   const runAutofill = async (): Promise<void> => {
+    await runAutofillFor(plantName)
+  }
+
+  const runAutofillFor = async (name: string): Promise<void> => {
     setShowHints(false)
     const requestId = makeRequestId()
     setAiRequestId(requestId)
@@ -132,7 +184,9 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
     try {
       const result = await window.api.ai.autofill({
         requestId,
-        plantName,
+        // 用传进来的名字，不是输入框的当前值 ——
+        // 识图选完候选时 setPlantName 还没生效，读 state 会拿到旧值
+        plantName: name,
         hints: hints.trim() || undefined,
         existing: values
       })
@@ -242,22 +296,40 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
               </Button>
             </>
           ) : (
-            <Button
-              variant="primary"
-              onClick={() => setShowHints(true)}
-              disabled={!plantName || !aiAvailable.hasKey || !aiAvailable.model}
-              title={
-                !aiAvailable.hasKey
-                  ? '尚未配置 API Key，请到「设置 → AI」'
-                  : !aiAvailable.model
-                    ? '尚未配置对话模型'
-                    : !plantName
-                      ? '请先填写植物名称'
-                      : '用 AI 生成字段草稿'
-              }
-            >
-              ✨ AI 补全信息
-            </Button>
+            <>
+              <Button
+                onClick={() => {
+                  setIdentifyResult(null)
+                  setShowIdentify(true)
+                }}
+                disabled={!aiAvailable.hasKey || !aiAvailable.model}
+                title={
+                  !aiAvailable.hasKey
+                    ? '尚未配置 API Key，请到「设置 → AI」'
+                    : !aiAvailable.model
+                      ? '尚未配置模型'
+                      : '选一张照片，让模型认出是什么'
+                }
+              >
+                📷 从照片识别
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => setShowHints(true)}
+                disabled={!plantName || !aiAvailable.hasKey || !aiAvailable.model}
+                title={
+                  !aiAvailable.hasKey
+                    ? '尚未配置 API Key，请到「设置 → AI」'
+                    : !aiAvailable.model
+                      ? '尚未配置对话模型'
+                      : !plantName
+                        ? '请先填写植物名称'
+                        : '用 AI 生成字段草稿'
+                }
+              >
+                ✨ AI 补全信息
+              </Button>
+            </>
           )}
           <Button variant="primary" onClick={() => void save()} disabled={saving}>
             {saving ? '保存中…' : '保存'}
@@ -381,6 +453,16 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
           </div>
         </Modal>
       ) : null}
+
+      {/* 识图对话框独立于补全结果 —— 它是先发生的，不该挂在 aiResult 上 */}
+      <IdentifyDialog
+        open={showIdentify}
+        busy={identifyBusy}
+        result={identifyResult}
+        onIdentify={(hint) => void runIdentify(hint)}
+        onPick={(c) => void pickCandidate(c)}
+        onClose={() => setShowIdentify(false)}
+      />
 
       {aiResult ? (
         <AiDraftDialog result={aiResult} defs={defs} onApply={applyDrafts} onClose={() => setAiResult(null)} />

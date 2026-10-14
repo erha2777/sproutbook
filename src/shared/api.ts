@@ -149,6 +149,12 @@ export interface SproutbookApi {
      * **只认品种，不写数据** —— 候选交给现有的草稿流程。
      */
     identify(payload: { requestId: string; imageId: number; hint?: string }): Promise<AiIdentifyResult>
+    /**
+     * 识别一张**本地图片**（主进程弹文件对话框）。
+     * 新建物种时相册里还没有图片，必须能从磁盘选。
+     * 用户取消选择时 ok 为 false、message 为「没有选择图片。」。
+     */
+    identifyFile(payload: { requestId: string; hint?: string }): Promise<AiIdentifyResult>
     cancel(requestId: string): Promise<boolean>
     runs(limit?: number): Promise<AiRunRow[]>
   }
@@ -427,6 +433,8 @@ export interface AiIdentifyCandidate {
 export interface AiIdentifyResult {
   ok: boolean
   candidates: AiIdentifyCandidate[]
+  /** 识别用的图片来源（文件名），让用户确认看的是哪张 */
+  sourceName?: string | null
   /** 失败原因，或「模型认不出」时的说明。成功且有候选时为 null */
   message: string | null
   /** 实际用的模型。出问题时能看出是不是用错了模型 */
