@@ -201,29 +201,38 @@ export interface GrowthLook {
 }
 
 export function growthLook(stage: GrowthStage): GrowthLook {
+  /*
+   * 茎高是**画布填充率**的主要来源。
+   *
+   * 第一版给得偏矮（生长只有 6 格），植物只占 16 格画布的下半部分，
+   * 上面三分之一是空的。缩小放大时**空的那部分跟着缩放**，
+   * 于是「大株和小株」看起来差不多 —— 用户反馈「看不出变化」就是这个原因。
+   *
+   * 现在让生长阶段就占到八成高度，开花时接近满格。
+   */
   switch (stage) {
     case 'seed':
       return { stem: 0, leaves: 0, flower: 'none', wither: 0, bare: false }
     case 'sprout':
-      return { stem: 2, leaves: 1, flower: 'none', wither: 0, bare: false }
+      return { stem: 3, leaves: 1, flower: 'none', wither: 0, bare: false }
     case 'growing':
-      return { stem: 6, leaves: 3, flower: 'none', wither: 0, bare: false }
+      return { stem: 9, leaves: 3, flower: 'none', wither: 0, bare: false }
     case 'budding':
-      return { stem: 7, leaves: 3, flower: 'bud', wither: 0, bare: false }
+      return { stem: 10, leaves: 4, flower: 'bud', wither: 0, bare: false }
     case 'blooming':
-      return { stem: 8, leaves: 4, flower: 'open', wither: 0, bare: false }
+      return { stem: 11, leaves: 4, flower: 'open', wither: 0, bare: false }
     case 'dormant':
-      return { stem: 4, leaves: 0, flower: 'none', wither: 0.25, bare: true }
+      return { stem: 6, leaves: 0, flower: 'none', wither: 0.25, bare: true }
     case 'sick':
-      return { stem: 5, leaves: 2, flower: 'none', wither: 0.45, bare: false }
+      return { stem: 7, leaves: 2, flower: 'none', wither: 0.45, bare: false }
     /*
      * 缓苗中：**保持成株高度**，只是叶子稀少、颜色偏淡。
      * 它不该被画小 —— 缓苗说明这株受了伤，不说明它还小。
      */
     case 'recovering':
-      return { stem: 7, leaves: 1, flower: 'none', wither: 0.15, bare: false }
+      return { stem: 9, leaves: 1, flower: 'none', wither: 0.15, bare: false }
     case 'withered':
-      return { stem: 3, leaves: 0, flower: 'none', wither: 1, bare: true }
+      return { stem: 4, leaves: 0, flower: 'none', wither: 1, bare: true }
   }
 }
 
