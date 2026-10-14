@@ -11,7 +11,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareLog, CarePhase, CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareOverview, CareTaskListItem, PlantPhaseInfo, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
-import { SEVERITY_LABELS } from '@core/weather'
+import { suggestTask, SEVERITY_LABELS } from '@core/weather'
 import {
   CARE_ACTION_ICONS,
   CARE_ACTION_LABELS,
@@ -328,12 +328,18 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
    * 和 AI 草稿一样，它只提议，不替你做决定。
    */
   const createTaskFromRisk = async (risk: WeatherRiskItem): Promise<void> => {
-    const what = risk.kind === 'frost' ? '防冻' : '防暑'
-    const action =
-      risk.kind === 'frost'
-        ? '搬到避风处或室内；不能搬的用无纺布/旧床单罩住，别用塑料袋闷。降温当天浇透一次水（湿土比干土保温）。'
-        : '避开正午浇水，改到清晨或傍晚；遮阳网或搬到半阴处；高温期间停施水溶肥。'
-    const title = `${what}：${risk.plantName}`
+    /*
+     * 文案从 core 拿，**不再在这里抄一份**。
+     *
+     * 这里原本有一份逐字副本，而且**已经漂移了**：
+     * core 说「降温**前**当天浇透一次水」，副本少了「前」字。
+     * 两处写同一件事、改了一处 —— 这轮审计在 suggestTask / buildSearchBlob /
+     * LEVEL_LABELS / PROVIDER_LABELS 上抓到的是同一个毛病。
+     *
+     * 合成一份还有个附带好处：那些「该怎么做」的话现在被自检覆盖到了
+     *（原来只有 core 版被自检引用，而线上跑的是没被覆盖的副本）。
+     */
+    const { title, detail } = suggestTask(risk)
     /*
      * 先查重。
      *
@@ -352,7 +358,7 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         plantId: risk.plantId,
         actionType: risk.kind === 'frost' ? 'protect' : 'water',
         title,
-        detail: `${risk.message}\n${action}\n〔依据天气预警，${risk.date}〕`,
+        detail,
         dueDate: risk.date,
         windowDays: 2,
         priority: risk.severity === 'severe' ? 1 : 2,

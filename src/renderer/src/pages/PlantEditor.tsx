@@ -196,7 +196,13 @@ export function PlantEditorModal({
               onClick={async () => {
                 if (!window.confirm(`确定要移除「${plant.nickname}」吗？记录会被归档，不会立即物理删除。`)) return
                 try {
-                  await window.api.plants.remove(plant.id)
+                  const ok = await window.api.plants.remove(plant.id)
+      // 底层如实返回「有没有真的删到」——不要再无条件说成功
+      if (!ok) {
+        toast.push('这株植物已经不在了。', 'error')
+        onClose()
+        return
+      }
                   toast.push('已移除', 'success')
                   onSaved(plant.id)
                 } catch (error) {

@@ -7,7 +7,7 @@
 
 import type { Db } from '../connection'
 import type { FieldValue, Species } from '../../../core/types'
-import { requiredErrors, splitAttributes } from '../../../core/attributes'
+import { buildSearchBlob, requiredErrors, splitAttributes } from '../../../core/attributes'
 import { jsonArray, jsonObject, likeParam, loadFieldDefinitions, mapFieldDefinition, writeAttrIndex } from './common'
 import type { FieldDefinitionRow } from './common'
 
@@ -245,7 +245,23 @@ export function saveSpecies(
     const family = (col.family as string | undefined) ?? existingRow?.family ?? null
     const genus = (col.genus as string | undefined) ?? existingRow?.genus ?? null
 
-    const searchBlob = buildSearchBlob(name, aliases, scientificName, family, genus, mergedAttrs, defs)
+    /*
+     * 用 core 里的那一份，不再自己维护一个副本。
+     *
+     * 两份**已经漂移了**：core 版对每个字段走 formatFieldValue（**带单位**，
+     * 例如「25 cm」），repo 这份用 String(v) 把单位丢了；core 版遍历全部字段，
+     * repo 这份跳过列字段、把名称/别名/学名/科/属手工拼在前面。
+     *
+     * 合并方向是「用 core 那份 + 把系统列当 extra 传进去」——
+     * 列字段会被遍历到两次，对一个搜索用的文本串无害，而带上单位是有益的。
+     */
+    const searchBlob = buildSearchBlob(defs, mergedAttrs, [
+      name,
+      ...jsonArray(aliases),
+      scientificName ?? '',
+      family ?? '',
+      genus ?? ''
+    ])
 
     const source = input.source ?? existingRow?.source ?? origin
 
@@ -361,26 +377,6 @@ export function familyStats(db: Db): Array<{ family: string; count: number }> {
     .map((r) => ({ family: r.family, count: Number(r.count) }))
 }
 
-function buildSearchBlob(
-  name: string,
-  aliasesJson: string,
-  scientificName: string | null,
-  family: string | null,
-  genus: string | null,
-  attributes: Record<string, FieldValue>,
-  defs: ReturnType<typeof loadFieldDefinitions>
-): string {
-  const parts = [name, ...jsonArray(aliasesJson), scientificName ?? '', family ?? '', genus ?? '']
-  for (const def of defs) {
-    if (def.columnName) continue
-    const v = attributes[def.key]
-    if (v === null || v === undefined) continue
-    if (Array.isArray(v)) parts.push(v.join(' '))
-    else if (v !== null && typeof v === 'object') parts.push(Object.values(v as unknown as Record<string, unknown>).join(' '))
-    else parts.push(String(v))
-  }
-  return parts.join(' ').toLowerCase().replace(/\s+/g, ' ').trim()
-}
 
 export function emptySpecies(): SpeciesListItem {
   return {

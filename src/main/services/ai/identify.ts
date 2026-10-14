@@ -21,12 +21,6 @@ import type { ChatMessage } from './client'
 /** 认到了哪一层。品种级最难，认不到就该老实停在种。 */
 export type IdentifyLevel = 'genus' | 'species' | 'cultivar'
 
-export const LEVEL_LABELS: Record<IdentifyLevel, string> = {
-  genus: '只到属',
-  species: '到种',
-  cultivar: '到品种'
-}
-
 export interface IdentifyCandidate {
   /** 中文俗名，最常用的那个 */
   name: string
