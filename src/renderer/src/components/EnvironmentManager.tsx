@@ -46,9 +46,9 @@ export function EnvironmentManager({ onChanged }: { onChanged?: () => void }): R
   const remove = async (env: Environment): Promise<void> => {
     if (!window.confirm(`确定删除养护位置「${env.name}」吗？\n引用它的植株会变成「未分配位置」，不会丢失。`)) return
     try {
-      await window.api.env.remove(env.id)
-      toast.push('已删除', 'success')
+      const ok = await window.api.env.remove(env.id)
       await reload()
+      toast.push(ok ? '已删除' : '这个位置已经不在了。列表已刷新。', ok ? 'success' : 'error')
       onChanged?.()
     } catch (error) {
       toast.push(error instanceof Error ? error.message : '删除失败', 'error')

@@ -60,9 +60,12 @@ export function RecipesPage(): ReactNode {
   const archive = async (recipe: RecipeListItem): Promise<void> => {
     if (!window.confirm(`确定归档配方「${recipe.name}」吗？归档后不再出现在列表里，可以再恢复。`)) return
     try {
-      await window.api.recipes.archive(recipe.id)
-      toast.push('已归档（勾选「显示已归档」可以找回）', 'success')
+      const ok = await window.api.recipes.archive(recipe.id)
       await reload()
+      toast.push(
+        ok ? '已归档（勾选「显示已归档」可以找回）' : '这条配方已经不在了，可能已在别处删掉。列表已刷新。',
+        ok ? 'success' : 'error'
+      )
     } catch (error) {
       toast.push(error instanceof Error ? error.message : '归档失败', 'error')
     }
@@ -70,9 +73,9 @@ export function RecipesPage(): ReactNode {
 
   const restore = async (recipe: RecipeListItem): Promise<void> => {
     try {
-      await window.api.recipes.restore(recipe.id)
-      toast.push('已恢复', 'success')
+      const ok = await window.api.recipes.restore(recipe.id)
       await reload()
+      toast.push(ok ? '已恢复' : '这条配方已经不在了。列表已刷新。', ok ? 'success' : 'error')
     } catch (error) {
       toast.push(error instanceof Error ? error.message : '恢复失败', 'error')
     }

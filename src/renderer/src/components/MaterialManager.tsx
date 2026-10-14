@@ -89,9 +89,9 @@ export function MaterialManager({
     }
     if (!window.confirm(`确定删除材料「${m.name}」吗？`)) return
     try {
-      await window.api.materials.remove(m.id)
-      toast.push('已删除', 'success')
+      const ok = await window.api.materials.remove(m.id)
       await reload()
+      toast.push(ok ? '已删除' : '这个材料已经不在了。列表已刷新。', ok ? 'success' : 'error')
       onChanged()
     } catch (error) {
       toast.push(error instanceof Error ? error.message : '删除失败', 'error')

@@ -22,11 +22,6 @@ import type { DailyTemp } from '../../core/weather'
 
 export type WeatherProviderId = 'open-meteo' | 'qweather'
 
-export const PROVIDER_LABELS: Record<WeatherProviderId, string> = {
-  'open-meteo': 'Open-Meteo（免注册）',
-  qweather: '和风天气（需 API Key）'
-}
-
 /** API Host 存在设置表里 —— 它不是秘密，本身就出现在请求 URL 中。 */
 export const QWEATHER_HOST_KEY = 'weather.qweatherHost'
 /** 地名解析结果的缓存。地名不会变，解析一次就够 */
