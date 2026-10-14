@@ -93,6 +93,24 @@ export function isCarePhase(value: unknown): value is CarePhase {
   return typeof value === 'string' && (PHASE_KEYS as readonly string[]).includes(value)
 }
 
+/**
+ * 当前阶段已经持续了几天。
+ *
+ * 存在的理由：阶段是人工标记的，**没有自动过期**。像「缓苗期」这种临时状态，
+ * 标记完很容易忘记改回来 —— 那株植物就会一直只浇海藻精、永远不施主肥。
+ * 界面上把「已标记 N 天」显示出来，是提醒你回头重新看一眼。
+ *
+ * phase_changed_at 存的是 UTC 时间戳，这里先转成本地日期再算差，
+ * 否则凌晨那几个小时会差一天。
+ */
+export function phaseAgeDays(changedAt: string | null | undefined, today: string = todayIso()): number | null {
+  if (!changedAt) return null
+  const ms = Date.parse(changedAt)
+  if (Number.isNaN(ms)) return null
+  const changedLocal = toIsoDate(new Date(ms))
+  return Math.max(0, daysBetween(today, changedLocal))
+}
+
 /** 把任意输入收敛成合法的阶段数组；空数组返回 null（＝不限阶段）。 */
 export function normalizePhases(input: unknown): CarePhase[] | null {
   if (!Array.isArray(input)) return null

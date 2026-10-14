@@ -21,6 +21,7 @@ import {
   CARE_PHASE_OPTIONS,
   CARE_URGENCY_LABELS,
   dueDescription,
+  phaseAgeDays,
   summarizeTasks,
   todayIso,
   urgencyOf
@@ -397,13 +398,29 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
             {plants.map((p) => {
               const info = plantPhases[p.id]
               const phase = info?.phase ?? null
+              const age = phaseAgeDays(info?.changedAt)
               return (
                 <div key={p.id} className="phase-row">
                   <span style={{ flex: 1, minWidth: 0 }}>{p.label}</span>
                   {phase ? (
-                    <Badge tone="ok">
-                      {CARE_PHASE_ICONS[phase]} {CARE_PHASE_LABELS[phase]}
-                    </Badge>
+                    <>
+                      <Badge tone="ok">
+                        {CARE_PHASE_ICONS[phase]} {CARE_PHASE_LABELS[phase]}
+                      </Badge>
+                      {/*
+                        阶段是人工标记的、不会自动过期。像缓苗期这种临时状态，
+                        标完容易忘记改回来 —— 那株植物就会一直不施主肥。
+                        把天数摆出来，是提醒你回头重看。
+                      */}
+                      {age !== null ? (
+                        <span
+                          className={`small ${age >= 45 ? 'phase-age stale' : 'muted'}`}
+                          title={`标记于 ${info?.changedAt?.slice(0, 10) ?? ''}`}
+                        >
+                          已 {age} 天{age >= 45 ? '，要不要重新看看？' : ''}
+                        </span>
+                      ) : null}
+                    </>
                   ) : (
                     <Badge tone="muted">未标记</Badge>
                   )}
@@ -551,6 +568,14 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
               南阳台的可能已经现蕾，北窗台的还没动。标记之后，
               限定阶段的规则会立刻跟着生效或停止。
             </Notice>
+            {phaseAgeDays(plantPhases[phaseTarget.id]?.changedAt) !== null ? (
+              <Notice tone="warn">
+                当前标记是 <b>{CARE_PHASE_ICONS[plantPhases[phaseTarget.id]?.phase as CarePhase]}</b>
+                <b>{CARE_PHASE_LABELS[plantPhases[phaseTarget.id]?.phase as CarePhase]}</b>，
+                已经 <b>{phaseAgeDays(plantPhases[phaseTarget.id]?.changedAt)}</b> 天了。
+                阶段不会自己过期 —— 如果植株的状态已经变了，记得在这里改过来。
+              </Notice>
+            ) : null}
             <Field label="记一句（会写进养护日志，可留空）">
               <TextInput value={phaseNote} onChange={setPhaseNote} placeholder="例如：看到花苞了" />
             </Field>

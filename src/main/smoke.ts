@@ -38,6 +38,7 @@ import {
   isCarePhase,
   monthsCovered,
   normalizePhases,
+  phaseAgeDays,
   spreadDay,
   summarizeTasks,
   urgencyOf,
@@ -1201,6 +1202,31 @@ export function runSmoke(outFile: string): number {
       }
       check('重新读取阶段一致', getPlantPhase(db, pid).phase === 'budding')
       check('阶段变化时间被记下', getPlantPhase(db, pid).changedAt !== null)
+
+      // ---- 阶段「持续了多久」 ----
+      //
+      // 阶段是人工标记的、不会自动过期。缓苗期这种临时状态标完容易忘记改回来，
+      // 那株植物就会一直只浇海藻精、永远不施主肥。所以要能算出持续天数。
+      check('没标记过时没有天数', phaseAgeDays(null) === null && phaseAgeDays(undefined) === null)
+      check('坏数据不崩', phaseAgeDays('不是日期') === null)
+      check('今天标记的算 0 天', phaseAgeDays(new Date().toISOString()) === 0)
+      {
+        const tenDaysAgo = new Date(Date.now() - 10 * 86_400_000)
+        check(
+          '十天前标记的算 10 天',
+          phaseAgeDays(tenDaysAgo.toISOString()) === 10,
+          String(phaseAgeDays(tenDaysAgo.toISOString()))
+        )
+        // UTC 时间戳要先转本地日期再算差，否则凌晨那几个小时会差一天
+        const earlyMorning = new Date()
+        earlyMorning.setHours(0, 30, 0, 0)
+        check(
+          '凌晨标记不会算成前一天',
+          phaseAgeDays(earlyMorning.toISOString()) === 0,
+          String(phaseAgeDays(earlyMorning.toISOString()))
+        )
+      }
+      check('未来时间不会算出负数', phaseAgeDays(new Date(Date.now() + 5 * 86_400_000).toISOString()) === 0)
 
       setPlantPhase(db, pid, 'dormant', '叶子掉光了')
       check('可改成别的阶段', getPlantPhase(db, pid).phase === 'dormant')

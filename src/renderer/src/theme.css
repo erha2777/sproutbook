@@ -608,6 +608,15 @@ img {
   background: var(--wood-panel-light);
 }
 
+/* 阶段标记超过 45 天没动过就提个醒：阶段不会自动过期，缓苗期尤其容易忘 */
+.phase-age {
+  white-space: nowrap;
+}
+.phase-age.stale {
+  color: #8a5f10;
+  font-weight: 700;
+}
+
 /* 阶段选择：每个选项带一句「什么时候算进入这个阶段」 */
 .phase-choices {
   display: grid;
