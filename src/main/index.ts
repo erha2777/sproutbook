@@ -220,13 +220,52 @@ function createWindow(): void {
     else void mainWindow.loadFile(indexPath)
   }
 
-  // 界面自检：等页面渲染完再截图，然后退出
+  // 界面自检：等页面渲染完再截图，然后退出。
+  //
+  // 支持用 --screenshot-click=<文字> 先点一个按钮再截图（仅开发模式），
+  // 这样弹窗、二级页面也能被截到 —— 否则只能截到首屏，界面问题靠猜。
   const shot = screenshotPath()
+  const shotClick = isDev ? process.argv.find((a) => a.startsWith('--screenshot-click=')) : undefined
+  const shotScroll = isDev ? process.argv.find((a) => a.startsWith('--screenshot-scroll=')) : undefined
+
   if (shot) {
     mainWindow.webContents.once('did-finish-load', () => {
       setTimeout(() => {
         void (async () => {
           try {
+            if (shotClick) {
+              const text = shotClick.slice('--screenshot-click='.length)
+              // 在渲染层里找按钮并点击。用 JSON.stringify 转义，避免文字里的引号破坏脚本
+              const clicked = await mainWindow?.webContents.executeJavaScript(
+                `(() => {
+                   const target = ${JSON.stringify(text)};
+                   const nodes = Array.from(document.querySelectorAll('button, .pixel-card, .nav-item'));
+                   const hit = nodes.find((n) => (n.textContent || '').includes(target));
+                   if (!hit) return false;
+                   hit.click();
+                   return true;
+                 })()`
+              )
+              logStartup('界面自检：点击元素', { text, clicked })
+              // 等弹窗渲染完再截图
+              await new Promise((resolve) => setTimeout(resolve, 900))
+            }
+
+            if (shotScroll) {
+              const value = shotScroll.slice('--screenshot-scroll='.length)
+              // 长页面（例如设置页）需要滚动才能截到下面的面板
+              const scrolled = await mainWindow?.webContents.executeJavaScript(
+                `(() => {
+                   const el = document.querySelector('.content') || document.scrollingElement;
+                   if (!el) return null;
+                   el.scrollTop = ${JSON.stringify(value)} === 'bottom' ? el.scrollHeight : Number(${JSON.stringify(value)}) || 0;
+                   return el.scrollTop;
+                 })()`
+              )
+              logStartup('界面自检：滚动页面', { value, scrolled })
+              await new Promise((resolve) => setTimeout(resolve, 350))
+            }
+
             const image = await mainWindow?.webContents.capturePage()
             if (image && !image.isEmpty()) {
               writeFileSync(shot, image.toPNG())

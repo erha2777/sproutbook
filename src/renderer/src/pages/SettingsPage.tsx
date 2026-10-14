@@ -12,6 +12,7 @@ import type { AiSettings, AppInfo, SandboxStatus } from '@core/types'
 import type { AppPaths, BackupInfo } from '@shared/api'
 import { formatBytes, formatDateTime } from '../lib/util'
 import { Badge, Button, EmptyState, Field, Notice, Panel, SectionTitle, SelectInput, Sign, Spinner, TextInput, useToast } from '../components/ui'
+import { EnvironmentManager } from '../components/EnvironmentManager'
 
 const PRESETS: Array<{ label: string; baseUrl: string; chatModel: string; visionModel: string }> = [
   { label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', chatModel: 'gpt-4o-mini', visionModel: 'gpt-4o-mini' },
@@ -238,6 +239,8 @@ export function SettingsPage(): ReactNode {
           </div>
         ) : null}
       </Panel>
+
+      <EnvironmentManager />
 
       <Panel>
         <SectionTitle>数据与备份</SectionTitle>

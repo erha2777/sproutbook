@@ -10,7 +10,7 @@ import type { ReactNode } from 'react'
 import type { Environment, FieldDefinition, PlantStatus } from '@core/types'
 import type { PlantListItem, SpeciesListItem } from '@shared/api'
 import { PLANT_STATUS_OPTIONS } from '../lib/util'
-import { Badge, Button, Field, Modal, Notice, Panel, SelectInput, TextArea, TextInput, useToast } from '../components/ui'
+import { Badge, Button, Field, Modal, Notice, Panel, SelectInput, TextInput, useToast } from '../components/ui'
 import { DynamicForm } from '../components/DynamicForm'
 import type { FormValues } from '../components/DynamicForm'
 import { ImageStrip } from '../components/ImageStrip'
@@ -42,10 +42,19 @@ export function PlantEditorModal({
   const [saving, setSaving] = useState(false)
   const [savedId, setSavedId] = useState<number | null>(plant?.id ?? null)
 
-  const speciesId = (values.__speciesId as number | null | undefined) ?? plant?.speciesId ?? presetSpeciesId ?? null
-  const envId = (values.__envId as number | null | undefined) ?? plant?.envId ?? null
-  const status = ((values.__status as PlantStatus | undefined) ?? plant?.status ?? 'growing') as PlantStatus
-  const notes = (values.__notes as string | undefined) ?? plant?.notes ?? ''
+  /**
+   * 从表单值里取「可选关联」字段。
+   *
+   * ⚠️ 这里不能用 `values.__envId ?? plant?.envId`。
+   * 用户选「（未分配）」时 `values.__envId` 是 `null`，而 `??` 把 null 当作
+   * 「未设置」，于是回退到原来的值 —— 结果就是**养护位置/所属物种清不掉**。
+   * 必须用「键是否存在」来判断，才能区分「没动过」和「显式清空」。
+   */
+  const pick = <T,>(key: string, fallback: T): T => (key in values ? (values[key] as T) : fallback)
+
+  const speciesId = pick<number | null>('__speciesId', plant?.speciesId ?? presetSpeciesId ?? null)
+  const envId = pick<number | null>('__envId', plant?.envId ?? null)
+  const status = pick<PlantStatus>('__status', (plant?.status ?? 'growing') as PlantStatus)
 
   useEffect(() => {
     void (async () => {
@@ -111,7 +120,8 @@ export function PlantEditorModal({
         speciesId,
         envId,
         status,
-        notes,
+        // 不传 notes：备注统一走模板字段 plant_notes，
+        // 这里传 undefined 会让主进程保留原有值，不会丢数据。
         nickname: typeof values.nickname === 'string' ? values.nickname : '',
         values
       })
@@ -239,15 +249,18 @@ export function PlantEditorModal({
         ) : null}
 
         <div className="section-title">本株信息</div>
+        {/*
+          只排除「昵称」—— 它在最上面单独渲染。
+          这里曾经还排除了 acquired_at，导致「入手 / 播种日期」在界面上
+          根本没有输入框（模板里有这个字段，但表单里永远看不到）。
+          模板字段就该怎么定义就怎么显示，不要在这里偷偷过滤。
+        */}
         <DynamicForm
-          defs={defs.filter((d) => d.key !== 'nickname' && d.key !== 'acquired_at')}
+          defs={defs.filter((d) => d.key !== 'nickname')}
           values={values}
           errors={errors}
           onChange={setValue}
         />
-
-        <div className="section-title">本株备注</div>
-        <TextArea value={notes} onChange={(v) => setValue('__notes', v)} placeholder="记录这株的特殊情况…" rows={3} />
 
         <div className="section-title">
           图片
