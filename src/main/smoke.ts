@@ -1525,7 +1525,29 @@ export function runSmoke(outFile: string): number {
       check('字符串数字也认', effectiveHeight({ actualHeight: '42' }).cm === 42)
       check('没有实测但木本有苗龄 → 推算', effectiveHeight({ matureHeight: 400, ageYears: 3, habit: '乔木' }).basis === 'estimated')
       check('没有实测也没有苗龄 → 用物种成株高度', effectiveHeight({ matureHeight: 400, habit: '乔木' }).basis === 'mature')
-      check('什么都没有 → 无从判断', effectiveHeight({}).basis === 'unknown' && effectiveHeight({}).cm === null)
+      /*
+       * 没有高度数据时按**株型**推测，而不是统一给个中位数。
+       *
+       * 这一条是用户反馈逼出来的：他填了「现状高度 1.0 m」，花园里一点没变。
+       * 量了一下确实只差 1 像素 —— 原来的默认值是 0.78，
+       * 恰好落在最常见的 1 米左右，填与不填自然一样。
+       */
+      check('什么高度数据都没有时按株型推测', effectiveHeight({ habit: '藤本' }).basis === 'habit')
+      check('多肉按小尺寸推测', effectiveHeight({ habit: '多肉' }).cm === 12)
+      check('乔木按大尺寸推测', effectiveHeight({ habit: '乔木' }).cm === 500)
+      check('连株型都没有时给兜底值', effectiveHeight({}).basis === 'habit' && (effectiveHeight({}).cm ?? 0) > 0)
+      check(
+        '按株型推测 + 填了实测，画出来确实不同',
+        Math.abs(sizeScaleFor(200) - sizeScaleFor(100)) > 0.08,
+        `${sizeScaleFor(200).toFixed(3)} vs ${sizeScaleFor(100).toFixed(3)}`
+      )
+      check(
+        '常见高度之间都有可见差距（每档至少 5%）',
+        [12, 35, 100, 200, 500]
+          .map((cm) => sizeScaleFor(cm))
+          .every((s, i, arr) => i === 0 || s - arr[i - 1] >= 0.05),
+        [12, 35, 100, 200, 500].map((cm) => sizeScaleFor(cm).toFixed(2)).join(' ')
+      )
 
       check('苗龄 0 年按最小算', ageFactor(0, '乔木') < 0.35)
       check('木本随苗龄变大', ageFactor(1, '乔木') < ageFactor(3, '乔木') && ageFactor(3, '乔木') < ageFactor(8, '乔木'))
@@ -1538,7 +1560,12 @@ export function runSmoke(outFile: string): number {
       check('推算出来的高度确实小于成株', (effectiveHeight({ matureHeight: 400, ageYears: 2, habit: '乔木' }).cm ?? 0) < 400)
       check('草本即使有苗龄也用成株高度', effectiveHeight({ matureHeight: 40, ageYears: 1, habit: '草本' }).basis === 'mature')
       check('大小说明带上依据', describeEffectiveHeight({ actualHeight: 65 }).includes('你量'), describeEffectiveHeight({ actualHeight: 65 }))
-      check('没依据时说明也诚实', describeEffectiveHeight({}) === '大小无依据')
+      check(
+        '大小说明带上显示比例（让「填了有没有生效」看得见）',
+        describeEffectiveHeight({ actualHeight: 200 }).includes('显示'),
+        describeEffectiveHeight({ actualHeight: 200 })
+      )
+      check('没有高度数据时也说得清来源', describeEffectiveHeight({ habit: '乔木' }).includes('株型'), describeEffectiveHeight({ habit: '乔木' }))
 
       // ---- 字段条件显示 ----
       //

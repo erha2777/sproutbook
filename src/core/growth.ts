@@ -272,17 +272,42 @@ export function readNumber(value: unknown): number | null {
 export function sizeScaleFor(matureHeightCm: number | null | undefined): number {
   const MIN_CM = 10
   const MAX_CM = 500
-  const MIN_SCALE = 0.5
+  const MIN_SCALE = 0.42
   const MAX_SCALE = 1
 
   const cm = readNumber(matureHeightCm)
-  // 没填就取中等：既不会让整片花园一个尺寸，也不会因为缺数据就画得特别小
-  if (cm === null || cm <= 0) return 0.78
+  // 走到这里说明连株型都没有，给个中等值
+  if (cm === null || cm <= 0) return 0.72
 
   const clamped = Math.min(MAX_CM, Math.max(MIN_CM, cm))
   const t = Math.log(clamped / MIN_CM) / Math.log(MAX_CM / MIN_CM)
   return MIN_SCALE + (MAX_SCALE - MIN_SCALE) * t
 }
+
+/**
+ * 不知道高度时，按株型猜一个常见值。
+ *
+ * 起因是一个真实的反馈：用户填了「现状高度 1.0 m」，花园里**一点变化都没有**。
+ * 量了一下确实只差 1 像素 —— 因为原来的默认值是不分株型的 0.78，
+ * 而它恰好落在最常见的 1 米左右，填与不填自然一样。
+ *
+ * 更好的做法是别用「所有植物的中位数」：不知道高度，但知道是藤本还是多肉，
+ * 而这两类的常见尺寸差着十倍。
+ */
+const HABIT_TYPICAL_CM: Record<string, number> = {
+  多肉: 12,
+  水生: 30,
+  附生: 30,
+  草本: 35,
+  蕨类: 40,
+  球根: 45,
+  灌木: 120,
+  藤本: 200,
+  乔木: 500
+}
+
+/** 连株型都没填时的兜底。 */
+const UNKNOWN_TYPICAL_CM = 60
 
 /** 给界面看的一句话说明。 */
 export function describeSize(cm: number | null | undefined): string {
@@ -323,41 +348,49 @@ export interface EffectiveHeight {
   /** 用来算显示高度的厘米数；null 表示完全没依据 */
   cm: number | null
   /** 这个数字是怎么来的 */
-  basis: 'measured' | 'estimated' | 'mature' | 'unknown'
+  basis: 'measured' | 'estimated' | 'mature' | 'habit' | 'unknown'
 }
 
 export const HEIGHT_BASIS_LABELS: Record<EffectiveHeight['basis'], string> = {
   measured: '你量的现状高度',
   estimated: '按成株高度 × 苗龄推算',
   mature: '按物种的成株高度',
+  habit: '按株型的常见高度推测',
   unknown: '没有高度数据'
 }
 
 /**
  * 一株植物在花园里该按多大画。
  *
- * 优先级：**实测 > 推算 > 物种上限**。
+ * 优先级：**实测 > 推算 > 物种上限 > 株型推测**。
  * 「成株高度」是这个品种能长多大，不是这株现在多大 ——
  * 一株刚买的乔木苗和一株养了十年的，不该画成一样大。
+ *
+ * 最后那层「株型推测」是后加的：原来是统一给个中位数，
+ * 结果用户填了真实高度反而看不出变化（那个中位数恰好就是常见值）。
  */
 export function effectiveHeight(input: EffectiveHeightInput): EffectiveHeight {
   const actual = readNumber(input.actualHeight)
   if (actual !== null && actual > 0) return { cm: actual, basis: 'measured' }
 
   const mature = readNumber(input.matureHeight)
-  if (mature === null || mature <= 0) return { cm: null, basis: 'unknown' }
-
-  const age = readNumber(input.ageYears)
-  if (age !== null && age >= 0 && WOODY_HABITS.has((input.habit ?? '').trim())) {
-    return { cm: mature * ageFactor(age, input.habit), basis: 'estimated' }
+  if (mature !== null && mature > 0) {
+    const age = readNumber(input.ageYears)
+    if (age !== null && age >= 0 && WOODY_HABITS.has((input.habit ?? '').trim())) {
+      return { cm: mature * ageFactor(age, input.habit), basis: 'estimated' }
+    }
+    return { cm: mature, basis: 'mature' }
   }
-  return { cm: mature, basis: 'mature' }
+
+  const habit = (input.habit ?? '').trim()
+  return { cm: HABIT_TYPICAL_CM[habit] ?? UNKNOWN_TYPICAL_CM, basis: 'habit' }
 }
 
-/** 高度的中文描述，带上依据。 */
+/** 高度的中文描述，带上依据和显示比例 —— 让「填了到底有没有生效」看得见。 */
 export function describeEffectiveHeight(input: EffectiveHeightInput): string {
   const { cm, basis } = effectiveHeight(input)
   if (cm === null) return '大小无依据'
   const text = cm >= 100 ? `${(cm / 100).toFixed(1)} m` : `${Math.round(cm)} cm`
-  return `${text}（${HEIGHT_BASIS_LABELS[basis]}）`
+  const scale = Math.round(sizeScaleFor(cm) * 100)
+  return `${text}（${HEIGHT_BASIS_LABELS[basis]} · 显示 ${scale}%）`
 }
