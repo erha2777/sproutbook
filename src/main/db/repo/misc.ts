@@ -63,7 +63,7 @@ export function saveEnvironment(db: Db, input: EnvironmentInput): Environment {
   const id = input.id ?? null
   if (id) {
     db.run(
-      `UPDATE environments SET name=?, kind=?, light_level=?, light_hours=?, climate_zone=?, province=?, city=?,
+      `UPDATE environments SET name=?, kind=?, light_level=?, light_hours=?, climate_zone=?, province=?, city=?, district=?,
          lat=?, lon=?, can_heat=?, frost_protected=?, sort_order=? WHERE id=?`,
       input.name,
       input.kind,
@@ -72,6 +72,7 @@ export function saveEnvironment(db: Db, input: EnvironmentInput): Environment {
       input.climateZone,
       input.province,
       input.city,
+      input.district,
       input.lat,
       input.lon,
       input.canHeat ? 1 : 0,
@@ -86,7 +87,7 @@ export function saveEnvironment(db: Db, input: EnvironmentInput): Environment {
 
   const r = db.run(
     `INSERT INTO environments (name, kind, light_level, light_hours, climate_zone, province, city, district, lat, lon, can_heat, frost_protected, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.name,
     input.kind,
     input.lightLevel,
@@ -94,6 +95,7 @@ export function saveEnvironment(db: Db, input: EnvironmentInput): Environment {
     input.climateZone,
     input.province,
     input.city,
+    input.district,
     input.lat,
     input.lon,
     input.canHeat ? 1 : 0,

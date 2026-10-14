@@ -25,7 +25,7 @@ import { readWeatherConfig, saveWeatherConfig } from './services/weather-provide
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { listPlants, plantStats, savePlant } from './db/repo/plants'
-import { getSetting, listEnvironments } from './db/repo/misc'
+import { archiveEnvironment, getEnvironment, getSetting, listEnvironments, saveEnvironment } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
@@ -1574,6 +1574,61 @@ export async function runSmoke(outFile: string): Promise<number> {
         // 排序：紧急的排最前
         const mixed = summarizeRisks([...weekRisks, ...heat])
         check('紧急的排在留意的前面', mixed[0]?.severity === 'severe', String(mixed[0]?.severity))
+      }
+
+      // ---- 养护位置的存取往返 ----
+      //
+      // 这条是补的，因为真出过事：加「区/县」字段时改了 SQL 的列名，
+      // 但**没有同步改参数** —— UPDATE 漏了 district（编辑永远存不进去，
+      // 用户报「这块修改不了」），INSERT 的列比占位符多一个（新建位置时
+      // 所有坐标整体错位）。存进去再读回来就能抓住这类错。
+      {
+        const saved = saveEnvironment(db, {
+          name: '自检位置',
+          kind: 'balcony',
+          lightLevel: null,
+          lightHours: null,
+          climateZone: null,
+          province: '湖南',
+          city: '某市',
+          district: '某县县',
+          lat: 30.0000,
+          lon: 120.0000,
+          canHeat: false,
+          frostProtected: false,
+          sortOrder: 99
+        })
+        check('新建位置时区县写入正确', saved.district === '某县县', String(saved.district))
+        check('新建位置时纬度不错位', saved.lat === 30.0000, String(saved.lat))
+        check('新建位置时经度不错位', saved.lon === 120.0000, String(saved.lon))
+
+        // 编辑：这正是用户报「修改不了」的那条路径
+        const edited = saveEnvironment(db, {
+          id: saved.id,
+          name: '自检位置',
+          kind: 'balcony',
+          lightLevel: null,
+          lightHours: null,
+          climateZone: null,
+          province: '湖南',
+          city: '某市',
+          district: '平江县',
+          lat: 28.71,
+          lon: 113.58,
+          canHeat: true,
+          frostProtected: true,
+          sortOrder: 99
+        })
+        check('编辑位置时区县能改', edited.district === '平江县', String(edited.district))
+        check('编辑位置时坐标能改', edited.lat === 28.71 && edited.lon === 113.58, `${edited.lat},${edited.lon}`)
+        check('编辑位置时开关能改', edited.canHeat === true && edited.frostProtected === true)
+
+        // 再读一次，确认真的落库了而不是只改了返回值
+        const reread = getEnvironment(db, saved.id)
+        check('重新读取后区县仍在', reread?.district === '平江县', String(reread?.district))
+        check('重新读取后坐标仍在', reread?.lat === 28.71 && reread?.lon === 113.58)
+
+        archiveEnvironment(db, saved.id)
       }
 
       // ---- 天气数据源配置 ----
