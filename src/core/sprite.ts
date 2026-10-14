@@ -40,6 +40,8 @@ export function normalizeHabit(value: string | null | undefined): SpriteHabit {
 export interface SpriteOptions {
   habit: string | null | undefined
   look: GrowthLook
+  /** 物种性状：叶形 / 叶色 / 花形 / 株幅。让同株型的植物也能区分开 */
+  style?: SpriteStyle
   /** 栽种方式（盆栽/地栽/水培/附生板），决定底座。留空则按株型给默认值 */
   cultivation?: string | null
   /** 花色。跟着物种走，同一片花园才有层次 */
@@ -180,6 +182,149 @@ class Canvas {
 const GROUND_Y = 13
 
 // ---------------------------------------------------------------------------
+// 物种性状：让同株型的植物也能区分开
+// ---------------------------------------------------------------------------
+
+/*
+ * 起因是用户的反馈：**株型只有 9 种，同株型的植物长得一模一样** ——
+ * 月季和薄荷都是草本，画出来分不出谁是谁，没有物种本身的样子。
+ *
+ * 解法还是「加参数，不画贴图」：株型决定骨架，这几个性状决定长相。
+ * 9 株型 × 9 叶形 × 6 叶色 × 6 花形 × 3 株幅，组合够用了。
+ */
+
+export const LEAF_SHAPE_OPTIONS = ['卵形', '披针', '剑形', '带状', '心形', '掌状', '羽状', '针形', '圆形'] as const
+export const FOLIAGE_COLOR_OPTIONS = ['深绿', '中绿', '浅绿', '灰绿', '紫红', '花叶'] as const
+export const FLOWER_FORM_OPTIONS = ['单瓣', '重瓣', '穗状', '头状', '钟形', '蝶形'] as const
+export const SPREAD_OPTIONS = ['紧凑', '中等', '开张'] as const
+
+export const FOLIAGE_COLOR_HEX: Record<string, string> = {
+  深绿: '#3f7a22',
+  中绿: '#5fa832',
+  浅绿: '#8cc85a',
+  灰绿: '#8aa08a',
+  紫红: '#8a4a6a',
+  花叶: '#7ab84a'
+}
+
+/** 花叶（斑叶）要两种颜色交替才像，靠这个标记。 */
+export function isVariegated(color: string | null | undefined): boolean {
+  return (color ?? '').trim() === '花叶'
+}
+
+/** 叶色的实际十六进制。认不出就用中绿。 */
+export function foliageHex(color: string | null | undefined): string {
+  const key = (color ?? '').trim()
+  return FOLIAGE_COLOR_HEX[key] ?? FOLIAGE_COLOR_HEX.中绿
+}
+
+export interface SpriteStyle {
+  leafShape?: string | null
+  foliageColor?: string | null
+  flowerForm?: string | null
+  spread?: string | null
+}
+
+/** 叶子往外伸几个像素。株幅决定张开程度。 */
+function spreadBonus(spread: string | null | undefined): number {
+  switch ((spread ?? '').trim()) {
+    case '开张':
+      return 1
+    case '紧凑':
+      return -1
+    default:
+      return 0
+  }
+}
+
+/**
+ * 画一片叶子。
+ *
+ * 形状不同，像素排布就不同 —— 这是「物种长相」差异最大的来源：
+ * 剑形（鸢尾、朱顶红）是一根斜刺，圆形（铜钱草）是个小圆饼，
+ * 掌状（天竺葵）像张开的手，针形（松）只有一条线。
+ */
+function drawLeaf(c: Canvas, x: number, y: number, dir: 1 | -1, len: number, shape: string, spread = 0): void {
+  const L = Math.max(1, len + spread)
+  const put = (dx: number, dy: number, key: string): void => c.px(x + dir * dx, y + dy, key)
+
+  switch ((shape ?? '').trim()) {
+    case '针形':
+      // 一条线，几乎不占面积
+      for (let i = 1; i <= L; i++) put(i, -Math.round(i * 0.35), 'g')
+      break
+
+    case '剑形':
+      // 斜着刺出去，中段加亮
+      for (let i = 1; i <= L; i++) {
+        put(i, -Math.round(i * 0.3), i > 1 && i < L ? 'G' : 'g')
+      }
+      break
+
+    case '带状':
+      // 直上直下、不收缩，像朱顶红那种
+      for (let i = 1; i <= L; i++) {
+        put(i, 0, 'g')
+        if (i % 3 === 2) put(i, 1, 'd')
+      }
+      break
+
+    case '披针':
+      // 两头尖中间宽
+      for (let i = 1; i <= L; i++) {
+        const w = i > 1 && i < L ? 1 : 0
+        put(i, 0, 'g')
+        if (w) put(i, -1, 'G')
+      }
+      break
+
+    case '心形':
+      // 三格宽、根部有个小缺口
+      for (let i = 0; i <= L; i++) put(i, 0, 'g')
+      put(1, -1, 'G')
+      put(2, -1, 'g')
+      put(2, 1, 'd')
+      break
+
+    case '掌状':
+      // 像张开的手：三条短指
+      for (let i = 1; i <= Math.max(1, Math.floor(L / 2)); i++) {
+        put(i, -1, 'g')
+        put(i + 1, 0, 'G')
+        put(i, 1, 'g')
+      }
+      break
+
+    case '羽状':
+      // 主轴 + 两侧小叶
+      for (let i = 1; i <= L; i++) {
+        put(i, 0, 'd')
+        if (i % 2 === 1) {
+          put(i, -1, 'g')
+          put(i, 1, 'g')
+        }
+      }
+      break
+
+    case '圆形':
+      // 小圆饼
+      put(1, 0, 'G')
+      put(2, -1, 'g')
+      put(2, 0, 'G')
+      put(2, 1, 'g')
+      break
+
+    default: {
+      // 卵形：最普通的一种，两格半宽
+      for (let i = 1; i <= L; i++) put(i, 0, 'g')
+      put(1, -1, 'G')
+      put(2, 1, 'd')
+      break
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 栽种方式 → 底座
 // ---------------------------------------------------------------------------
 
@@ -275,25 +420,25 @@ function drawFlower(c: Canvas, x: number, y: number, kind: GrowthLook['flower'])
  * 约定：从 (8, GROUND_Y-1) 往上生长。对称的株型只画**左半边**，
  * 由 mirror() 补右半边；藤本和水生是不对称的，自己画完整。
  */
-const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase) => void> = {
+const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase, style: SpriteStyle) => void> = {
   /** 草本：一根细茎，对生叶 */
-  草本(c, look, base) {
+  草本(c, look, base, style) {
     drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     c.vline(7, top, GROUND_Y - 1, 'b')
+    const sp = spreadBonus(style.spread)
     for (let i = 0; i < look.leaves; i++) {
       const y = GROUND_Y - 2 - i * 2
-      if (y <= top) break
-      c.px(6, y, 'g')
-      c.px(5, y - 1, 'g')
-      c.px(6, y + 1, look.wither > 0.5 ? 'g' : 'G')
+      if (y <= top + 1) break
+      // 叶形决定这一对叶子长什么样 —— 草本之间的差异几乎全在这里
+      drawLeaf(c, 7, y, -1, 2 + Math.floor(look.leaves / 2), style.leafShape ?? '', sp)
     }
     c.mirror()
     if (look.flower !== 'none') drawFlower(c, 8, top - 1, look.flower)
   },
 
   /** 灌木：短主干 + 一蓬叶子 */
-  灌木(c, look, base) {
+  灌木(c, look, base, _style) {
     drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     c.rect(7, top + 3, 1, GROUND_Y - top - 3, 't')
@@ -313,7 +458,7 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
   },
 
   /** 乔木：主干 + 圆树冠 */
-  乔木(c, look, base) {
+  乔木(c, look, base, _style) {
     drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     c.rect(7, top + 3, 1, GROUND_Y - top - 3, 't')
@@ -331,7 +476,7 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
   },
 
   /** 藤本：细长茎带点弯。不对称，不镜像 */
-  藤本(c, look, base) {
+  藤本(c, look, base, style) {
     drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     let x = 8
@@ -340,15 +485,15 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
       // 每三格往左偏一次，做出攀爬的弯度
       if ((GROUND_Y - y) % 3 === 0 && x > 4) x--
       if ((GROUND_Y - y) % 2 === 0) {
-        c.px(x - 1, y, 'g')
-        c.px(x + 1, y - 1, 'd')
+        drawLeaf(c, x, y, -1, 2, style.leafShape ?? '', spreadBonus(style.spread))
+        drawLeaf(c, x, y - 1, 1, 1, style.leafShape ?? '')
       }
     }
     if (look.flower !== 'none') drawFlower(c, x, top - 1, look.flower)
   },
 
   /** 多肉：低矮莲座，一层层往外摊 */
-  多肉(c, look, base) {
+  多肉(c, look, base, _style) {
     drawBase(c, base)
     const layers = Math.max(1, Math.min(3, Math.ceil(look.stem / 3)))
     for (let i = 0; i < layers; i++) {
@@ -361,20 +506,37 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
   },
 
   /** 球根：土面一个球，抽出几片带状叶 */
-  球根(c, look, base) {
+  球根(c, look, base, style) {
     drawBase(c, base)
     c.rect(6, GROUND_Y - 1, 3, 2, 'p')
     const blades = Math.max(1, Math.min(4, look.leaves + 1))
+    /*
+     * 球根类（朱顶红、郁金香、风信子）的叶片**就是它的长相**，
+     * 所以这里必须真的按叶形画，不能只加个叶尖高光 ——
+     * 第一版偷懒只判断了「带状」，自检里「球根也受叶形影响」立刻红了。
+     *
+     * 第一版偷懒只判了「带状」，自检里那条立刻红了。
+     */
+    const shape = (style.leafShape ?? '').trim()
+    const wide = shape === '圆形' || shape === '卵形' || shape === '心形' || shape === '掌状'
+    const taper = shape === '剑形' || shape === '披针'
+    const thin = shape === '针形'
     for (let i = 0; i < blades; i++) {
       const dx = i - Math.floor(blades / 2)
-      const h = Math.max(1, look.stem - Math.abs(dx))
-      for (let k = 0; k < h; k++) c.px(8 + dx, GROUND_Y - 2 - k, k > h - 2 ? 'G' : 'g')
+      const h = Math.max(1, (thin ? look.stem - 2 : look.stem) - Math.abs(dx))
+      for (let k = 0; k < h; k++) {
+        c.px(8 + dx, GROUND_Y - 2 - k, k > h - 2 ? 'G' : 'g')
+        // 圆叶类长宽一些，剑叶类往上收，针叶只有一条线
+        if (wide && k < h - 2) c.px(8 + dx + (dx >= 0 ? 1 : -1), GROUND_Y - 2 - k, 'G')
+        if (taper && k > h / 2) c.px(8 + dx + (dx >= 0 ? 1 : -1), GROUND_Y - 2 - k, 'd')
+      }
+      if (shape === '带状') c.px(8 + dx, GROUND_Y - 2 - h, 'G')
     }
     if (look.flower !== 'none') drawFlower(c, 8, GROUND_Y - 3 - look.stem, look.flower)
   },
 
   /** 水生：浮叶 + 立出水面的花。底座由栽种方式决定（睡莲默认水培） */
-  水生(c, look, base) {
+  水生(c, look, base, _style) {
     drawBase(c, base)
     c.rect(5, GROUND_Y - 1, 4, 1, 'g') // 浮叶
     c.px(4, GROUND_Y - 1, 'G')
@@ -384,29 +546,26 @@ const SHAPES: Record<SpriteHabit, (c: Canvas, look: GrowthLook, base: SpriteBase
   },
 
   /** 蕨类：一根主轴，两侧羽状小叶 */
-  蕨类(c, look, base) {
+  蕨类(c, look, base, style) {
     drawBase(c, base)
     const top = GROUND_Y - 1 - look.stem
     c.vline(7, top, GROUND_Y - 1, 'b')
     for (let y = GROUND_Y - 2; y >= top; y -= 2) {
-      c.px(6, y, 'g')
-      c.px(5, y, 'd')
-      c.px(6, y - 1, 'G')
+      drawLeaf(c, 7, y, -1, 2, style.leafShape ?? '', spreadBonus(style.spread))
     }
     c.mirror()
     if (look.flower !== 'none') drawFlower(c, 8, top - 1, look.flower)
   },
 
   /** 附生：一截木头，叶子贴在木头上 */
-  附生(c, look, base) {
+  附生(c, look, base, style) {
     drawBase(c, base)
     const top = GROUND_Y - 1 - Math.max(3, look.stem)
     c.rect(7, top, 1, GROUND_Y - top - 1, 't')
     c.px(5, top + 2, 'T')
     for (let i = 0; i < Math.max(1, look.leaves); i++) {
       const y = top + 1 + i * 2
-      c.px(6, y, 'g')
-      c.px(5, y - 1, 'G')
+      drawLeaf(c, 7, y, -1, 2, style.leafShape ?? '', spreadBonus(style.spread))
     }
     c.mirror()
     if (look.flower !== 'none') drawFlower(c, 4, top + 1, look.flower)
@@ -428,7 +587,7 @@ export function buildPlantSprite(options: SpriteOptions): BuiltSprite {
   const base = baseForCultivation(options.cultivation, habit)
   const c = new Canvas()
 
-  SHAPES[habit](c, look, base)
+  SHAPES[habit](c, look, base, options.style ?? {})
 
   // 种子阶段：只画土，露一点芽
   if (look.stem === 0 && look.leaves === 0 && !look.bare) {

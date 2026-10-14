@@ -48,6 +48,13 @@ import {
   CULTIVATION_OPTIONS,
   FLOWER_COLOR_HEX,
   FLOWER_COLOR_OPTIONS,
+  FLOWER_FORM_OPTIONS,
+  FOLIAGE_COLOR_HEX,
+  FOLIAGE_COLOR_OPTIONS,
+  LEAF_SHAPE_OPTIONS,
+  SPREAD_OPTIONS,
+  foliageHex,
+  isVariegated,
   SPRITE_HABITS,
   SPRITE_SIZE,
   baseForCultivation,
@@ -1748,6 +1755,44 @@ export function runSmoke(outFile: string): number {
         check('枯萎后红色通道上升（转枯黄）', dr > ar, `红 ${ar} → ${dr}`)
       }
 
+      // ---- 物种性状：同株型的植物必须能区分开 ----
+      //
+      // 用户的反馈：株型只有 9 种，月季和薄荷都是草本，画出来分不出谁是谁，
+      // 没有物种本身的样子。叶形是差异最大的来源。
+      check('叶形选项齐全', LEAF_SHAPE_OPTIONS.length >= 8)
+      check('叶色选项齐全', FOLIAGE_COLOR_OPTIONS.length >= 5)
+      check('花形选项齐全', FLOWER_FORM_OPTIONS.length >= 5)
+      check('株幅选项齐全', SPREAD_OPTIONS.length === 3)
+      check('每个叶色都有对应颜色', FOLIAGE_COLOR_OPTIONS.every((k) => /^#[0-9a-f]{6}$/.test(FOLIAGE_COLOR_HEX[k] ?? '')))
+      check('未知叶色退回中绿', foliageHex('不存在的颜色') === FOLIAGE_COLOR_HEX.中绿 && foliageHex(null) === FOLIAGE_COLOR_HEX.中绿)
+      check('花叶能被识别', isVariegated('花叶') && !isVariegated('深绿') && !isVariegated(null))
+      {
+        // 同一株型 + 同一阶段，只换叶形，画出来必须两两不同
+        const grids = LEAF_SHAPE_OPTIONS.map(
+          (leafShape) => buildPlantSprite({ habit: '草本', look: growthLook('growing'), style: { leafShape } }).grid.join('|')
+        )
+        check('九种叶形画出来两两不同', new Set(grids).size === LEAF_SHAPE_OPTIONS.length, `${new Set(grids).size}/${LEAF_SHAPE_OPTIONS.length}`)
+        // 卵形是默认叶形，拿它跟「没给叶形」比当然一样 —— 用非默认的比
+        const noStyle = buildPlantSprite({ habit: '草本', look: growthLook('growing') }).grid.join('|')
+        const needle = buildPlantSprite({ habit: '草本', look: growthLook('growing'), style: { leafShape: '针形' } }).grid.join('|')
+        check('非默认叶形确实改变了像素', needle !== noStyle)
+        // 株幅也要有影响
+        const tight = buildPlantSprite({ habit: '草本', look: growthLook('growing'), style: { leafShape: '卵形', spread: '紧凑' } }).grid.join('|')
+        const loose = buildPlantSprite({ habit: '草本', look: growthLook('growing'), style: { leafShape: '卵形', spread: '开张' } }).grid.join('|')
+        check('株幅紧凑与开张画出来不同', tight !== loose)
+        // 藤本和球根同样受叶形影响
+        for (const habit of ['藤本', '球根', '蕨类']) {
+          const a = buildPlantSprite({ habit, look: growthLook('growing'), style: { leafShape: '圆形' } }).grid.join('|')
+          const b = buildPlantSprite({ habit, look: growthLook('growing'), style: { leafShape: '针形' } }).grid.join('|')
+          check(`${habit}也受叶形影响`, a !== b)
+        }
+      }
+      {
+        const defs = defaultFieldDefinitions()
+        const leafField = defs.find((d) => d.key === 'leaf_shape')
+        check('物种模板里有叶形字段', leafField !== undefined)
+        check('叶形的选项和渲染表一一对应', (leafField?.options ?? []).join(',') === LEAF_SHAPE_OPTIONS.join(','), (leafField?.options ?? []).join(','))
+      }
       check('花色跟着参数走', buildPlantSprite({ habit: '草本', look: growthLook('blooming'), flowerColor: '#123456' }).palette.f === '#123456')
       check('不传花色有默认值', buildPlantSprite({ habit: '草本', look: growthLook('blooming') }).palette.f.length === 7)
 

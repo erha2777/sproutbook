@@ -23,7 +23,7 @@
  */
 
 import type { NewFieldDefinition } from './types'
-import { CULTIVATION_OPTIONS, FLOWER_COLOR_OPTIONS } from './sprite'
+import { CULTIVATION_OPTIONS, FLOWER_COLOR_OPTIONS, LEAF_SHAPE_OPTIONS } from './sprite'
 
 type Seed = Omit<NewFieldDefinition, 'ownerKind'>
 
@@ -104,6 +104,16 @@ const speciesFields: Seed[] = [
     type: 'number',
     unit: '天',
     helpText: '单朵或单次开花持续多少天。'
+  },
+  {
+    key: 'leaf_shape',
+    label: '叶形',
+    groupName: '形态',
+    type: 'select',
+    // 株型只有 9 种，同株型的植物全靠叶形区分 —— 月季和薄荷都是草本，
+    // 叶子一个是卵形一个是圆形，画出来才不像同一株
+    options: [...LEAF_SHAPE_OPTIONS],
+    helpText: '决定花园视图里叶片怎么画。留空按株型的默认叶形。'
   },
   {
     key: 'flower_color',
