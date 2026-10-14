@@ -251,6 +251,9 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   const [overdue, setOverdue] = useState<CareTaskListItem[]>([])
   const [overview, setOverview] = useState<CareOverview | null>(null)
   const [logs, setLogs] = useState<CareLog[]>([])
+  /** 手动记一笔：选了哪株、写了什么 */
+  const [logPlantId, setLogPlantId] = useState('')
+  const [logDraft, setLogDraft] = useState('')
   const [plants, setPlants] = useState<PlantOption[]>([])
   const [speciesNames, setSpeciesNames] = useState<string[]>([])
   /** 任务上要显示绑定的配方，所以把配方与材料一起取回来（都是几十条量级） */
@@ -327,6 +330,30 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
    * **只在你点按钮时才写数据。** 预警本身永远不自动建任务 ——
    * 和 AI 草稿一样，它只提议，不替你做决定。
    */
+  /**
+   * 手动记一笔养护日志。
+   *
+   * care:log.add 这个通道一直存在、preload 也暴露了，**就是界面没接** ——
+   * 而日志空态原本还写着「也可以随时手动记一笔」。
+   * **邀请用户做一件做不到的事，比不说更糟。** 与其删那句话，不如把路接上。
+   */
+  const addManualLog = async (): Promise<void> => {
+    const plantId = logPlantId ? Number(logPlantId) : null
+    const content = logDraft.trim()
+    if (plantId === null || !content) {
+      toast.push('先选一株植物，再写一句做了什么', 'error')
+      return
+    }
+    try {
+      await window.api.care.addLog({ plantId, content })
+      setLogDraft('')
+      setLogs(await window.api.care.logs(logPlantId ? plantId : undefined, 100))
+      toast.push('已记一笔', 'success')
+    } catch (error) {
+      toast.push(`记录失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    }
+  }
+
   const createTaskFromRisk = async (risk: WeatherRiskItem): Promise<void> => {
     /*
      * 文案从 core 拿，**不再在这里抄一份**。
@@ -845,13 +872,29 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
       ) : (
         <Panel>
           <SectionTitle>养护日志</SectionTitle>
-          {/*
-            空态文案原来写的是「也可以随时手动记一笔」—— 可界面上**没有那个入口**
-            （care:log.add 通道有实现、preload 也暴露了，就是没人接）。
-            邀请用户做一件做不到的事，比不说更糟。接线是更好的修法，先去掉这半句。
-          */}
+          {/* 手动记一笔。原来空态写着「也可以随时手动记一笔」却没有入口，现在真给了。 */}
+          <div className="row tight" style={{ marginBottom: 8 }}>
+            <div style={{ width: 180 }}>
+              <SelectInput
+                value={logPlantId}
+                onChange={setLogPlantId}
+                placeholder="选一株植物…"
+                options={plants.map((pl) => ({ value: String(pl.id), label: pl.label }))}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <TextInput
+                value={logDraft}
+                onChange={setLogDraft}
+                placeholder="记一句做了什么，例如「换了盆，土是泥炭 5 : 珍珠岩 3」"
+              />
+            </div>
+            <Button onClick={() => void addManualLog()} disabled={!logPlantId || !logDraft.trim()}>
+              记一笔
+            </Button>
+          </div>
           {logs.length === 0 ? (
-            <EmptyState icon="📓" title="还没有记录" hint="完成任务时会自动写一条日志。" />
+            <EmptyState icon="📓" title="还没有记录" hint="完成任务时会自动写一条日志；也可以在上面手动记一笔。" />
           ) : (
             <div className="log-timeline">
               {logs.map((log) => {
