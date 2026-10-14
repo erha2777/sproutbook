@@ -14,6 +14,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Db } from './db/connection'
+import { formatMonthSet, normalizeMonths } from '../core/fieldTypes'
 import { LATEST_VERSION, MIGRATIONS } from './db/schema'
 import { currentVersion, migrate, rebuildAttrIndex } from './db/migrate'
 import { seedAll, seedFieldDefinitions } from './db/seed'
@@ -141,7 +142,8 @@ export function runSmoke(outFile: string): number {
         needs_vernalization: false, // boolean → 必须被归一化为 0/1
         cold_hardiness: -15, // number
         heat_tolerance: 38,
-        bloom_months: { from: 4, to: 10 }, // month_range → 展开成 7 行投影
+        // 月份集合：两段不相连（月季的真实情况 —— 4~6 月主花期 + 9~11 月复花）
+        bloom_months: [4, 5, 6, 9, 10, 11],
         light_requirement: ['全日照', '半阴'], // multiselect → 2 行投影
         toxicity_level: '无毒',
         fragrance: '浓香'
@@ -160,8 +162,28 @@ export function runSmoke(outFile: string): number {
       "SELECT idx, value_num FROM attr_index WHERE owner_kind='species' AND owner_id=? AND field_key='bloom_months' ORDER BY idx",
       speciesId
     )
-    check('月份区间展开为多行投影', monthRows.length === 7, `实际 ${monthRows.length} 行（4~10 月应为 7）`)
-    check('投影月份数值正确', monthRows[0]?.value_num === 4 && monthRows[6]?.value_num === 10)
+    check('月份集合展开为多行投影', monthRows.length === 6, `实际 ${monthRows.length} 行（4,5,6,9,10,11 应为 6）`)
+    check(
+      '多段月份都被投影（中间断开的 7、8 月不出现）',
+      monthRows.map((r) => r.value_num).join(',') === '4,5,6,9,10,11',
+      monthRows.map((r) => r.value_num).join(',')
+    )
+    check('按花期筛选能命中第二段（9 月）', listSpecies(db, { bloomMonth: 9 }).items.some((s) => s.id === speciesId))
+    check('按花期筛选不会命中断档月（7 月）', !listSpecies(db, { bloomMonth: 7 }).items.some((s) => s.id === speciesId))
+
+    // --- 月份集合的解析与格式化 ---
+    check('字符串 "3-5,9-11" 可解析为两段', normalizeMonths('3-5,9-11').join(',') === '3,4,5,9,10,11')
+    check('旧的 {from,to} 写法仍可读', normalizeMonths({ from: 11, to: 2 }).join(',') === '11,12,1,2')
+    check('月份集合会去重并升序', normalizeMonths([9, 3, 9, 5]).join(',') === '3,5,9')
+    check('越界月份被丢弃', normalizeMonths([0, 13, 5]).join(',') === '5')
+    check(
+      '连续段压缩为区间文本',
+      formatMonthSet([3, 4, 5, 9, 10, 11]) === '三月~五月、九月~十一月',
+      formatMonthSet([3, 4, 5, 9, 10, 11])
+    )
+    check('跨年段压缩正确', formatMonthSet([11, 12, 1, 2]) === '十一月~二月', formatMonthSet([11, 12, 1, 2]))
+    check('单月不加区间符号', formatMonthSet([5]) === '五月', formatMonthSet([5]))
+    check('十二个月显示为全年', formatMonthSet(Array.from({ length: 12 }, (_, i) => i + 1)) === '全年')
 
     const lightRows = db.all(
       "SELECT * FROM attr_index WHERE owner_kind='species' AND owner_id=? AND field_key='light_requirement'",
@@ -305,17 +327,20 @@ export function runSmoke(outFile: string): number {
           applied_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
       `)
-      oldDb.exec(MIGRATIONS[0].sql)
+      oldDb.exec(MIGRATIONS[0].sql ?? '')
       oldDb.run('INSERT INTO schema_migrations (version, name) VALUES (?, ?)', MIGRATIONS[0].version, MIGRATIONS[0].name)
 
       // v1 时代的模板里没有 relation_target 列，所以只能绕开 insertFieldDefinition 手写
       oldDb.run(
         `INSERT INTO field_definitions (owner_kind, key, label, group_name, type, is_system, is_required, column_name, sort_order)
          VALUES ('plant','nickname','昵称','基础','text',1,1,'nickname',0),
-                ('plant','pot_size','盆径','基础','text',0,0,NULL,1)`
+                ('plant','pot_size','盆径','基础','text',0,0,NULL,1),
+                ('species','bloom_months','开花时期','习性','month_range',0,0,NULL,0)`
       )
+      // 老数据用的是单区间写法 —— v3 迁移应该把它改写成月份数组
       oldDb.run(
-        `INSERT INTO species (common_name, family, attributes_json) VALUES ('老数据月季','蔷薇科','{"pot_size":"20cm"}')`
+        `INSERT INTO species (common_name, family, attributes_json)
+         VALUES ('老数据月季','蔷薇科','{"pot_size":"20cm","bloom_months":{"from":4,"to":10}}')`
       )
       const legacySpeciesId = Number(oldDb.scalar<number>('SELECT id FROM species LIMIT 1'))
       oldDb.run(
@@ -339,6 +364,22 @@ export function runSmoke(outFile: string): number {
         '升级后老物种数据完好',
         oldDb.get<{ common_name: string }>('SELECT common_name FROM species LIMIT 1')?.common_name === '老数据月季'
       )
+
+      // v3 数据迁移：老的 {from,to} 必须被改写成月份数组
+      const migratedAttrs = oldDb.get<{ attributes_json: string }>('SELECT attributes_json FROM species LIMIT 1')
+        ?.attributes_json
+      let parsedMonths: unknown = null
+      try {
+        parsedMonths = (JSON.parse(migratedAttrs ?? '{}') as Record<string, unknown>).bloom_months
+      } catch {
+        parsedMonths = null
+      }
+      check(
+        'v3 迁移把老的月份区间改写成了数组',
+        Array.isArray(parsedMonths) && (parsedMonths as number[]).join(',') === '4,5,6,7,8,9,10',
+        JSON.stringify(parsedMonths)
+      )
+      check('v3 迁移不影响其它字段', (JSON.parse(migratedAttrs ?? '{}') as Record<string, unknown>).pot_size === '20cm')
 
       // 升级后再补种模板：老库里缺的 relation 字段应该被补上
       seedFieldDefinitions(oldDb)

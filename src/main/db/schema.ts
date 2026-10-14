@@ -7,10 +7,18 @@
  *  3. 软删除优先：能归档就不物理删除，避免用户误操作丢数据。
  */
 
+import type { Db } from './connection'
+
 export interface Migration {
   version: number
   name: string
-  sql: string
+  /** 结构变更写在这里 */
+  sql?: string
+  /**
+   * 需要**改数据**的迁移（比如某个字段的取值形状变了）写在这里。
+   * 与 sql 在同一个事务里执行，失败即整体回滚。
+   */
+  run?: (db: Db) => void
 }
 
 const V1_INIT = /* sql */ `
@@ -264,9 +272,64 @@ const V2_RELATION_FIELDS = /* sql */ `
 ALTER TABLE field_definitions ADD COLUMN relation_target TEXT;
 `
 
+/**
+ * 把 month_range 字段的值从「单个区间」改写成「月份集合」。
+ *
+ * 起因：很多植物一年开两次（月季 4~6 月 + 9~11 月），夏天和冬天各休眠一次的也不少，
+ * 而 {from,to} 只能表达一段连续区间，模型上就是错的。
+ *
+ * 读取端（normalizeMonths）两种形状都认，所以这个迁移不是「必须成功才能用」，
+ * 而是把存量数据统一成新形状，避免库里长期存在两种表示。
+ */
+function migrateMonthRangesToSets(db: Db): void {
+  const defs = db.all<{ owner_kind: string; key: string }>(
+    "SELECT owner_kind, key FROM field_definitions WHERE type = 'month_range'"
+  )
+  if (defs.length === 0) return
+
+  const tables: Record<string, string> = { species: 'species', plant: 'plants' }
+
+  const expand = (from: number, to: number): number[] => {
+    const out: number[] = []
+    let cur = from
+    for (let i = 0; i < 12; i++) {
+      out.push(cur)
+      if (cur === to) break
+      cur = cur === 12 ? 1 : cur + 1
+    }
+    return out
+  }
+
+  for (const def of defs) {
+    const table = tables[def.owner_kind]
+    if (!table) continue
+
+    for (const row of db.all<{ id: number; attributes_json: string | null }>(
+      `SELECT id, attributes_json FROM ${table}`
+    )) {
+      let attrs: Record<string, unknown>
+      try {
+        attrs = JSON.parse(row.attributes_json ?? '{}') as Record<string, unknown>
+      } catch {
+        continue // 坏 JSON 交给投影重建去处理，不在这里抛错中断整个迁移
+      }
+
+      const value = attrs[def.key]
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+
+      const r = value as { from?: unknown; to?: unknown }
+      if (typeof r.from !== 'number' || typeof r.to !== 'number') continue
+
+      attrs[def.key] = expand(r.from, r.to)
+      db.run(`UPDATE ${table} SET attributes_json = ? WHERE id = ?`, JSON.stringify(attrs), row.id)
+    }
+  }
+}
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
-  { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS }
+  { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
+  { version: 3, name: 'month_sets', run: migrateMonthRangesToSets }
 ]
 
 export const LATEST_VERSION = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0)

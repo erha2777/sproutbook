@@ -23,7 +23,7 @@ export const FIELD_TYPES: FieldTypeMeta[] = [
   { type: 'select', label: '单选', multiValued: false, hint: '从预设选项里选一个' },
   { type: 'multiselect', label: '多选', multiValued: true, hint: '从预设选项里选多个' },
   { type: 'tags', label: '标签', multiValued: true, hint: '自由输入多个值' },
-  { type: 'month_range', label: '月份区间', multiValued: true, hint: '如花期 3~5 月，支持跨年' },
+  { type: 'month_range', label: '月份', multiValued: true, hint: '可多段，如花期 4~6 月 + 9~11 月；支持跨年' },
   { type: 'hours_range', label: '数值区间', multiValued: false, hint: '如光照 6~8 小时' },
   { type: 'date', label: '日期', multiValued: false, hint: 'YYYY-MM-DD' },
   { type: 'image', label: '图片', multiValued: false, hint: '本地图片路径' },
@@ -53,7 +53,10 @@ function clampMonth(n: unknown): number | null {
   return i
 }
 
-/** 把月份区间展开成月份数组（自动处理跨年，如 11~2 月 → [11,12,1,2]）。 */
+/**
+ * 把 from~to 展开成月份数组（自动处理跨年，如 11~2 月 → [11,12,1,2]）。
+ * 旧的单区间写法仍然支持，但内部统一用「月份集合」表示。
+ */
 export function monthsInRange(range: MonthRange): number[] {
   const from = clampMonth(range.from)
   const to = clampMonth(range.to)
@@ -70,8 +73,86 @@ export function monthsInRange(range: MonthRange): number[] {
   return out
 }
 
-export function isMonthInRange(range: MonthRange, month: number): boolean {
-  return monthsInRange(range).includes(month)
+/**
+ * 把任意输入归一化成「月份集合」：去重、升序、限定 1~12。
+ *
+ * 为什么用集合而不是区间：很多植物一年开两次（月季 4~6 月 + 9~11 月），
+ * 还有的夏天和冬天各休眠一次。单个 {from,to} 表达不了这种「多段」，
+ * 而区间只是集合的一个特例，所以底层统一用集合，展示时再压缩成区间文本。
+ */
+export function normalizeMonths(raw: unknown): number[] {
+  if (raw === null || raw === undefined) return []
+
+  // 旧格式 { from, to }
+  if (typeof raw === 'object' && !Array.isArray(raw) && 'from' in (raw as object)) {
+    return monthsInRange(raw as MonthRange)
+  }
+
+  // 字符串：支持 "3-5,9-11" / "3,4,5" / "3月~5月" / "3 至 5" 等写法
+  if (typeof raw === 'string') {
+    const nums = raw
+      .replace(/[月号]/g, '')
+      .split(/[,，、;；]/)
+      .flatMap((segment) => {
+        const parts = segment
+          .split(/[-~～至到]/)
+          .map((s) => Number(s.trim()))
+          .filter((n) => Number.isFinite(n))
+        if (parts.length < 2) return parts
+        // 段内是区间，展开
+        return monthsInRange({ from: parts[0], to: parts[parts.length - 1] })
+      })
+      .map((n) => clampMonth(n))
+      .filter((n): n is number => n !== null)
+    return Array.from(new Set(nums)).sort((a, b) => a - b)
+  }
+
+  if (typeof raw === 'number') {
+    const m = clampMonth(raw)
+    return m === null ? [] : [m]
+  }
+
+  if (Array.isArray(raw)) {
+    const nums = raw.map((n) => clampMonth(n)).filter((n): n is number => n !== null)
+    return Array.from(new Set(nums)).sort((a, b) => a - b)
+  }
+
+  return []
+}
+
+/**
+ * 把月份集合压缩成给人看的文本： [3,4,5,9,10,11] → 「3~5月、9~11月」。
+ * 连续的一段合成区间；若同时覆盖了 1 月和 12 月，则合成跨年区间。
+ */
+export function formatMonthSet(months: number[]): string {
+  const sorted = Array.from(new Set(months.filter((m) => m >= 1 && m <= 12))).sort((a, b) => a - b)
+  if (sorted.length === 0) return ''
+  if (sorted.length === 12) return '全年'
+
+  // 切成连续段
+  const runs: Array<[number, number]> = []
+  let start = sorted[0]
+  let prev = sorted[0]
+  for (let i = 1; i < sorted.length; i++) {
+    const cur = sorted[i]
+    if (cur === prev + 1) {
+      prev = cur
+      continue
+    }
+    runs.push([start, prev])
+    start = cur
+    prev = cur
+  }
+  runs.push([start, prev])
+
+  // 首段从 1 月、末段到 12 月时合并成跨年区间（如 11,12,1,2 → 11~2月）
+  if (runs.length > 1 && runs[0][0] === 1 && runs[runs.length - 1][1] === 12) {
+    const head = runs.shift() as [number, number]
+    const tail = runs.pop() as [number, number]
+    runs.unshift([tail[0], head[1]])
+  }
+
+  return runs.map(([a, b]) => (a === b ? monthLabel(a) : `${monthLabel(a)}~${monthLabel(b)}`)).join('、')
 }
 
 // ---------------------------------------------------------------------------
@@ -144,24 +225,12 @@ export function coerceFieldValue(def: Pick<FieldDefinition, 'type' | 'options' |
     }
 
     case 'month_range': {
-      if (typeof raw === 'object' && raw !== null && 'from' in raw && 'to' in raw) {
-        const r = raw as { from: unknown; to: unknown }
-        const from = clampMonth(r.from)
-        const to = clampMonth(r.to)
-        if (from === null || to === null) return { ok: false, error: `${def.label} 的月份需要在 1~12 之间` }
-        return { ok: true, value: { from, to } satisfies MonthRange }
+      // 值统一是月份集合（number[]）。旧的 {from,to} 写法照样能读进来。
+      const months = normalizeMonths(raw)
+      if (months.length === 0) {
+        return { ok: false, error: `${def.label} 需要至少一个月份（可写 3-5、3,4,5 或 3-5,9-11）` }
       }
-      // 兼容 "3-5" / "3~5" / "3,4,5" / "3月-5月"
-      const nums = String(raw)
-        .replace(/[月号]/g, '')
-        .split(/[-~～至到,，]/)
-        .map((s) => Number(s.trim()))
-        .filter((n) => Number.isFinite(n))
-      if (nums.length === 0) return { ok: false, error: `${def.label} 需要形如 3-5 的月份区间` }
-      const from = clampMonth(nums[0])
-      const to = clampMonth(nums.length > 1 ? nums[nums.length - 1] : nums[0])
-      if (from === null || to === null) return { ok: false, error: `${def.label} 的月份需要在 1~12 之间` }
-      return { ok: true, value: { from, to } satisfies MonthRange }
+      return { ok: true, value: months }
     }
 
     case 'hours_range': {
@@ -229,9 +298,9 @@ export function formatFieldValue(def: Pick<FieldDefinition, 'type' | 'unit' | 'l
     case 'tags':
       return Array.isArray(value) ? value.join('、') : String(value)
     case 'month_range': {
-      const r = value as MonthRange
-      if (typeof r !== 'object' || r === null) return String(value)
-      return r.from === r.to ? monthLabel(r.from) : `${monthLabel(r.from)} ~ ${monthLabel(r.to)}`
+      // 值可能是新的月份集合，也可能是老数据里的 {from,to}
+      const months = normalizeMonths(value)
+      return months.length > 0 ? formatMonthSet(months) : ''
     }
     case 'hours_range': {
       const r = value as NumberRange
@@ -277,8 +346,9 @@ export function projectFieldValue(def: Pick<FieldDefinition, 'type' | 'unit' | '
       return [{ idx: 0, text, num: typeof r?.min === 'number' ? r.min : null }]
     }
     case 'month_range': {
-      const r = value as MonthRange
-      return monthsInRange(r).map((m, i) => ({ idx: i, text: monthLabel(m), num: m }))
+      // 一个月一行 —— 所以「本月开花」永远是一次索引命中，
+      // 无论用户填的是一个区间还是多段不相连的月份。
+      return normalizeMonths(value).map((m, i) => ({ idx: i, text: monthLabel(m), num: m }))
     }
     case 'multiselect':
     case 'tags': {

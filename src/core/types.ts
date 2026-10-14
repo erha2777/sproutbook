@@ -43,7 +43,13 @@ export const RELATION_TARGETS: Array<{ value: RelationTarget; label: string }> =
   { value: 'recipes', label: '配方' }
 ]
 
-/** 月份区间。from > to 表示跨年（如 11 月 ~ 次年 2 月）。 */
+/**
+ * 月份区间（旧写法，仍然兼容读取）。
+ *
+ * 现在 month_range 字段的值统一是**月份集合** `number[]`，
+ * 因为这个形状表达不了「4~6 月 + 9~11 月」这种一年开两次的情况。
+ * 保留这个类型是为了：老数据、字符串解析、以及 monthsInRange 展开。
+ */
 export interface MonthRange {
   from: number
   to: number
@@ -55,7 +61,7 @@ export interface NumberRange {
   max: number | null
 }
 
-export type FieldValue = string | number | boolean | string[] | MonthRange | NumberRange | null
+export type FieldValue = string | number | boolean | string[] | number[] | MonthRange | NumberRange | null
 
 export type FieldOwner = 'species' | 'plant'
 

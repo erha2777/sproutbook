@@ -5,8 +5,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
-import { monthsInRange } from '@core/fieldTypes'
-import type { MonthRange } from '@core/types'
+import { formatMonthSet, normalizeMonths } from '@core/fieldTypes'
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
@@ -335,33 +334,30 @@ export function TagInput({
   )
 }
 
-/** 月份区间选择器：点第一个月设起点，点后面的月设终点，支持跨年。 */
-export function MonthRangeInput({
+/**
+ * 月份选择器：点哪个月就切换哪个月，可以选任意多段。
+ *
+ * 之所以不是「选起点 + 选终点」：很多植物一年开两次
+ * （月季 4~6 月 + 9~11 月），夏天和冬天各休眠一次的也不少，
+ * 单个连续区间根本表达不了。区间只是本控件的一种用法，不是限制。
+ */
+export function MonthSetInput({
   value,
   onChange,
   disabled
 }: {
-  value: MonthRange | null
-  onChange: (value: MonthRange | null) => void
+  value: number[] | null
+  onChange: (value: number[] | null) => void
   disabled?: boolean
 }): ReactNode {
-  const active = useMemo(() => (value ? monthsInRange(value) : []), [value])
+  const active = useMemo(() => normalizeMonths(value), [value])
 
-  const click = (month: number): void => {
+  const toggle = (month: number): void => {
     if (disabled) return
-    if (!value) {
-      onChange({ from: month, to: month })
-      return
-    }
-    if (value.from === value.to && month === value.from) {
-      onChange(null) // 再点一次同一个月份 = 取消
-      return
-    }
-    if (month < value.from) {
-      onChange({ from: month, to: value.to })
-      return
-    }
-    onChange({ from: value.from, to: month })
+    const next = active.includes(month)
+      ? active.filter((m) => m !== month)
+      : [...active, month].sort((a, b) => a - b)
+    onChange(next.length > 0 ? next : null)
   }
 
   return (
@@ -372,24 +368,27 @@ export function MonthRangeInput({
             key={m}
             type="button"
             disabled={disabled}
-            className={cx('month-cell', active.includes(m) && 'in-range', (value?.from === m || value?.to === m) && 'edge')}
-            onClick={() => click(m)}
-            title={`${m} 月`}
+            className={cx('month-cell', active.includes(m) && 'in-range')}
+            onClick={() => toggle(m)}
+            title={`点击切换 ${m} 月`}
           >
             {m}
           </button>
         ))}
       </div>
       <div className="row tight">
-        <span className="small muted">
-          {value
-            ? value.from === value.to
-              ? `仅 ${value.from} 月`
-              : `${value.from} 月 → ${value.to} 月${value.from > value.to ? '（跨年）' : ''}`
-            : '未设置'}
-        </span>
+        <span className="small muted">{active.length > 0 ? formatMonthSet(active) : '未设置'}</span>
         <span className="spacer" />
-        {value ? (
+        <Button
+          size="small"
+          variant="ghost"
+          onClick={() => onChange(Array.from({ length: 12 }, (_, i) => i + 1))}
+          disabled={disabled}
+          title="选择全部 12 个月"
+        >
+          全年
+        </Button>
+        {active.length > 0 ? (
           <Button size="small" variant="ghost" onClick={() => onChange(null)} disabled={disabled}>
             清除
           </Button>

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 演示数据：一组有代表性的物种与植株，用于快速体验 / 截图 / 联调。
  *
  * 覆盖了各种字段类型（月份区间、多选、布尔、数字、安全字段），
@@ -26,7 +26,7 @@ const DEMO_SPECIES: DemosSpecies[] = [
       growth_habit: '灌木',
       mature_height: 120,
       lifespan: '多年生',
-      bloom_months: { from: 4, to: 10 },
+      bloom_months: [4, 5, 6, 9, 10, 11], // 主花期 + 秋季复花，盛夏歇息
       bloom_duration: 7,
       needs_vernalization: false,
       fragrance: '浓香',
@@ -34,7 +34,7 @@ const DEMO_SPECIES: DemosSpecies[] = [
       light_hours: { min: 6, max: 8 },
       heat_tolerance: 38,
       cold_hardiness: -15,
-      dormancy_months: { from: 12, to: 2 },
+      dormancy_months: [12, 1, 2],
       water_need: '中等',
       toxicity_level: '无毒',
       pet_safe: true,
@@ -83,7 +83,7 @@ const DEMO_SPECIES: DemosSpecies[] = [
       growth_habit: '灌木',
       mature_height: 150,
       lifespan: '多年生',
-      bloom_months: { from: 5, to: 8 },
+      bloom_months: [5, 6, 7, 8],
       bloom_duration: 30,
       needs_vernalization: true,
       fragrance: '淡香',
@@ -113,7 +113,7 @@ const DEMO_SPECIES: DemosSpecies[] = [
       growth_habit: '多肉',
       mature_height: 8,
       lifespan: '多年生',
-      bloom_months: { from: 4, to: 6 },
+      bloom_months: [4, 5, 6],
       needs_vernalization: false,
       fragrance: '无香',
       light_requirement: ['半阴', '明亮散射光'],
@@ -121,7 +121,7 @@ const DEMO_SPECIES: DemosSpecies[] = [
       heat_tolerance: 30,
       cold_hardiness: 5,
       water_need: '少',
-      dormancy_months: { from: 7, to: 8 },
+      dormancy_months: [7, 8], // 夏季休眠
       toxicity_level: '无毒',
       pet_safe: true,
       benefits: '株型小巧，叶片透亮如玉石，适合窗台小盆栽培。',
@@ -139,7 +139,7 @@ const DEMO_SPECIES: DemosSpecies[] = [
       growth_habit: '灌木',
       mature_height: 90,
       lifespan: '多年生',
-      bloom_months: { from: 3, to: 5 },
+      bloom_months: [3, 4, 5],
       bloom_duration: 20,
       fragrance: '浓香',
       light_requirement: ['全日照'],

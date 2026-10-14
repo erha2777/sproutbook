@@ -52,8 +52,13 @@ function buildFieldSpec(fields: FieldDefinition[]): string {
     const parts = [`- ${f.key}（${f.label}）: 类型 ${f.type}`]
     if (f.unit) parts.push(`单位 ${f.unit}`)
     if (f.options && f.options.length) parts.push(`可选值 [${f.options.join(' / ')}]`)
-    if (f.type === 'month_range') parts.push('值形如 {"from":3,"to":5}，跨年如 {"from":11,"to":2}')
+    if (f.type === 'month_range') {
+      // 明确要求数组：一年开两次的植物很多（月季 4~6 月 + 9~11 月），
+      // 若提示词给的是单区间写法，模型就只能硬塞成一段，丢掉真实信息。
+      parts.push('值是 1~12 的月份数组，可以有**多段不相连**，例如 [3,4,5,9,10,11]；跨年写成 [11,12,1,2]')
+    }
     if (f.type === 'hours_range') parts.push('值形如 {"min":6,"max":8}')
+    if (f.type === 'relation') parts.push('值是目标记录的 ID 数字；不确定就留空，不要编造')
     if (f.type === 'tags' || f.type === 'multiselect') parts.push('值是字符串数组')
     if (f.type === 'bool') parts.push('值是 true 或 false')
     if (f.type === 'number') parts.push('值是数字，不要带单位')

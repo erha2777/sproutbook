@@ -64,7 +64,10 @@ export function migrate(db: Db, options: MigrateOptions = {}): MigrationReport {
   try {
     for (const m of pending) {
       db.transaction(() => {
-        db.exec(m.sql)
+        // 结构迁移写 SQL；需要改数据的迁移（比如值形状变化）用 run 回调。
+        // 两者都在同一个事务里，失败即整体回滚。
+        if (m.run) m.run(db)
+        if (m.sql) db.exec(m.sql)
         db.run('INSERT INTO schema_migrations (version, name) VALUES (?, ?)', m.version, m.name)
       })
       applied.push({ version: m.version, name: m.name })

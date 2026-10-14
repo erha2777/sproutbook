@@ -6,8 +6,9 @@
  */
 
 import type { ReactNode } from 'react'
-import type { FieldDefinition, FieldValue, MonthRange, NumberRange } from '@core/types'
-import { CheckChips, Checkbox, Field, MonthRangeInput, NumberRangeInput, SelectInput, TagInput, TextArea, TextInput, Badge, cx } from './ui'
+import type { FieldDefinition, FieldValue, NumberRange } from '@core/types'
+import { normalizeMonths } from '@core/fieldTypes'
+import { CheckChips, Checkbox, Field, MonthSetInput, NumberRangeInput, SelectInput, TagInput, TextArea, TextInput, Badge, cx } from './ui'
 
 export type FormValues = Record<string, unknown>
 
@@ -121,8 +122,9 @@ function FieldValueInput({ def, value, onChange, disabled, invalid, context }: F
 
     case 'month_range':
       return (
-        <MonthRangeInput
-          value={isMonthRange(value) ? value : null}
+        <MonthSetInput
+          // 老数据可能是 {from,to}，normalizeMonths 一并接受
+          value={normalizeMonths(value)}
           onChange={(v) => onChange(v)}
           disabled={disabled}
         />
@@ -169,10 +171,6 @@ function FieldValueInput({ def, value, onChange, disabled, invalid, context }: F
         />
       )
   }
-}
-
-function isMonthRange(value: unknown): value is MonthRange {
-  return Boolean(value) && typeof value === 'object' && 'from' in (value as object) && 'to' in (value as object)
 }
 
 function isNumberRange(value: unknown): value is NumberRange {

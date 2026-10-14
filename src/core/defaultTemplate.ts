@@ -94,7 +94,7 @@ const speciesFields: Seed[] = [
     label: '开花时期',
     groupName: '习性',
     type: 'month_range',
-    helpText: '可跨年，例如 11 ~ 2 月。'
+    helpText: '可以选多段。一年开两次的（如月季 4~6 月 + 9~11 月）就把两段都点上；跨年也可以，如 11 月~次年 2 月。'
   },
   {
     key: 'bloom_duration',
@@ -154,7 +154,8 @@ const speciesFields: Seed[] = [
     key: 'dormancy_months',
     label: '休眠期',
     groupName: '习性',
-    type: 'month_range'
+    type: 'month_range',
+    helpText: '同样可以选多段：夏天和冬天各休眠一次的植物（如某些多肉、球根）就点上两段。'
   },
   {
     key: 'water_need',
