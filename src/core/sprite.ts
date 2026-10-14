@@ -47,6 +47,52 @@ export interface SpriteOptions {
 }
 
 // ---------------------------------------------------------------------------
+// 花色
+// ---------------------------------------------------------------------------
+
+/**
+ * 物种模板里的「花色」可选值。
+ *
+ * 用中文色名而不是让人填十六进制：养花的人说「粉色」，
+ * 不会说「#e86a8a」。模板的 select 字段和这里的映射共用同一份列表，
+ * 加一个颜色只要改这里。
+ */
+export const FLOWER_COLOR_OPTIONS = ['红', '粉', '黄', '白', '紫', '蓝', '橙', '绿', '复色'] as const
+
+export const FLOWER_COLOR_HEX: Record<string, string> = {
+  红: '#d84040',
+  粉: '#e86a8a',
+  黄: '#f0c040',
+  白: '#f2ede0',
+  紫: '#a060d0',
+  蓝: '#7090e0',
+  橙: '#e08040',
+  绿: '#88c060',
+  复色: '#d860a8'
+}
+
+/**
+ * 取一个物种该用什么花色。
+ *
+ * 优先用物种属性里的「花色」；没填就按物种名散列取一个 ——
+ * 整片花园用同一种花太死板，散列至少保证同名同色、
+ * 不会每次刷新都换。返回值总是合法的十六进制。
+ */
+export function flowerColorForSpecies(attrs: Record<string, unknown> | null | undefined, fallbackName?: string | null): string {
+  const raw = attrs?.flower_color
+  if (typeof raw === 'string') {
+    const key = raw.trim()
+    if (FLOWER_COLOR_HEX[key]) return FLOWER_COLOR_HEX[key]
+    // 直接填了十六进制也认
+    if (/^#[0-9a-fA-F]{6}$/.test(key)) return key.toLowerCase()
+  }
+  const s = fallbackName ?? ''
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return FLOWER_COLOR_OPTIONS.map((k) => FLOWER_COLOR_HEX[k])[h % FLOWER_COLOR_OPTIONS.length]
+}
+
+// ---------------------------------------------------------------------------
 // 调色板
 // ---------------------------------------------------------------------------
 

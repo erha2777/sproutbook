@@ -23,6 +23,7 @@
  */
 
 import type { NewFieldDefinition } from './types'
+import { FLOWER_COLOR_OPTIONS } from './sprite'
 
 type Seed = Omit<NewFieldDefinition, 'ownerKind'>
 
@@ -103,6 +104,15 @@ const speciesFields: Seed[] = [
     type: 'number',
     unit: '天',
     helpText: '单朵或单次开花持续多少天。'
+  },
+  {
+    key: 'flower_color',
+    label: '花色',
+    groupName: '形态',
+    type: 'select',
+    // 用中文色名而不是让人填十六进制：养花的人说「粉色」，不会说「#e86a8a」
+    options: [...FLOWER_COLOR_OPTIONS],
+    helpText: '决定花园视图里画成什么颜色。留空则按物种名取一个固定颜色。'
   },
   {
     key: 'needs_vernalization',

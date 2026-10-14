@@ -1104,6 +1104,41 @@ img {
 /* ---------- 花园场景 ---------- */
 
 /*
+ * 视图切换。做成连体的分段控件，选中态是「你在这里」而不是「可点的按钮」——
+ * 用主操作色（绿色）会让用户以为点了会发生什么，而已经在那个视图时
+ * 点下去毫无反应，看起来就像坏了。
+ */
+.view-tabs {
+  display: flex;
+}
+.view-tab {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 4px 12px;
+  cursor: pointer;
+  border: 2px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+  color: var(--ink-soft);
+}
+.view-tab + .view-tab {
+  border-left: none;
+}
+.view-tab:hover {
+  background: #fff8dc;
+  color: var(--ink);
+}
+.view-tab.on {
+  background: #dff0d8;
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 2px #2f6b26;
+  cursor: default;
+}
+.view-tab.on::before {
+  content: '✓ ';
+}
+
+/*
  * 地块：每株一格。草地感靠渐变 + 泥土色的边框，
  * 和整体木框风格一致，不至于像贴了张别处的图。
  */

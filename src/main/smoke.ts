@@ -36,7 +36,18 @@ import {
   growthLook
 } from '../core/growth'
 import type { GrowthStage } from '../core/growth'
-import { SPRITE_HABITS, SPRITE_SIZE, buildPlantSprite, countPixels, mixColor, normalizeHabit } from '../core/sprite'
+import {
+  FLOWER_COLOR_HEX,
+  FLOWER_COLOR_OPTIONS,
+  SPRITE_HABITS,
+  SPRITE_SIZE,
+  buildPlantSprite,
+  countPixels,
+  flowerColorForSpecies,
+  mixColor,
+  normalizeHabit
+} from '../core/sprite'
+import { defaultFieldDefinitions } from '../core/defaultTemplate'
 import {
   addDays,
   compareTasks,
@@ -1496,6 +1507,28 @@ export function runSmoke(outFile: string): number {
 
       check('花色跟着参数走', buildPlantSprite({ habit: '草本', look: growthLook('blooming'), flowerColor: '#123456' }).palette.f === '#123456')
       check('不传花色有默认值', buildPlantSprite({ habit: '草本', look: growthLook('blooming') }).palette.f.length === 7)
+
+      // ---- 花色字段 ----
+      check('每个花色选项都有对应颜色', FLOWER_COLOR_OPTIONS.every((k) => /^#[0-9a-f]{6}$/.test(FLOWER_COLOR_HEX[k] ?? '')))
+      check('物种填了花色就用真的', flowerColorForSpecies({ flower_color: '紫' }) === FLOWER_COLOR_HEX.紫)
+      check('花色值带空格也认', flowerColorForSpecies({ flower_color: '  黄  ' }) === FLOWER_COLOR_HEX.黄)
+      check('直接填十六进制也认', flowerColorForSpecies({ flower_color: '#123456' }) === '#123456')
+      check('十六进制大小写归一', flowerColorForSpecies({ flower_color: '#AABBCC' }) === '#aabbcc')
+      check('填了不认识的颜色则退回散列', /^#[0-9a-f]{6}$/.test(flowerColorForSpecies({ flower_color: '蓝紫色' }, '月季')))
+      check('没填花色时按物种名散列', flowerColorForSpecies({}, '月季') === flowerColorForSpecies({}, '月季'))
+      check('不同物种名大概率不同色', flowerColorForSpecies({}, '月季') !== flowerColorForSpecies({}, '绿萝'), `${flowerColorForSpecies({}, '月季')} vs ${flowerColorForSpecies({}, '绿萝')}`)
+      check('没有物种名也不报错', /^#[0-9a-f]{6}$/.test(flowerColorForSpecies(null, null)))
+      check('散列结果一定是合法颜色', ['', 'a', '月季', 'Hippeastrum'].every((n) => /^#[0-9a-f]{6}$/.test(flowerColorForSpecies({}, n))))
+      {
+        // 模板字段和颜色映射必须对得上，否则选了颜色画不出来
+        const defs = defaultFieldDefinitions()
+        const field = defs.find((d) => d.key === 'flower_color')
+        check('物种模板里有花色字段', field !== undefined)
+        check('花色字段的选项和颜色表一一对应', (field?.options ?? []).join(',') === FLOWER_COLOR_OPTIONS.join(','), (field?.options ?? []).join(','))
+        // 加了字段不能破坏模板的既有约束
+        const keys = defs.map((d) => d.key)
+        check('模板字段没有重名', new Set(keys).size === keys.length)
+      }
     }
 
     // --- CSV 编解码（导出导入的地基，必须精确）---

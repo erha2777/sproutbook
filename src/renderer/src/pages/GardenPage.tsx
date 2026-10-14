@@ -21,27 +21,13 @@ import {
   readMonthSet
 } from '@core/growth'
 import { CARE_ACTION_ICONS, CARE_PHASE_ICONS, CARE_PHASE_LABELS, dueDescription, urgencyOf } from '@core/care'
+import { flowerColorForSpecies } from '@core/sprite'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
 import { todayIso } from '@core/care'
 import { PlantSprite } from '../components/PlantSprite'
 import { Badge, Button, EmptyState, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 import { PlantEditorModal } from './PlantEditor'
 
-/**
- * 花色按物种名散列取一个。
- *
- * 物种模板里目前没有「花色」字段，但整片花园用同一种花太死板。
- * 散列保证同名同色、不会每次刷新都变。以后加了花色字段，
- * 这里换成读字段即可。
- */
-const FLOWER_COLORS = ['#e86a8a', '#f0c040', '#c060d0', '#e07050', '#80b0f0', '#f5f0e0', '#d04040', '#60c0a0', '#a0e060']
-
-export function flowerColorFor(name: string | null | undefined): string {
-  const s = name ?? ''
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
-  return FLOWER_COLORS[h % FLOWER_COLORS.length]
-}
 
 export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactNode {
   const toast = useToast()
@@ -125,7 +111,9 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
       return {
         habit: typeof habitRaw === 'string' ? habitRaw : null,
         bloomMonths: readMonthSet(attrs.bloom_months),
-        dormancyMonths: readMonthSet(attrs.dormancy_months)
+        dormancyMonths: readMonthSet(attrs.dormancy_months),
+        // 物种填了花色就用真的，没填退回按名字散列
+        flowerColor: flowerColorForSpecies(attrs as Record<string, unknown>, plant.species?.commonName)
       }
     },
     [speciesById]
@@ -178,13 +166,29 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
               <SelectInput value={envId} onChange={(v) => patch({ envId: v })} options={envOptions} />
             </div>
             <span className="spacer" />
-            {/* 两种视图：花园看状态，列表做管理 */}
-            <Button size="small" variant={view === 'scene' ? 'primary' : 'ghost'} onClick={() => setView('scene')}>
-              🌿 花园
-            </Button>
-            <Button size="small" variant={view === 'list' ? 'primary' : 'ghost'} onClick={() => setView('list')}>
-              ▦ 列表
-            </Button>
+            {/*
+              视图切换用分段控件，而不是两个主按钮。
+              原来激活的那个用的是主操作色（和「＋新增植株」一样的绿），
+              读起来像「点我会发生什么」；于是「已经在这个视图」时点下去
+              毫无反应，看起来就像坏了。现在选中态是「你在这里」的样子。
+            */}
+            <span className="small muted">视图</span>
+            <div className="view-tabs">
+              <button
+                className={`view-tab${view === 'scene' ? ' on' : ''}`}
+                onClick={() => setView('scene')}
+                title="用像素图看每株长到哪一步"
+              >
+                🌿 花园
+              </button>
+              <button
+                className={`view-tab${view === 'list' ? ' on' : ''}`}
+                onClick={() => setView('list')}
+                title="搜索、筛选、批量管理"
+              >
+                ▦ 列表
+              </button>
+            </div>
             <Button variant="primary" onClick={() => setEditing('new')}>
               ＋ 新增植株
             </Button>
@@ -245,7 +249,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                     <PlantSprite
                       habit={g.habit}
                       look={growthLook(result.stage)}
-                      flowerColor={flowerColorFor(plant.species?.commonName)}
+                      flowerColor={g.flowerColor}
                       size={58}
                     />
                     <div className="plot-name ellipsis">{plant.nickname}</div>
@@ -300,7 +304,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                     <PlantSprite
                       habit={g.habit}
                       look={growthLook(result.stage)}
-                      flowerColor={flowerColorFor(selectedPlant.species?.commonName)}
+                      flowerColor={g.flowerColor}
                       size={96}
                     />
                     <div style={{ flex: 1, minWidth: 0 }}>
