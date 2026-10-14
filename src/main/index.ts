@@ -234,6 +234,15 @@ function createWindow(): void {
   // 之前 CarePage 的备注框每敲一个字符就被卸载重建、焦点丢失，
   // 截图完全看不出来，只有真的敲进去才能验证。
   const shotType = isDev ? process.argv.find((a) => a.startsWith('--screenshot-type=')) : undefined
+  /*
+   * 支持 --screenshot-wait=<毫秒>：多等一会儿再截。
+   *
+   * 加这个是因为页面上的**异步内容**（天气要联网取、列表要读库）常常在默认
+   * 等待时间内还没渲染完，截出来是「正在查看…」—— 于是"验证"截了个寂寞。
+   * 宁可多等，也别拍到半成品然后把它当成结果。
+   */
+  const shotWaitArg = isDev ? process.argv.find((a) => a.startsWith('--screenshot-wait=')) : undefined
+  const shotWait = shotWaitArg ? Number(shotWaitArg.slice('--screenshot-wait='.length)) : 1800
 
   if (shot) {
     mainWindow.webContents.once('did-finish-load', () => {
@@ -319,7 +328,7 @@ function createWindow(): void {
             app.exit(3)
           }
         })()
-      }, 1800)
+      }, Number.isFinite(shotWait) && shotWait > 0 ? shotWait : 1800)
     })
   }
 }

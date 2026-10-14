@@ -483,8 +483,16 @@ export interface WeatherRiskItem {
 }
 
 export interface WeatherWarningResult {
-  /** 这次实际用的是哪个数据源。**不能写死** —— 配了和风就不是 Open-Meteo 了 */
+  /**
+   * 这次**实际**用的是哪个数据源。
+   * **不能写死，也不能从配置推导** —— 和风失败时会静默退回 Open-Meteo。
+   */
   providerLabel: string
+  /**
+   * 换源的原因。没换源时为 null。
+   * 换源了就要在界面上说出来，否则用户会拿「已到区县」去信一份市级网格预报。
+   */
+  fallbackReason: string | null
   /** 今天向数据源发了几次请求 */
   requestsToday: number
   /** 有没有养护位置填了城市。false = 完全没联网 */

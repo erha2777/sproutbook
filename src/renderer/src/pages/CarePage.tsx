@@ -164,12 +164,26 @@ function WeatherPanel({
         <Button size="small" onClick={onRefresh} disabled={busy}>
           {busy ? '刷新中…' : '重新获取'}
         </Button>
-        {/* 这里**不能写死**，配了和风就不是 Open-Meteo 了 */}
+        {/*
+          这里**不能写死，也不能从配置推导** ——
+          和风失败时会静默退回 Open-Meteo，providerLabel 要用实际来源。
+        */}
         <span className="small muted">
           {result.providerLabel ? `数据来自 ${result.providerLabel}` : '天气数据'}，只在打开这一页时请求一次
           {result.requestsToday > 0 ? `　·　今天已请求 ${result.requestsToday} 次` : ''}
         </span>
       </div>
+      {/*
+        换源了就要说出来。
+        不然用户看到「数据来自和风天气 · 已到区县」，会拿它去信一份其实是
+        Open-Meteo 市级网格的预报 —— 而设置页恰好教人「填经纬度会更准」，
+        正好触发这条假来源。
+      */}
+      {result.fallbackReason ? (
+        <div className="small" style={{ marginTop: 4, color: '#8a6a3a' }}>
+          ⚠ 和风天气这次没用上（{result.fallbackReason}），这份预报实际来自 {result.providerLabel}，精度按市级算。
+        </div>
+      ) : null}
     </div>
   )
 }
