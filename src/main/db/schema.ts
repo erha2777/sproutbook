@@ -428,6 +428,13 @@ function migratePotSize(db: Db): void {
     const num = Number(String(raw).replace(/[^\d.]/g, ''))
     if (!Number.isFinite(num) || num <= 0) continue
     if (attrs.pot_size_cm === undefined) attrs.pot_size_cm = Math.round(num)
+    /*
+     * 旧的 pot_size 键**故意留着**。
+     *
+     * 旧字段是归档不是删除 —— 用户在模板页能把它恢复。要是这里把值抹掉，
+     * 恢复之后就是个空字段，那是数据丢失。
+     * 活动模板用的是 pot_size_cm，所以这个残留键既不会出现在表单上，也不会被导出。
+     */
     db.run('UPDATE plants SET attributes_json = ? WHERE id = ?', JSON.stringify(attrs), row.id)
   }
 

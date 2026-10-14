@@ -543,7 +543,7 @@ export function runSmoke(outFile: string): number {
       const legacySpeciesId = Number(oldDb.scalar<number>('SELECT id FROM species LIMIT 1'))
       oldDb.run(
         `INSERT INTO plants (species_id, nickname, env_id, status, attributes_json)
-         VALUES (?, '老植株', NULL, 'dormant', '{}')`,
+         VALUES (?, '老植株', NULL, 'dormant', '{"pot_size":"25cm"}')`,
         legacySpeciesId
       )
 
@@ -578,6 +578,46 @@ export function runSmoke(outFile: string): number {
         JSON.stringify(parsedMonths)
       )
       check('v3 迁移不影响其它字段', (JSON.parse(migratedAttrs ?? '{}') as Record<string, unknown>).pot_size === '20cm')
+
+      /*
+       * v7 的数据迁移：旧的文本「盆径」值要搬到新数字字段里，旧字段要归档。
+       *
+       * 这段是补写的 —— 第一版只把迁移代码写出来就宣称做完了，
+       * 但演示库是新模板建的，pot_size 根本不存在，等于从没跑过这条路径。
+       */
+      {
+        const plantAttrs = JSON.parse(
+          oldDb.get<{ attributes_json: string }>('SELECT attributes_json FROM plants LIMIT 1')?.attributes_json ?? '{}'
+        ) as Record<string, unknown>
+        check('v7 把旧的文本盆径搬成了数字', plantAttrs.pot_size_cm === 25, JSON.stringify(plantAttrs))
+        /*
+         * 旧的键**故意保留**：旧字段是归档不是删除，用户在模板页能把它恢复。
+         * 要是把值抹掉，恢复之后就是个空字段 —— 那是数据丢失。
+         * 活动模板用的是 pot_size_cm，所以这个残留键不会被导出，也不会出现在表单上。
+         */
+        check('v7 保留旧键，以便归档字段被恢复时值还在', plantAttrs.pot_size === '25cm', JSON.stringify(plantAttrs))
+
+        const oldField = oldDb.get<{ archived_at: string | null }>(
+          "SELECT archived_at FROM field_definitions WHERE owner_kind = 'plant' AND key = 'pot_size'"
+        )
+        check('v7 归档了旧的文本盆径字段（否则会看到两个「盆径」）', oldField?.archived_at !== null && oldField !== undefined)
+
+        // 补种模板后新字段才存在，且带上了显示条件
+        seedFieldDefinitions(oldDb)
+        const newField = oldDb.get<{ type: string; unit: string | null; visible_when_json: string | null }>(
+          "SELECT type, unit, visible_when_json FROM field_definitions WHERE owner_kind = 'plant' AND key = 'pot_size_cm'"
+        )
+        check('补种后有了数字版盆径', newField?.type === 'number' && newField?.unit === 'cm', JSON.stringify(newField))
+        check(
+          '数字版盆径带上了「仅盆栽时显示」',
+          newField?.visible_when_json === '{"key":"cultivation","in":["盆栽"]}',
+          newField?.visible_when_json ?? 'null'
+        )
+        // 归档的字段不该出现在活动模板里
+        const activeKeys = loadFieldDefinitions(oldDb, 'plant').map((d) => d.key)
+        check('活动模板里没有旧的文本盆径', !activeKeys.includes('pot_size'), activeKeys.join(','))
+        check('活动模板里有数字版盆径', activeKeys.includes('pot_size_cm'))
+      }
 
       // 升级后再补种模板：老库里缺的 relation 字段应该被补上
       seedFieldDefinitions(oldDb)
