@@ -92,6 +92,23 @@ function Shell(): ReactNode {
   /** 侧栏角标：已过期 + 该做了的养护任务数 */
   const [carePending, setCarePending] = useState(0)
 
+  /**
+   * 重新取角标数量。
+   *
+   * 这个数字必须能被刷新 —— 第一版只在挂载时取一次，于是打完勾、
+   * 页面上明明显示「逾期 0、该做 0」，侧栏那个红点还挂着，看着像没生效。
+   * 现在两处触发：路由切换时（万一别处改动了数据），
+   * 以及养护计划页每次操作之后（通过 onCareChanged 回调）。
+   */
+  const refreshCareBadge = useCallback(async () => {
+    try {
+      const overview = await window.api.care.overview(new Date().getFullYear())
+      setCarePending(overview.overdue + overview.due)
+    } catch {
+      // 养护表还没就绪时静默跳过，不因为角标影响启动
+    }
+  }, [])
+
   useEffect(() => {
     void (async () => {
       try {
@@ -99,14 +116,12 @@ function Shell(): ReactNode {
       } catch {
         // 拿不到就不显示版本号，不影响使用
       }
-      try {
-        const overview = await window.api.care.overview(new Date().getFullYear())
-        setCarePending(overview.overdue + overview.due)
-      } catch {
-        // 养护表还没就绪时静默跳过，不因为角标影响启动
-      }
     })()
   }, [])
+
+  useEffect(() => {
+    void refreshCareBadge()
+  }, [refreshCareBadge, route.name])
 
   useEffect(() => {
     void (async () => {
@@ -284,7 +299,7 @@ function Shell(): ReactNode {
           {route.name === 'templates' ? <TemplatesPage /> : null}
           {route.name === 'settings' ? <SettingsPage /> : null}
 
-          {route.name === 'plans' ? <CarePage /> : null}
+          {route.name === 'plans' ? <CarePage onCareChanged={refreshCareBadge} /> : null}
 
           {route.name === 'recipes' ? <RecipesPage /> : null}
           </PageErrorBoundary>

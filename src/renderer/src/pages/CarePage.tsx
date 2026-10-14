@@ -42,7 +42,7 @@ function monthBounds(year: number, month: number): { from: string; to: string } 
   return { from: `${year}-${mm}-01`, to: `${year}-${mm}-${String(last).padStart(2, '0')}` }
 }
 
-export function CarePage(): ReactNode {
+export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): ReactNode {
   const toast = useToast()
   const today = todayIso()
   const now = new Date()
@@ -93,12 +93,15 @@ export function CarePage(): ReactNode {
         }))
       )
       setSpeciesNames(speciesList.items.map((s) => s.commonName))
+      // 侧栏角标和这里的统计是同一份数据，一起刷新才不会出现
+      //「页面上写着该做 0、侧栏还挂着红点」这种自相矛盾
+      onCareChanged?.()
     } catch (error) {
       toast.push(`加载养护计划失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     } finally {
       setLoading(false)
     }
-  }, [bounds.from, bounds.to, plantFilter, year, today, toast])
+  }, [bounds.from, bounds.to, plantFilter, year, today, toast, onCareChanged])
 
   useEffect(() => {
     void reload()

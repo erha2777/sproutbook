@@ -920,6 +920,28 @@ export function runSmoke(outFile: string): number {
       check('概览：逾期数不为负', overview.overdue >= 0)
       check('概览：无任务的植物数可统计', overview.plantsWithoutTasks >= 0)
 
+      // 侧栏角标取的是 overview.overdue + overview.due —— 页面上显示的
+      // 「逾期/该做」也是这两个数。同源才不会出现「页面写着 0、侧栏还挂红点」
+      // （那正是第一版的 bug：角标只在挂载时取一次，打完勾不刷新）。
+      {
+        const before = careOverview(db, year, '2026-06-11')
+        const victim = listCareTasks(db, { plantId: carePlantId, status: 'open' }).find(
+          (t) => urgencyOf(t, '2026-06-11') === 'due' || urgencyOf(t, '2026-06-11') === 'overdue'
+        )
+        if (victim) {
+          completeCareTask(db, victim.id, '角标测试')
+          const after = careOverview(db, year, '2026-06-11')
+          check(
+            '完成任务后概览的「该做+逾期」确实减少（角标依赖这个不变量）',
+            after.overdue + after.due < before.overdue + before.due,
+            `${before.overdue + before.due} -> ${after.overdue + after.due}`
+          )
+          reopenCareTask(db, victim.id)
+        } else {
+          check('完成任务后概览的「该做+逾期」确实减少（角标依赖这个不变量）', true, '当前没有到期的任务，跳过')
+        }
+      }
+
       // ---- 全量生成 ----
       const all = generateTasksForAll(db, year, { today: FIXED_TODAY })
       check('可批量生成全部植株的计划', all.plants >= 1, JSON.stringify(all))
