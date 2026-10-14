@@ -1511,3 +1511,62 @@ img {
   height: 100%;
   background: var(--green);
 }
+
+/* ---------------------------------------------------------------------------
+   天气预警
+   ---------------------------------------------------------------------------
+   严重程度用左侧色条 + 徽章双重表达：只靠颜色的话，
+   色觉障碍用户分不出「留意」和「紧急」。
+--------------------------------------------------------------------------- */
+
+.weather-risks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weather-risk {
+  border: 1px solid #c8a878;
+  border-left-width: 4px;
+  border-radius: 3px;
+  padding: 6px 8px;
+  background: #fdf6e0;
+}
+
+.weather-risk.sev-watch {
+  border-left-color: #7ba05b;
+}
+.weather-risk.sev-warn {
+  border-left-color: #d08a2a;
+}
+.weather-risk.sev-severe {
+  border-left-color: #b84a3a;
+  background: #fdeee8;
+}
+
+.weather-risk-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.weather-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fffdf5;
+  white-space: nowrap;
+}
+
+.weather-badge.sev-watch {
+  background: #6b8f4a;
+}
+.weather-badge.sev-warn {
+  background: #c07a1e;
+}
+.weather-badge.sev-severe {
+  background: #a83c2c;
+}

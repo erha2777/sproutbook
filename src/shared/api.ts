@@ -238,6 +238,17 @@ export interface SproutbookApi {
     applyImport(token: string, options?: TransferImportOptions): Promise<TransferResult>
     discardImport(token: string): Promise<boolean>
   }
+  /**
+   * 天气预警。
+   *
+   * **没有养护位置填了城市时，一个字节都不会发出去** ——
+   * assess 会直接返回 configured: false，界面据此说明情况。
+   */
+  weather: {
+    assess(force?: boolean): Promise<WeatherWarningResult>
+    clearCache(): Promise<boolean>
+  }
+
   care: {
     rules(options?: { speciesKey?: string; hemisphere?: CareHemisphere }): Promise<CareRule[]>
     saveRule(input: CareRuleInput): Promise<CareRule>
@@ -386,6 +397,46 @@ export interface TransferResult {
   failed: number
   created: string[]
   errors: TransferIssue[]
+}
+
+/**
+ * 天气预警结果。
+ *
+ * 刻意在 shared 里重新声明而不是从 main/services 导入 ——
+ * renderer 引用主进程模块会把 fs / node:sqlite 一起拖进前端打包。
+ * 两边形状必须一致，所以自检里有一条专门核对字段。
+ */
+export interface WeatherPlace {
+  name: string
+  label: string
+  days: Array<{ date: string; tempMin: number; tempMax: number }>
+}
+
+export interface WeatherRiskItem {
+  kind: 'frost' | 'heat'
+  plantId: number
+  plantName: string
+  speciesName: string | null
+  date: string
+  forecastTemp: number
+  tolerance: number
+  margin: number
+  severity: 'watch' | 'warn' | 'severe'
+  message: string
+}
+
+export interface WeatherWarningResult {
+  /** 有没有养护位置填了城市。false = 完全没联网 */
+  configured: boolean
+  places: WeatherPlace[]
+  /** 收拢后的风险，每株每种一条 */
+  risks: WeatherRiskItem[]
+  /** 逐天明细 */
+  daily: WeatherRiskItem[]
+  unknownCold: string[]
+  unknownHeat: string[]
+  fetchedAt: string | null
+  error: string | null
 }
 
 export type { Plant, PlantListItem as PlantCard }

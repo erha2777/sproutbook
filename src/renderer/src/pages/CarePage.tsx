@@ -10,7 +10,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareLog, CarePhase, CareTask, Material, RecipeListItem } from '@core/types'
-import type { CareOverview, CareTaskListItem, PlantPhaseInfo } from '@shared/api'
+import type { CareOverview, CareTaskListItem, PlantPhaseInfo, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
+import { SEVERITY_LABELS } from '@core/weather'
 import {
   CARE_ACTION_ICONS,
   CARE_ACTION_LABELS,
@@ -32,6 +33,95 @@ import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
 import { CareRuleManager } from '../components/CareRuleManager'
 import { CareCalendar } from '../components/CareCalendar'
+
+/**
+ * 天气预警面板。
+ *
+ * 四种状态各有各的话要说，尤其是「没配置」那一种 ——
+ * 用户需要知道**不填城市就不会联网**，而不是以为功能坏了。
+ *
+ * 定义在模块层而不是 CarePage 内部：组件内定义会让每次渲染产生新的函数标识，
+ * React 视为换了类型就整个重挂子树（之前笔记输入框打不进字就是这个原因）。
+ */
+function WeatherPanel({
+  result,
+  busy,
+  onRefresh,
+  onCreateTask
+}: {
+  result: WeatherWarningResult | null
+  busy: boolean
+  onRefresh: () => void
+  onCreateTask: (risk: WeatherRiskItem) => void | Promise<void>
+}): ReactNode {
+  if (busy && !result) return <div className="small muted">正在查看天气…</div>
+  if (!result) return <div className="small muted">暂时拿不到天气数据。</div>
+
+  if (!result.configured) {
+    return (
+      <div className="small muted">
+        还没有养护位置填过城市，所以<b>没有联网</b>。
+        到「设置 → 养护位置」给露天的位置填上城市（比如「某市」），
+        这里就会按那儿的实际天气提醒你防冻、防暑。
+        <div style={{ marginTop: 4 }}>
+          判断依据是每个物种的「耐寒 / 耐热」温度，以及这个位置能不能防冻、能不能加温。
+        </div>
+      </div>
+    )
+  }
+
+  const risks = result.risks
+  const nothing = risks.length === 0
+
+  return (
+    <div>
+      {result.error ? <div className="small muted">⚠ {result.error}（下面可能是缓存的数据）</div> : null}
+
+      {nothing ? (
+        <div className="small muted">
+          未来几天{result.places.length > 0 ? `（${result.places.map((p) => p.label || p.name).join('、')}）` : ''}
+          没有超出任何植株的承受范围。
+        </div>
+      ) : (
+        <div className="weather-risks">
+          {risks.map((r) => (
+            <div key={`${r.kind}-${r.plantId}`} className={`weather-risk sev-${r.severity}`}>
+              <div className="weather-risk-head">
+                <span className={`weather-badge sev-${r.severity}`}>
+                  {r.kind === 'frost' ? '❄' : '☀'} {SEVERITY_LABELS[r.severity]}
+                </span>
+                <b>{r.plantName}</b>
+                <span className="muted small">{r.date}</span>
+                <span style={{ flex: 1 }} />
+                <Button size="small" onClick={() => void onCreateTask(r)}>
+                  加进养护计划
+                </Button>
+              </div>
+              <div className="small">{r.message}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {result.unknownCold.length > 0 ? (
+        <div className="small muted" style={{ marginTop: 6 }}>
+          另有 {result.unknownCold.length} 株的物种没填「耐寒」温度，判断不了：
+          {result.unknownCold.join('、')}
+        </div>
+      ) : null}
+
+      <div className="row tight" style={{ marginTop: 8 }}>
+        <Button size="small" onClick={onRefresh} disabled={busy}>
+          {busy ? '刷新中…' : '重新获取'}
+        </Button>
+        <span className="small muted">
+          数据来自 Open-Meteo，只在打开这一页时请求一次
+        </span>
+      </div>
+    </div>
+  )
+}
+
 /**
  * 任务卡片上显示绑定的配方。
  *
@@ -92,6 +182,15 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   /** 任务上要显示绑定的配方，所以把配方与材料一起取回来（都是几十条量级） */
   const [recipes, setRecipes] = useState<RecipeListItem[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
+  /**
+   * 天气预警。
+   *
+   * 这是应用里唯一会往外发请求的功能，所以刻意做成**按需拉取**：
+   * 只有打开养护计划页时才问一次，而且后端在没有养护位置填城市时
+   * 会直接返回 configured:false —— 不填城市就是完全离线。
+   */
+  const [weather, setWeather] = useState<WeatherWarningResult | null>(null)
+  const [weatherBusy, setWeatherBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [editing, setEditing] = useState<CareTask | 'new' | null>(null)
@@ -108,6 +207,61 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   const [phaseNote, setPhaseNote] = useState('')
 
   const bounds = useMemo(() => monthBounds(year, month), [year, month])
+
+  /**
+   * 取天气预警。
+   *
+   * 刻意放在 reload 之外：任务刷新频繁（完成一条就刷），
+   * 天气没必要跟着刷 —— 后端有 3 小时缓存兜底，但连请求都不该发。
+   */
+  const loadWeather = useCallback(
+    async (force = false) => {
+      setWeatherBusy(true)
+      try {
+        setWeather(await window.api.weather.assess(force))
+      } catch {
+        // 天气取不到不该影响这个页面 —— 它是锦上添花，不是主线
+        setWeather(null)
+      } finally {
+        setWeatherBusy(false)
+      }
+    },
+    []
+  )
+
+  useEffect(() => {
+    void loadWeather(false)
+  }, [loadWeather])
+
+  /**
+   * 把一条天气风险变成任务。
+   *
+   * **只在你点按钮时才写数据。** 预警本身永远不自动建任务 ——
+   * 和 AI 草稿一样，它只提议，不替你做决定。
+   */
+  const createTaskFromRisk = async (risk: WeatherRiskItem): Promise<void> => {
+    const what = risk.kind === 'frost' ? '防冻' : '防暑'
+    const action =
+      risk.kind === 'frost'
+        ? '搬到避风处或室内；不能搬的用无纺布/旧床单罩住，别用塑料袋闷。降温当天浇透一次水（湿土比干土保温）。'
+        : '避开正午浇水，改到清晨或傍晚；遮阳网或搬到半阴处；高温期间停施水溶肥。'
+    try {
+      await window.api.care.createTask({
+        plantId: risk.plantId,
+        actionType: risk.kind === 'frost' ? 'protect' : 'water',
+        title: `${what}：${risk.plantName}`,
+        detail: `${risk.message}\n${action}\n〔依据天气预警，${risk.date}〕`,
+        dueDate: risk.date,
+        windowDays: 2,
+        priority: risk.severity === 'severe' ? 1 : 2,
+        source: 'manual'
+      })
+      toast.push('已加入养护计划', 'success')
+      await reload()
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : '创建任务失败', 'error')
+    }
+  }
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -439,6 +593,28 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         南阳台的可能已经现蕾，北窗台的还没动。所以放在待办页最上面，
         由你看到什么就标什么；标了之后限定阶段的规则会立刻跟着变。
       */}
+      <Panel>
+        <SectionTitle
+          right={
+            <span className="small muted">
+              {weatherBusy
+                ? '正在查看…'
+                : weather?.fetchedAt
+                  ? `数据时间 ${new Date(weather.fetchedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                  : ''}
+            </span>
+          }
+        >
+          天气预警
+        </SectionTitle>
+        <WeatherPanel
+          result={weather}
+          busy={weatherBusy}
+          onRefresh={() => void loadWeather(true)}
+          onCreateTask={createTaskFromRisk}
+        />
+      </Panel>
+
       <Panel>
         <SectionTitle
           right={
