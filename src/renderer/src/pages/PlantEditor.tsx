@@ -32,6 +32,7 @@ export function PlantEditorModal({
   onSaved
 }: PlantEditorModalProps): ReactNode {
   const toast = useToast()
+
   const [defs, setDefs] = useState<FieldDefinition[]>([])
   const [speciesList, setSpeciesList] = useState<SpeciesListItem[]>([])
   const [values, setValues] = useState<FormValues>({})
@@ -247,10 +248,37 @@ export function PlantEditorModal({
               <Button size="small" onClick={() => void createSpecies()} disabled={!speciesQuery.trim()}>
                 新建物种「{speciesQuery.trim() || '…'}」
               </Button>
-              {filteredSpecies.length > 0 ? (
-                <span className="small muted">或在右上角下拉框里从已有 {speciesList.length} 个物种中选择</span>
-              ) : null}
             </div>
+            {/*
+              原来这里写的是「或在右上角下拉框里从已有 N 个物种中选择」——
+              可**右上角根本没有物种下拉框**，真正的「所属物种」在下面的表单里。
+              一句把人支使到不存在的地方的话，用户只会得出「已有的物种不能选」。
+              改成就地列出、点一下就关联。
+            */}
+            {filteredSpecies.length > 0 ? (
+              <div style={{ marginTop: 8 }}>
+                <div className="small muted" style={{ marginBottom: 4 }}>
+                  {speciesQuery.trim()
+                    ? `或者从名字带「${speciesQuery.trim()}」的已有物种里选：`
+                    : `或者直接选一个已有的（共 ${speciesList.length} 个）：`}
+                </div>
+                <div className="row tight" style={{ flexWrap: 'wrap' }}>
+                  {filteredSpecies.map((s) => (
+                    <Button
+                      key={s.id}
+                      size="small"
+                      onClick={() => {
+                        setValue('species_id', s.id)
+                        setSpeciesQuery('')
+                      }}
+                      title={s.scientificName ?? ''}
+                    >
+                      {s.commonName}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </Panel>
         ) : currentSpecies ? (
           <Notice tone="info">
@@ -286,6 +314,7 @@ export function PlantEditorModal({
           onChanged={() => undefined}
         />
       </div>
+
     </Modal>
   )
 }
