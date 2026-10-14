@@ -1051,6 +1051,56 @@ img {
 .tag-toggle.verified { background: #dff0d8; border-color: #2f6b26; }
 .tag-toggle:not(.verified) { border-style: dashed; }
 
+/*
+ * 多选「药丸」：阶段、适用物种这类多选器用。
+ *
+ * 之前复用了 .tag-toggle，但那个类是为模板页的字段核实做的，
+ * 它的选中状态叫 .verified —— 我写的是 .on，而 .on 没有任何样式，
+ * 于是**选中和没选中长得一模一样**，用户根本看不出自己选了什么。
+ * 单独一套类，省得再被核实那套的语义带偏。
+ */
+.pick-chip {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+  border: 2px solid var(--wood-outline);
+  border-radius: 10px;
+  background: var(--wood-panel-light);
+  color: var(--ink);
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+}
+.pick-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 0 var(--wood-outline);
+}
+.pick-chip:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+.pick-chip:focus-visible {
+  outline: 2px solid var(--leaf-dark);
+  outline-offset: 1px;
+}
+/*
+ * 选中状态叠加三种线索：填充、白字加粗、前缀勾。
+ * 只靠颜色的话，在这个像素风的小字号下很不容易分辨。
+ */
+.pick-chip.on {
+  background: #2f6b26;
+  border-color: #1e4a18;
+  color: #fff;
+  font-weight: 700;
+}
+.pick-chip.on::before {
+  content: '✓ ';
+}
+/* 「所有植物」是个开关而不是普通选项，给它一点区别 */
+.pick-chip.wide {
+  padding: 4px 14px;
+  font-size: 13px;
+}
+
 /* ---------- 表格 ---------- */
 
 .pixel-table {

@@ -227,7 +227,7 @@ export function CareRuleManager({
           <div className="row tight" style={{ flexWrap: 'wrap' }}>
             <button
               type="button"
-              className={`tag-toggle${universalOn ? ' on' : ''}`}
+              className={`pick-chip wide${universalOn ? ' on' : ''}`}
               onClick={() => setDraft({ ...draft, speciesKeys: universalOn ? [] : [UNIVERSAL_SPECIES_KEY] })}
             >
               🌍 所有植物
@@ -242,7 +242,7 @@ export function CareRuleManager({
                     <button
                       key={name}
                       type="button"
-                      className={`tag-toggle${on ? ' on' : ''}`}
+                      className={`pick-chip${on ? ' on' : ''}`}
                       onClick={() =>
                         setDraft({
                           ...draft,
@@ -281,6 +281,11 @@ export function CareRuleManager({
             </>
           ) : null}
         </Field>
+        {/* 摘要一行：小字号下只靠颜色分辨选中与否太吃力 */}
+        <div className="small" style={{ marginBottom: 8 }}>
+          这条规则将作用于：
+          <b>{universalOn ? '所有植物' : draft.speciesKeys.length > 0 ? draft.speciesKeys.join('、') : '（还没选）'}</b>
+        </div>
         {!universalOn && draft.speciesKeys.length === 0 ? (
           <Notice tone="warn">还没有选任何物种 —— 这条规则不会对任何植物生效。</Notice>
         ) : null}
@@ -323,7 +328,7 @@ export function CareRuleManager({
                 <button
                   key={opt.value}
                   type="button"
-                  className={`tag-toggle${on ? ' on' : ''}`}
+                  className={`pick-chip${on ? ' on' : ''}`}
                   title={CARE_PHASE_HINTS[opt.value as CarePhase]}
                   onClick={() =>
                     setDraft({
