@@ -183,6 +183,24 @@ const QWEATHER_ERRORS: Record<string, string> = {
   '500': '和风服务器错误'
 }
 
+/**
+ * 和风的英文错误标题 → **该去改什么**。
+ *
+ * 光把英文原文转给用户等于让他自己去查。这些错都是配置问题，
+ * 每一种都有明确的去处，那就直接说去处。
+ */
+const QWEATHER_ERROR_ADVICE: Record<string, string> = {
+  'Security Restriction':
+    '控制台里开了「安全限制」。到 dev.qweather.com 控制台 → 设置 → 安全限制，改成「不限制」即可。' +
+    '桌面应用不发 Referer，所以 Referer 白名单一定拦；IP 白名单也会因为家里宽带换 IP 而失效。',
+  'Invalid Host': 'API Host 填错了。到控制台 → 设置 里复制你自己的那串，注意别带 https:// 前缀。',
+  Unauthorized: '凭据无效。检查 API Key 是否复制完整（前后别带空格），或它是否属于这个 API Host。',
+  Forbidden: '这个凭据没有访问 GeoAPI 的权限。到控制台给凭据勾上 GeoAPI。',
+  'Invalid Parameter': '请求参数有误，多半是 API Host 里混进了多余字符。',
+  'Too Many Requests': '调用太频繁，过一会儿再试。',
+  'Invalid Token': '凭据无效，重新复制一次 API Key。'
+}
+
 export interface LookupOutcome {
   geo: GeoResult | null
   /** 和风返回的业务码，诊断时原样显示 */
@@ -246,10 +264,14 @@ export async function qweatherLookupDetailed(
   // 新版错误体：{"error":{"status":403,"title":"...","detail":"..."}}
   const errBody = (data as { error?: { title?: string; detail?: string } }).error
   if (errBody) {
+    const title = String(errBody.title ?? '')
+    const advice = QWEATHER_ERROR_ADVICE[title]
     return {
       geo: null,
-      code: String(errBody.title ?? ''),
-      error: `和风返回 ${errBody.title ?? '错误'}：${errBody.detail ?? ''}`
+      code: title,
+      error: advice
+        ? `和风拒绝了这个请求（${title}）——${advice}`
+        : `和风返回 ${title || '错误'}：${errBody.detail ?? ''}`
     }
   }
 
