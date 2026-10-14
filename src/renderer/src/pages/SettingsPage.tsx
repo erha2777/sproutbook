@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { AiSettings, AppInfo, SandboxStatus } from '@core/types'
-import type { AppPaths, BackupInfo } from '@shared/api'
+import type { AppPaths, BackupInfo, WeatherConfigSnapshot } from '@shared/api'
 import { formatBytes, formatDateTime } from '../lib/util'
 import { Badge, Button, EmptyState, Field, Notice, Panel, SectionTitle, SelectInput, Sign, Spinner, TextInput, useToast } from '../components/ui'
 import { EnvironmentManager } from '../components/EnvironmentManager'
@@ -37,9 +37,52 @@ export function SettingsPage(): ReactNode {
   const [backups, setBackups] = useState<BackupInfo[]>([])
   const [busy, setBusy] = useState(false)
   const [sandbox, setSandbox] = useState<SandboxStatus | null>(null)
+  /**
+   * 天气数据源配置。
+   * key 填了之后**不回显** —— 和 AI 那边同一个原则，只说配没配。
+   */
+  const [weatherConfig, setWeatherConfig] = useState<WeatherConfigSnapshot | null>(null)
+  const [qweatherHostDraft, setQweatherHostDraft] = useState('')
+  const [qweatherKeyDraft, setQweatherKeyDraft] = useState('')
+  const [weatherTesting, setWeatherTesting] = useState(false)
+  const [weatherTestResult, setWeatherTestResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  /**
+   * 保存天气配置。
+   *
+   * key 只在**填了新值**时才提交 —— 只改 Host 的时候不能把已存的 key 抹掉，
+   * 那是用户最容易踩的一步（改完 Host 点保存，key 没了）。
+   */
+  const patchWeather = async (patch: {
+    provider?: 'open-meteo' | 'qweather'
+    qweatherHost?: string
+  }): Promise<void> => {
+    setBusy(true)
+    try {
+      const next = await window.api.weather.saveConfig({
+        provider: patch.provider ?? weatherConfig?.provider,
+        qweatherHost: patch.qweatherHost ?? qweatherHostDraft,
+        qweatherKey: qweatherKeyDraft.trim() === '' ? undefined : qweatherKeyDraft.trim()
+      })
+      setWeatherConfig(next)
+      setQweatherHostDraft(next.qweatherHost)
+      setQweatherKeyDraft('')
+      setWeatherTestResult(null)
+      toast.push('天气数据源已保存', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : '保存失败', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const load = useCallback(async () => {
     try {
+      {
+        const wc = await window.api.weather.config()
+        setWeatherConfig(wc)
+        setQweatherHostDraft(wc.qweatherHost)
+      }
       const [s, p, i, b, w, sb] = await Promise.all([
         window.api.ai.getSettings(),
         window.api.app.paths(),
@@ -444,6 +487,97 @@ export function SettingsPage(): ReactNode {
             </Button>
           </div>
         </div>
+      </Panel>
+
+      <Panel>
+        <SectionTitle
+          right={
+            <Badge tone={weatherConfig?.qweatherReady ? 'ok' : 'muted'}>
+              {weatherConfig?.activeLabel ?? '…'}
+            </Badge>
+          }
+        >
+          天气数据源
+        </SectionTitle>
+        <div className="small muted" style={{ marginBottom: 8 }}>
+          霜冻预警要按你所在位置的天气判断。默认用 <b>Open-Meteo</b>：免费、不用注册。
+          但它是全球模型，<b>认不出中国的区县</b> ——「湘阴县」查不到，而「华容县」却查得到，不可靠。
+          想要区县级精度就配一个<b>和风天气</b>的 key。<b>不配也完全能用</b>，只是地名的精度停在市一级。
+        </div>
+
+        <Field label="数据源">
+          <SelectInput
+            value={weatherConfig?.provider ?? 'open-meteo'}
+            onChange={(v) => void patchWeather({ provider: v as 'open-meteo' | 'qweather' })}
+            options={[
+              { value: 'open-meteo', label: 'Open-Meteo（免注册，精度到市）' },
+              { value: 'qweather', label: '和风天气（需 API Key，可到区县）' }
+            ]}
+          />
+        </Field>
+
+        {weatherConfig?.provider === 'qweather' ? (
+          <>
+            <Field
+              label="API Host"
+              help="在 dev.qweather.com 控制台 → 设置 里查看。形如 h2a9cf3mhs.xy.qweatherapi.com，每个账号一个。"
+            >
+              <TextInput
+                value={qweatherHostDraft}
+                onChange={setQweatherHostDraft}
+                placeholder="h2a9cf3mhs.xy.qweatherapi.com"
+              />
+            </Field>
+            <Field
+              label="API Key"
+              help={
+                weatherConfig.hasWeatherKey
+                  ? '已配置。留空＝保持不变；填入新值会覆盖。'
+                  : '在同一个控制台里创建。密钥存进系统钥匙串，不会写进数据库。'
+              }
+            >
+              <TextInput
+                value={qweatherKeyDraft}
+                onChange={setQweatherKeyDraft}
+                type="password"
+                placeholder={weatherConfig.hasWeatherKey ? '••••••••（已配置）' : ''}
+              />
+            </Field>
+            <div className="row tight">
+              <Button size="small" onClick={() => void patchWeather({})} disabled={busy}>
+                保存
+              </Button>
+              <Button
+                size="small"
+                disabled={weatherTesting || !weatherConfig.qweatherReady}
+                onClick={async () => {
+                  setWeatherTesting(true)
+                  setWeatherTestResult(null)
+                  try {
+                    // 拿「湘阴县」试 —— 那正是 Open-Meteo 认不出、用户真正需要的那个地名
+                    const r = await window.api.weather.testLocation('湘阴县')
+                    setWeatherTestResult(
+                      r.ok
+                        ? {
+                            ok: true,
+                            message: `定位到「${r.label}」，精度：${r.level === 'district' ? '区县级' : '市级'}`
+                          }
+                        : { ok: false, message: r.error ?? '测试失败' }
+                    )
+                  } finally {
+                    setWeatherTesting(false)
+                  }
+                }}
+              >
+                {weatherTesting ? '测试中…' : '用「湘阴县」试一下'}
+              </Button>
+              <span className="small muted">{weatherConfig.qweatherReady ? '' : '填好 Host 和 Key 才能测'}</span>
+            </div>
+            {weatherTestResult ? (
+              <Notice tone={weatherTestResult.ok ? 'info' : 'warn'}>{weatherTestResult.message}</Notice>
+            ) : null}
+          </>
+        ) : null}
       </Panel>
 
       <Panel>

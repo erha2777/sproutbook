@@ -110,7 +110,7 @@ export function EnvironmentManager({ onChanged }: { onChanged?: () => void }): R
                   <td className="small">{env.lightLevel ? (LIGHT_LEVEL_LABELS[env.lightLevel] ?? env.lightLevel) : '—'}</td>
                   <td className="small">{env.lightHours === null ? '—' : `${env.lightHours} 小时`}</td>
                   <td className="small">
-                    {[env.province, env.city].filter(Boolean).join(' · ') || '—'}
+                    {[env.province, env.city, env.district].filter(Boolean).join(' · ') || '—'}
                     {env.lat !== null && env.lon !== null ? (
                       <div className="muted mono" style={{ fontSize: 11 }}>
                         {env.lat.toFixed(3)}, {env.lon.toFixed(3)}
@@ -174,6 +174,7 @@ function EnvironmentEditorModal({
   const [lightHours, setLightHours] = useState(env?.lightHours === null || env?.lightHours === undefined ? '' : String(env.lightHours))
   const [province, setProvince] = useState(env?.province ?? '')
   const [city, setCity] = useState(env?.city ?? '')
+  const [district, setDistrict] = useState(env?.district ?? '')
   const [lat, setLat] = useState(env?.lat === null || env?.lat === undefined ? '' : String(env.lat))
   const [lon, setLon] = useState(env?.lon === null || env?.lon === undefined ? '' : String(env.lon))
   const [canHeat, setCanHeat] = useState(env?.canHeat ?? false)
@@ -196,6 +197,7 @@ function EnvironmentEditorModal({
       climateZone: env?.climateZone ?? null,
       province: province.trim() || null,
       city: city.trim() || null,
+      district: district.trim() || null,
       lat: num(lat),
       lon: num(lon),
       canHeat,
@@ -251,8 +253,23 @@ function EnvironmentEditorModal({
             <TextInput value={province} onChange={setProvince} placeholder="浙江" />
           </Field>
 
-          <Field label="城市（可选）" help="城市或经纬度任一填好，将来就能做霜冻预警。">
-            <TextInput value={city} onChange={setCity} placeholder="杭州" />
+          <Field
+            label="城市（可选）"
+            help="城市或经纬度任一填好，就能做霜冻预警。手填的经纬度优先级最高。"
+          >
+            <TextInput value={city} onChange={setCity} placeholder="岳阳" />
+          </Field>
+
+          {/*
+            区县这一级只有配了和风天气的 key 才真正影响坐标。
+            Open-Meteo 认不出中国的区县（湘阴县查不到，华容县却查得到），
+            所以这里如实说明，而不是让用户以为填了就一定更准。
+          */}
+          <Field
+            label="区 / 县（可选）"
+            help="例如「湘阴县」。只有在「设置 → 天气数据源」配好和风天气的 key 之后，这一级才会真正影响坐标；否则仅作记录，坐标仍落在市一级。"
+          >
+            <TextInput value={district} onChange={setDistrict} placeholder="湘阴县" />
           </Field>
 
           <Field label="纬度（可选）">

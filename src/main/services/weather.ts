@@ -17,6 +17,13 @@
  */
 
 import type { Db } from '../db/connection'
+import {
+  fetchDaily,
+  lookupLocation,
+  readWeatherConfig,
+  type GeoResult,
+  type WeatherConfig
+} from './weather-providers'
 import { getSetting, setSetting, listEnvironments } from '../db/repo/misc'
 import { listPlants } from '../db/repo/plants'
 import { listSpecies } from '../db/repo/species'
@@ -28,12 +35,9 @@ import {
 import type { DailyTemp, WeatherRisk, WeatherRiskInput } from '../../core/weather'
 
 const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search'
-const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast'
 
 /** 缓存多久。预报一天更新几次就够，没必要每次开页面都请求。 */
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000
-/** 预报取未来几天。霜冻预警要提前量，一周比较合适。 */
-const FORECAST_DAYS = 7
 const TIMEOUT_MS = 8000
 
 const CACHE_KEY = 'weather.forecastCache'
@@ -118,38 +122,31 @@ export async function geocode(db: Db, city: string, province?: string | null): P
   return point
 }
 
-/** 拿未来几天的预报。带缓存；同一个地点 3 小时内只请求一次。 */
-export async function getForecast(db: Db, point: GeoPoint, force = false): Promise<DailyTemp[] | null> {
+/**
+ * 取预报，按坐标缓存 3 小时。
+ *
+ * 缓存键是**坐标**而不是数据源：换源之后同一个点的预报还是会重新取
+ *（因为换了 provider 缓存里那条可能来自旧源），所以缓存里记了 provider，
+ * 对不上就重新取。
+ */
+export async function getForecast(
+  db: Db,
+  config: WeatherConfig,
+  point: GeoResult,
+  force = false
+): Promise<DailyTemp[] | null> {
   const key = `${point.latitude.toFixed(3)},${point.longitude.toFixed(3)}`
   const cache = getSetting<Record<string, CacheEntry>>(db, CACHE_KEY, {})
   const hit = cache[key]
-  if (!force && hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.days
-
-  const url =
-    `${FORECAST_URL}?latitude=${point.latitude}&longitude=${point.longitude}` +
-    `&daily=temperature_2m_min,temperature_2m_max&forecast_days=${FORECAST_DAYS}` +
-    `&timezone=auto`
-
-  const data = await fetchJson<{
-    daily?: { time?: string[]; temperature_2m_min?: number[]; temperature_2m_max?: number[] }
-  }>(url)
-
-  const time = data?.daily?.time ?? []
-  const mins = data?.daily?.temperature_2m_min ?? []
-  const maxs = data?.daily?.temperature_2m_max ?? []
-  if (time.length === 0) return null
-
-  const days: DailyTemp[] = []
-  for (let i = 0; i < time.length; i++) {
-    const tempMin = mins[i]
-    const tempMax = maxs[i]
-    // 缺任何一项就跳过那一天，别用 0 去顶替 —— 那会凭空造出一场 0℃ 的寒潮
-    if (typeof tempMin !== 'number' || typeof tempMax !== 'number') continue
-    days.push({ date: time[i], tempMin, tempMax })
+  if (!force && hit && Date.now() - hit.at < CACHE_TTL_MS && (hit as CacheEntry & { provider?: string }).provider === point.provider) {
+    return hit.days
   }
-  if (days.length === 0) return null
 
-  cache[key] = { key, at: Date.now(), point, days, fetchedAt: new Date().toISOString() }
+  const days = await fetchDaily(config, point)
+  if (!days) return null
+
+  cache[key] = { key, at: Date.now(), point: { latitude: point.latitude, longitude: point.longitude, label: point.label }, days, fetchedAt: new Date().toISOString() } as CacheEntry
+  ;(cache[key] as CacheEntry & { provider?: string }).provider = point.provider
   setSetting(db, CACHE_KEY, cache)
   return days
 }
@@ -164,13 +161,24 @@ export function clearWeatherCache(db: Db): void {
 // ---------------------------------------------------------------------------
 
 export interface WeatherWarningResult {
+  /** 这次实际用的是哪个数据源，界面要说明白 */
+  providerLabel: string
   /**
    * 有没有任何一个养护位置填了城市。
    * **为 false 时一个字节都没发出去** —— 界面要如实这么告诉用户。
    */
   configured: boolean
   /** 参与判断的地点（按地点去重，同一地点只请求一次） */
-  places: Array<{ name: string; label: string; latitude: number; longitude: number; days: DailyTemp[] }>
+  places: Array<{
+    name: string
+    label: string
+    latitude: number
+    longitude: number
+    days: DailyTemp[]
+    /** 精确到区县还是只到市 —— 界面上要如实说 */
+    level: 'city' | 'district'
+    provider: string
+  }>
   /** 收拢后的风险，每株每种一条 */
   risks: WeatherRisk[]
   /** 逐天的明细，界面展开时用 */
@@ -191,9 +199,15 @@ export interface WeatherWarningResult {
  * 流程：植株 → 物种（耐寒/耐热）→ 养护位置（城市/经纬度/能否防冻）。
  * 地点相同只请求一次；**没有任何地点填城市就直接返回，不发请求**。
  */
-export async function assessPlantsWeather(db: Db, force = false): Promise<WeatherWarningResult> {
+export async function assessPlantsWeather(
+  db: Db,
+  force = false,
+  /** 和风的 API Key。由调用方（IPC 层）从钥匙串取出后传进来 */
+  qweatherKey: string | null = null
+): Promise<WeatherWarningResult> {
   const empty: WeatherWarningResult = {
     configured: false,
+    providerLabel: '',
     places: [],
     risks: [],
     daily: [],
@@ -202,6 +216,8 @@ export async function assessPlantsWeather(db: Db, force = false): Promise<Weathe
     fetchedAt: null,
     error: null
   }
+
+  const config = readWeatherConfig(db, qweatherKey)
 
   const plants = listPlants(db, { limit: 1000 }).items.filter((p) => p.status !== 'gifted')
   const environments = listEnvironments(db)
@@ -227,15 +243,34 @@ export async function assessPlantsWeather(db: Db, force = false): Promise<Weathe
   const daysByPoint = new Map<string, DailyTemp[]>()
 
   for (const env of located) {
-    let point: GeoPoint | null =
+    /*
+     * 手填的经纬度**永远优先**：那是用户自己确认过的点，比任何地理编码都准。
+     * 只有没填时才去解析地名。
+     */
+    let point: GeoResult | null =
       env.lat !== null && env.lon !== null
-        ? { latitude: env.lat, longitude: env.lon, label: [env.province, env.city].filter(Boolean).join(' · ') || env.name }
+        ? {
+            latitude: env.lat,
+            longitude: env.lon,
+            label: [env.province, env.city, env.district].filter(Boolean).join(' · ') || env.name,
+            locationId: null,
+            level: 'city',
+            provider: config.provider
+          }
         : null
 
     if (!point) {
-      point = await geocode(db, env.city ?? '', env.province)
+      /*
+       * 解析顺序在 lookupLocation 里：配了和风就先试和风（能到区县），
+       * 失败再退 Open-Meteo。反过来的话，和风能解析出的区县永远轮不到。
+       */
+      point = await lookupLocation(config, {
+        province: env.province,
+        city: env.city,
+        district: env.district
+      })
       if (!point) {
-        error = error ?? `没能定位「${env.city}」`
+        error = error ?? `没能定位「${env.district || env.city || env.name}」`
         continue
       }
       // 定位成功就写回档案：下次不用再查，也让用户看得见用的是哪个坐标
@@ -245,14 +280,23 @@ export async function assessPlantsWeather(db: Db, force = false): Promise<Weathe
     const pointKey = `${point.latitude.toFixed(3)},${point.longitude.toFixed(3)}`
     let days = daysByPoint.get(pointKey)
     if (!days) {
-      const fetched = await getForecast(db, point, force)
+      const fetched = await getForecast(db, config, point, force)
       if (!fetched) {
         error = error ?? '没能取到天气预报'
         continue
       }
       days = fetched
       daysByPoint.set(pointKey, days)
-      places.push({ name: env.name, label: point.label, latitude: point.latitude, longitude: point.longitude, days })
+      places.push({
+        name: env.name,
+        label: point.label,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        days,
+        // 精度要摆在明面上：区县级和市级是两回事
+        level: point.level,
+        provider: point.provider
+      })
       fetchedAt = new Date().toISOString()
     }
     daysByEnvId.set(env.id, days)
@@ -295,12 +339,15 @@ export async function assessPlantsWeather(db: Db, force = false): Promise<Weathe
 
   return {
     configured: true,
+    providerLabel: config.provider === 'qweather' && config.qweatherReady ? '和风天气' : 'Open-Meteo',
     places: places.map((p) => ({
       name: p.name,
       label: p.label,
       latitude: p.latitude,
       longitude: p.longitude,
-      days: p.days
+      days: p.days,
+      level: p.level,
+      provider: p.provider
     })),
     risks: summarizeRisks(daily),
     daily,

@@ -484,6 +484,20 @@ const V10_LOG_RECIPE = /* sql */ `
 ALTER TABLE care_logs ADD COLUMN recipe_id INTEGER;
 `
 
+/**
+ * 养护位置加「区 / 县」一级。
+ *
+ * 起因是用户的真实需求：他的一株在**湘阴县**（岳阳下辖）。而 Open-Meteo
+ * 的地理编码认不出湘阴县（华容县却认得出 —— 不是不支持，是不可靠）。
+ * 和风天气的 GeoAPI 有完整的中国区县库，所以加这一级配合它用。
+ *
+ * 注意：**只有配了和风 key 时这一级才起作用**。没配 key 走 Open-Meteo 时，
+ * 它只用于记录，坐标仍然落在市一级 —— 界面上要如实说明，不能假装更准了。
+ */
+const V11_ENV_DISTRICT = /* sql */ `
+ALTER TABLE environments ADD COLUMN district TEXT;
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -494,7 +508,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 7, name: 'field_visibility', run: migrateFieldVisibility },
   { version: 8, name: 'rule_frequency_recipe', sql: V8_RULE_FREQUENCY_AND_RECIPE },
   { version: 9, name: 'task_rule_recipe', sql: V9_TASK_RULE_AND_RECIPE },
-  { version: 10, name: 'log_recipe', sql: V10_LOG_RECIPE }
+  { version: 10, name: 'log_recipe', sql: V10_LOG_RECIPE },
+  { version: 11, name: 'env_district', sql: V11_ENV_DISTRICT }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

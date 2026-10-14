@@ -21,10 +21,11 @@ import { seedAll, seedFieldDefinitions } from './db/seed'
 import { backupDatabase } from './db/backup'
 import { loadFieldDefinitions } from './db/repo/common'
 import { assessPlantsWeather } from './services/weather'
+import { readWeatherConfig, saveWeatherConfig } from './services/weather-providers'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { listPlants, plantStats, savePlant } from './db/repo/plants'
-import { listEnvironments } from './db/repo/misc'
+import { getSetting, listEnvironments } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
@@ -1575,6 +1576,43 @@ export async function runSmoke(outFile: string): Promise<number> {
         check('紧急的排在留意的前面', mixed[0]?.severity === 'severe', String(mixed[0]?.severity))
       }
 
+      // ---- 天气数据源配置 ----
+      //
+      // 用户的需求是「湘阴县」这种区县级地名，而 Open-Meteo 认不出来。
+      // 和风天气能认，但要 key。底线是：**不配 key 的人照样能用。**
+      {
+        const fresh = readWeatherConfig(db, null)
+        check('默认数据源是 Open-Meteo（不用配任何东西）', fresh.provider === 'open-meteo')
+        check('没配 key 时和风不可用', fresh.qweatherReady === false)
+
+        // 选了和风但没填 host/key —— 不能算就绪，否则会去请求一个空域名
+        saveWeatherConfig(db, { provider: 'qweather' })
+        const halfDone = readWeatherConfig(db, null)
+        check('选了和风但没填 host 时仍不算就绪', halfDone.provider === 'qweather' && halfDone.qweatherReady === false)
+
+        saveWeatherConfig(db, { qweatherHost: 'abc123.xy.qweatherapi.com' })
+        const noKey = readWeatherConfig(db, null)
+        check('有 host 没 key 也不算就绪', noKey.qweatherReady === false)
+
+        const ready = readWeatherConfig(db, 'test-key-123')
+        check('host 和 key 齐了才算就绪', ready.qweatherReady === true, JSON.stringify({ host: ready.qweatherHost, key: !!ready.qweatherKey }))
+
+        // host 前后有空格是粘贴时最常见的，不能因此判成没填
+        saveWeatherConfig(db, { qweatherHost: '  abc123.xy.qweatherapi.com  ' })
+        check('host 前后空格会被去掉', readWeatherConfig(db, 'k').qweatherHost === 'abc123.xy.qweatherapi.com')
+
+        // 切回 Open-Meteo：不配 key 的用户不该被和风的配置卡住
+        saveWeatherConfig(db, { provider: 'open-meteo' })
+        const back = readWeatherConfig(db, null)
+        check('可以切回 Open-Meteo', back.provider === 'open-meteo')
+        check('切回后即使没 key 也是可用的', back.qweatherReady === false && back.provider === 'open-meteo')
+
+        // 配置存在设置表里，不是内存
+        check('配置落到了设置表', getSetting<string>(db, 'weather.providerId', '') === 'open-meteo')
+        // host 不是秘密，可以落库；key 绝不落库 —— 这里只断言 host 在库里
+        check('API Host 存在设置表里（它不是秘密）', getSetting<string>(db, 'weather.qweatherHost', '') === 'abc123.xy.qweatherapi.com')
+      }
+
       // ---- 天气服务：没有城市就一个字节都不发 ----
       //
       // 整个功能最重要的一条承诺：应用原本 100% 离线，
@@ -1590,9 +1628,21 @@ export async function runSmoke(outFile: string): Promise<number> {
           check('没有城市时不认为已配置', result.configured === false)
           check('没有城市时返回空风险', result.risks.length === 0 && result.daily.length === 0)
           check('没有城市时没有取数时间', result.fetchedAt === null)
-          // 最硬的一条：缓存只在请求成功后才写，所以它必须是空的
-          const keys = db.all<{ key: string }>("SELECT key FROM settings WHERE key LIKE 'weather.%'")
-          check('没有城市时连缓存都没写（＝确实没联网）', keys.length === 0, keys.map((k) => k.key).join(','))
+          /*
+           * 最硬的一条：**缓存**只在请求成功后才写，所以它必须是空的。
+           *
+           * 这里只查缓存键，不查所有 weather.* ——
+           * providerId 和 qweatherHost 是本地配置，不联网也本来就该存在。
+           * 早先写成查全部，结果上面的配置自检一写库这条就红了。
+           */
+          const cacheKeys = db.all<{ key: string }>(
+            "SELECT key FROM settings WHERE key IN ('weather.forecastCache','weather.geocodeCache')"
+          )
+          check(
+            '没有城市时连缓存都没写（＝确实没联网）',
+            cacheKeys.length === 0,
+            cacheKeys.map((k) => k.key).join(',')
+          )
         } else {
           // 自检库如果被别处写了城市，这条就换成不联网的等价断言，避免真的发请求
           check('天气服务在自检库里没有可判断的城市（跳过联网分支）', true)
