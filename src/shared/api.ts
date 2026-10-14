@@ -425,6 +425,10 @@ export interface WeatherConfigSnapshot {
 export interface WeatherPlace {
   name: string
   label: string
+  /** 解析到了区县还是只到市。界面上要说清楚，不能含糊 */
+  level: 'city' | 'district'
+  /** 这个点来自哪个数据源 */
+  provider: string
   /** 实际用的坐标。精度可见，用户才知道要不要填精确经纬度 */
   latitude: number
   longitude: number
@@ -445,6 +449,8 @@ export interface WeatherRiskItem {
 }
 
 export interface WeatherWarningResult {
+  /** 这次实际用的是哪个数据源。**不能写死** —— 配了和风就不是 Open-Meteo 了 */
+  providerLabel: string
   /** 有没有养护位置填了城市。false = 完全没联网 */
   configured: boolean
   places: WeatherPlace[]
