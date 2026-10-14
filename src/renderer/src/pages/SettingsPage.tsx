@@ -17,7 +17,8 @@ import { TransferPanel } from '../components/TransferPanel'
 
 const PRESETS: Array<{ label: string; baseUrl: string; chatModel: string; visionModel: string }> = [
   { label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', chatModel: 'gpt-4o-mini', visionModel: 'gpt-4o-mini' },
-  { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', chatModel: 'deepseek-chat', visionModel: '' },
+  // deepseek-flash 是官方定价页上唯一标了 Vision ✓ 的模型（deepseek-v4-pro 不支持）
+  { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', chatModel: 'deepseek-flash', visionModel: 'deepseek-flash' },
   { label: 'Moonshot 月之暗面', baseUrl: 'https://api.moonshot.cn/v1', chatModel: 'moonshot-v1-8k', visionModel: '' },
   { label: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', chatModel: 'glm-4-flash', visionModel: 'glm-4v-flash' },
   { label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', chatModel: '', visionModel: '' },
