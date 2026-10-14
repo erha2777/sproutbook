@@ -10,8 +10,11 @@ rem    and double-clicking Sproutbook.exe looks like "nothing happens".
 rem
 rem    This launcher just adds --no-sandbox so the app can start.
 rem
-rem    (Comments here are intentionally ASCII-only: cmd.exe parses .cmd files
-rem     using the OEM code page, and non-ASCII bytes can corrupt the parsing.)
+rem  Two hard rules for this file (both were violated once and broke it):
+rem    1. ASCII ONLY. cmd.exe parses .cmd files using the OEM code page, and
+rem       non-ASCII bytes can decode into characters that wreck the parsing.
+rem    2. CRLF line endings. cmd.exe is unreliable with LF-only .cmd files,
+rem       especially inside if (...) blocks. See .gitattributes.
 rem
 rem  Security note:
 rem    Disabling the renderer sandbox lowers process isolation. This app only
@@ -19,6 +22,12 @@ rem    loads local files, its CSP forbids all remote resources, contextIsolation
 rem    is enabled and nodeIntegration is disabled, so the practical risk is
 rem    limited. If you would rather not disable it, look for the real cause
 rem    first - see the troubleshooting section in README.md.
+rem
+rem  Tip:
+rem    Run this launcher once, then use
+rem    Settings -> "Startup compatibility" -> "Create desktop shortcut".
+rem    That makes a normal Windows shortcut with --no-sandbox baked in, so
+rem    afterwards you can just double-click a desktop icon. No launcher needed.
 rem ===========================================================================
 
 if not exist "%~dp0Sproutbook.exe" (
@@ -27,11 +36,5 @@ if not exist "%~dp0Sproutbook.exe" (
   pause
   exit /b 1
 )
-
-rem  Tip:
-rem    If you would rather not keep using this launcher, run it once as usual,
-rem    then open  Settings -> "启动兼容性"  and click
-rem    "在桌面创建兼容模式快捷方式". That creates a normal Windows shortcut
-rem    with --no-sandbox baked in, so you can just double-click a desktop icon.
 
 start "" "%~dp0Sproutbook.exe" --no-sandbox %*
