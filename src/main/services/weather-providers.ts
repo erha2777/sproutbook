@@ -29,6 +29,8 @@ export const PROVIDER_LABELS: Record<WeatherProviderId, string> = {
 
 /** API Host 存在设置表里 —— 它不是秘密，本身就出现在请求 URL 中。 */
 export const QWEATHER_HOST_KEY = 'weather.qweatherHost'
+/** 地名解析结果的缓存。地名不会变，解析一次就够 */
+export const GEOCODE_CACHE_KEY = 'weather.geocodeCache'
 export const QWEATHER_KEY_KEY = 'weather.provider'
 export const SELECTED_PROVIDER_KEY = 'weather.providerId'
 
@@ -358,17 +360,39 @@ export async function openMeteoLookup(query: LocationQuery): Promise<GeoResult |
 }
 
 /**
- * 按配置解析地点。
+ * 按配置解析地点，结果缓存起来。
  *
- * 顺序有讲究：**配了和风就先试和风**（它能到区县），失败再退 Open-Meteo。
- * 反过来的话，和风能解析出的区县永远轮不到。
+ * ## 顺序：配了和风就先试和风
+ *
+ * 它能到区县。反过来的话，和风能解析出的区县永远轮不到。
+ * 和风失败时退 Open-Meteo，不让用户这次什么都看不到。
+ *
+ * ## 缓存键里为什么要带「实际会用哪个源」
+ *
+ * 用户先不配 key 用了几天（缓存的都是 Open-Meteo 的市级结果），
+ * 后来补上和风的 key —— 如果键里不带源，就会一直吃那份旧的市级缓存，
+ * 配了也白配。带上源之后，配置一变键就变，自然重新解析。
  */
-export async function lookupLocation(config: WeatherConfig, query: LocationQuery): Promise<GeoResult | null> {
-  if (config.provider === 'qweather' && config.qweatherReady) {
-    const hit = await qweatherLookup(config, query)
-    if (hit) return hit
+export async function lookupLocation(
+  db: Db,
+  config: WeatherConfig,
+  query: LocationQuery
+): Promise<GeoResult | null> {
+  // 「实际会用哪个源」而不是「用户选了哪个」—— 配了和风但没配齐时实际是 Open-Meteo
+  const source: WeatherProviderId = config.provider === 'qweather' && config.qweatherReady ? 'qweather' : 'open-meteo'
+  const key = [source, query.province ?? '', query.city ?? '', query.district ?? ''].join('|')
+
+  const cache = getSetting<Record<string, GeoResult>>(db, GEOCODE_CACHE_KEY, {})
+  const hit = cache[key]
+  if (hit) return hit
+
+  const result = source === 'qweather' ? await qweatherLookup(config, query) : await openMeteoLookup(query)
+  // 失败**不缓存** —— 网络抖一下不该让这个地名永久失效
+  if (result) {
+    cache[key] = result
+    setSetting(db, GEOCODE_CACHE_KEY, cache)
   }
-  return openMeteoLookup(query)
+  return result
 }
 
 // ---------------------------------------------------------------------------

@@ -21,11 +21,12 @@ import { seedAll, seedFieldDefinitions } from './db/seed'
 import { backupDatabase } from './db/backup'
 import { loadFieldDefinitions } from './db/repo/common'
 import { assessPlantsWeather } from './services/weather'
-import { readWeatherConfig, saveWeatherConfig } from './services/weather-providers'
+import { GEOCODE_CACHE_KEY, lookupLocation, readWeatherConfig, saveWeatherConfig } from './services/weather-providers'
+import type { GeoResult } from './services/weather-providers'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { listPlants, plantStats, savePlant } from './db/repo/plants'
-import { archiveEnvironment, getEnvironment, getSetting, listEnvironments, saveEnvironment } from './db/repo/misc'
+import { archiveEnvironment, getEnvironment, getSetting, listEnvironments, saveEnvironment, setSetting } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
@@ -1574,6 +1575,42 @@ export async function runSmoke(outFile: string): Promise<number> {
         // 排序：紧急的排最前
         const mixed = summarizeRisks([...weekRisks, ...heat])
         check('紧急的排在留意的前面', mixed[0]?.severity === 'severe', String(mixed[0]?.severity))
+      }
+
+      // ---- 地名解析的缓存 ----
+      //
+      // 这条能在**不联网**的情况下验证：往缓存里塞一个特征明显的假结果，
+      // 再调 lookupLocation。拿回那个假值 = 命中了缓存 = 没发请求。
+      //
+      // 顺带钉住缓存键里带「实际会用哪个源」这件事 ——
+      // 不带的话，用户后补和风的 key 之后会一直吃旧的市级缓存，配了也白配。
+      {
+        const fake: GeoResult = {
+          label: '缓存里的假地点',
+          latitude: 1.23,
+          longitude: 4.56,
+          locationId: 'fake-id',
+          level: 'district',
+          provider: 'open-meteo'
+        }
+        setSetting(db, GEOCODE_CACHE_KEY, { 'open-meteo|湖南|岳阳|湘阴县': fake })
+
+        const cfg = readWeatherConfig(db, null)
+        check('自检里默认走 Open-Meteo（否则下面这条会真发请求）', cfg.provider === 'open-meteo', cfg.provider)
+
+        const fromCache = await lookupLocation(db, cfg, { province: '湖南', city: '岳阳', district: '湘阴县' })
+        check('命中缓存时原样返回（＝没联网）', fromCache?.label === '缓存里的假地点', String(fromCache?.label))
+        check('缓存里的坐标与精度一并带出', fromCache?.latitude === 1.23 && fromCache?.level === 'district')
+
+        // 换个区县就该重新解析；这里只断言键确实按区县区分（不去真的请求）
+        const cache = getSetting<Record<string, unknown>>(db, GEOCODE_CACHE_KEY, {})
+        check('缓存键含数据源', 'open-meteo|湖南|岳阳|湘阴县' in cache, Object.keys(cache).join(','))
+        check(
+          '缓存键按省市区分开',
+          !('open-meteo|湖南|岳阳|平江县' in cache) && !('open-meteo|湖北|武汉|湘阴县' in cache)
+        )
+
+        setSetting(db, GEOCODE_CACHE_KEY, {})
       }
 
       // ---- 养护位置的存取往返 ----
