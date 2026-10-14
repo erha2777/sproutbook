@@ -457,6 +457,21 @@ ALTER TABLE care_rules ADD COLUMN once_per_window INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE care_rules ADD COLUMN recipe_id INTEGER REFERENCES recipes(id);
 `
 
+/**
+ * 任务要记得自己是从哪条规则来的。
+ *
+ * 原来 care_tasks 和 care_plans 都没有 rule_id —— 任务生成出来就和规则脱钩了，
+ * 于是「这条规则绑了哪个配方」在任务卡片上根本查不到，
+ * 而做任务的时候恰恰最需要看到材料清单。
+ *
+ * recipe_id 冗余存一份（规则上也有）：规则改了配方之后，
+ * 已经生成的任务仍应显示当时的配方 —— 提醒的是那次要做的事。
+ */
+const V9_TASK_RULE_AND_RECIPE = /* sql */ `
+ALTER TABLE care_tasks ADD COLUMN rule_id INTEGER;
+ALTER TABLE care_tasks ADD COLUMN recipe_id INTEGER;
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -465,7 +480,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 5, name: 'phenology', sql: V5_PHASES },
   { version: 6, name: 'multi_species', sql: V6_MULTI_SPECIES },
   { version: 7, name: 'field_visibility', run: migrateFieldVisibility },
-  { version: 8, name: 'rule_frequency_recipe', sql: V8_RULE_FREQUENCY_AND_RECIPE }
+  { version: 8, name: 'rule_frequency_recipe', sql: V8_RULE_FREQUENCY_AND_RECIPE },
+  { version: 9, name: 'task_rule_recipe', sql: V9_TASK_RULE_AND_RECIPE }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

@@ -289,6 +289,8 @@ interface CareTaskRow {
   status: string
   completed_at: string | null
   completed_note: string | null
+  rule_id: number | null
+  recipe_id: number | null
   source: string
   created_at: string
 }
@@ -308,6 +310,8 @@ function mapTask(row: CareTaskRow): CareTask {
     status: row.status as CareTaskStatus,
     completedAt: row.completed_at,
     completedNote: row.completed_note,
+    ruleId: row.rule_id ?? null,
+    recipeId: row.recipe_id ?? null,
     source: row.source as CareTask['source'],
     createdAt: row.created_at
   }
@@ -368,8 +372,8 @@ export function createCareTask(db: Db, input: CareTaskInput): CareTask {
 
   const r = db.run(
     `INSERT INTO care_tasks (plan_id, plant_id, action_type, title, detail, due_date, window_days,
-       recurrence, priority, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       recurrence, priority, rule_id, recipe_id, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.planId ?? null,
     input.plantId ?? null,
     input.actionType,
@@ -379,6 +383,8 @@ export function createCareTask(db: Db, input: CareTaskInput): CareTask {
     input.windowDays ?? 3,
     input.recurrence ?? null,
     input.priority ?? 2,
+    input.ruleId ?? null,
+    input.recipeId ?? null,
     input.source ?? 'manual'
   )
   const created = getCareTask(db, Number(r.lastInsertRowid))
@@ -623,8 +629,8 @@ export function generateTasksForPlant(
       }
       db.run(
         `INSERT INTO care_tasks (plan_id, plant_id, action_type, title, detail, due_date, window_days,
-           priority, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'generated')`,
+           priority, rule_id, recipe_id, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')`,
         plan.id,
         plantId,
         task.actionType,
@@ -632,7 +638,10 @@ export function generateTasksForPlant(
         task.detail,
         task.dueDate,
         task.windowDays,
-        task.priority
+        task.priority,
+        // 任务要记得自己从哪条规则来 —— 做的时候才能直接看到配方
+        task.ruleId,
+        task.recipeId
       )
       created++
     }

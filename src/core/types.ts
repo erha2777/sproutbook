@@ -392,6 +392,13 @@ export interface CareTask {
   status: CareTaskStatus
   completedAt: string | null
   completedNote: string | null
+  /** 由哪条规则生成。手动建的任务为空 */
+  ruleId: number | null
+  /**
+   * 生成时那条规则绑的配方（冗余存一份）。
+   * 规则后来改了配方不该影响已经生成的任务 —— 它提醒的是当时要做的那件事。
+   */
+  recipeId: number | null
   source: 'seed' | 'ai' | 'manual' | 'generated'
   createdAt: string
 }
@@ -407,6 +414,10 @@ export interface CareTaskInput {
   windowDays?: number
   recurrence?: string | null
   priority?: number
+  /** 由哪条规则生成。手动建的任务为空 */
+  ruleId?: number | null
+  /** 生成时那条规则绑的配方 */
+  recipeId?: number | null
   source?: CareTask['source']
 }
 

@@ -308,6 +308,8 @@ export interface GeneratedTask {
   priority: number
   windowDays: number
   ruleId: number
+  /** 生成时那条规则绑的配方。为空表示这条规则没有材料清单 */
+  recipeId: number | null
 }
 
 /**
@@ -371,7 +373,9 @@ export function generateTasks(
       actionType: rule.actionType,
       priority: rule.priority,
       windowDays,
-      ruleId: rule.id
+      ruleId: rule.id,
+      // 冗余带一份配方：规则以后改了配方，已生成的任务仍显示当时那份
+      recipeId: rule.recipeId ?? null
     })
   }
 

@@ -9,7 +9,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { CareLog, CarePhase, CareTask } from '@core/types'
+import type { CareLog, CarePhase, CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareOverview, CareTaskListItem, PlantPhaseInfo } from '@shared/api'
 import {
   CARE_ACTION_ICONS,
@@ -32,7 +32,35 @@ import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
 import { CareRuleManager } from '../components/CareRuleManager'
 import { CareCalendar } from '../components/CareCalendar'
-
+/**
+ * 任务卡片上显示绑定的配方。
+ *
+ * **定义在模块层，不是组件内部。** 组件内定义会让每次渲染都产生一个新的
+ * 函数标识，React 认为子树换了类型就整个重挂载 —— 之前笔记输入框打不进字
+ * 就是这个原因。这个组件目前只是静态展示，但同样的坑不该再踩第二次。
+ */
+function TaskRecipe({
+  recipeId,
+  recipes,
+  materials
+}: {
+  recipeId: number
+  recipes: RecipeListItem[]
+  materials: Material[]
+}): ReactNode {
+  const rec = recipes.find((r) => r.id === recipeId)
+  if (!rec) return <div className="small muted">📋 配方已删除</div>
+  const parts = rec.items.map((it) => {
+    const label = it.name ?? materials.find((m) => m.id === it.materialId)?.name ?? '材料'
+    return it.ratioPart && it.ratioPart !== 1 ? `${label} ${it.ratioPart} 份` : label
+  })
+  return (
+    <div className="task-recipe">
+      <span className="task-recipe-name">📋 {rec.name}</span>
+      {parts.length > 0 ? <span className="muted"> {parts.join(' · ')}</span> : null}
+    </div>
+  )
+}
 const URGENCY_TONE: Record<CareUrgency, 'safety' | 'warn' | 'info' | 'muted' | 'ok'> = {
   overdue: 'safety',
   due: 'warn',
@@ -61,6 +89,9 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   const [logs, setLogs] = useState<CareLog[]>([])
   const [plants, setPlants] = useState<PlantOption[]>([])
   const [speciesNames, setSpeciesNames] = useState<string[]>([])
+  /** 任务上要显示绑定的配方，所以把配方与材料一起取回来（都是几十条量级） */
+  const [recipes, setRecipes] = useState<RecipeListItem[]>([])
+  const [materials, setMaterials] = useState<Material[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [editing, setEditing] = useState<CareTask | 'new' | null>(null)
@@ -82,13 +113,16 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
     setLoading(true)
     try {
       const plantId = plantFilter ? Number(plantFilter) : undefined
-      const [monthTasks, allOpen, ov, logList, plantList, speciesList] = await Promise.all([
+      const [monthTasks, allOpen, ov, logList, plantList, speciesList, recipeList, materialList] = await Promise.all([
         window.api.care.tasks({ from: bounds.from, to: bounds.to, plantId }),
         window.api.care.tasks({ status: 'open', plantId }),
         window.api.care.overview(year),
         window.api.care.logs(plantId, 100),
         window.api.plants.list({ limit: 500 }),
-        window.api.species.list({ limit: 500 })
+        window.api.species.list({ limit: 500 }),
+        // 任务卡片要显示绑定的配方，所以一起取
+        window.api.recipes.list().catch(() => []),
+        window.api.materials.list().catch(() => [])
       ])
       setTasks(monthTasks)
       // 逾期任务可能落在任意更早的月份，必须单独取，否则翻页就「看不见」了
@@ -102,6 +136,9 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         }))
       )
       setSpeciesNames(speciesList.items.map((s) => s.commonName))
+      // 配方取不到不该让整页报错（用户可能一个配方都没有）
+      setRecipes(recipeList ?? [])
+      setMaterials(materialList ?? [])
       {
         const infos = await Promise.all(plantList.items.map((p) => window.api.care.plantPhase(p.id)))
         setPlantPhases(Object.fromEntries(infos.map((i) => [i.plantId, i])))
@@ -240,6 +277,12 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
             {task.windowDays > 0 ? ` · 时间窗 ±${task.windowDays} 天` : ''}
           </div>
           {task.detail ? <div className="small">{task.detail}</div> : null}
+          {/*
+            绑了配方的规则，任务上直接列出材料清单 ——
+            做的时候不用再翻回规则库查「羊粪放多少」。
+            按 id 现查，所以配方改了名字这里会跟着变。
+          */}
+          {task.recipeId ? <TaskRecipe recipeId={task.recipeId} recipes={recipes} materials={materials} /> : null}
           {task.completedNote ? <div className="small muted">备注：{task.completedNote}</div> : null}
 
           {noteFor === task.id ? (
