@@ -14,9 +14,16 @@ interface SecretFile {
   version: 1
   /** encrypted = 是否由系统钥匙串加密 */
   apiKey: { encrypted: boolean; data: string } | null
+  /**
+   * 和风天气的 API Key。
+   *
+   * 和 AI 的 key 走同一条路：进操作系统钥匙串，绝不写数据库、绝不进 git。
+   * API Host 不在这里 —— 那不是秘密，它本身就出现在请求 URL 里。
+   */
+  weatherKey?: { encrypted: boolean; data: string } | null
 }
 
-const EMPTY: SecretFile = { version: 1, apiKey: null }
+const EMPTY: SecretFile = { version: 1, apiKey: null, weatherKey: null }
 
 function secretPath(): string {
   return join(app.getPath('userData'), 'secrets', 'credentials.json')
@@ -107,4 +114,42 @@ export function redact(text: string): string {
     .replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-***')
     .replace(/Bearer\s+[A-Za-z0-9._-]{8,}/gi, 'Bearer ***')
     .replace(/(api[_-]?key["'\s:=]+)[A-Za-z0-9._-]{8,}/gi, '$1***')
+}
+
+// ---------------------------------------------------------------------------
+// 和风天气的 API Key —— 与 AI 的 key 同一套存储与加密
+// ---------------------------------------------------------------------------
+
+/**
+ * 天气 key 用的是**同一个密钥文件、同一套 safeStorage 加解密**。
+ * 另起一套存储只会多一个可能忘记加密的地方。
+ */
+export function hasWeatherKey(): boolean {
+  return readFile().weatherKey != null
+}
+
+export function getWeatherKey(): string | null {
+  const entry = readFile().weatherKey
+  if (!entry) return null
+  try {
+    return entry.encrypted ? safeStorage.decryptString(Buffer.from(entry.data, 'base64')) : entry.data
+  } catch {
+    // 换了机器 / 系统密钥变了，解不开就当没有 —— 让用户重新填，而不是抛错
+    return null
+  }
+}
+
+export function setWeatherKey(key: string | null): { stored: boolean; plaintext: boolean } {
+  const file = readFile()
+  if (key === null || key.trim() === '') {
+    file.weatherKey = null
+    writeFile(file)
+    return { stored: false, plaintext: false }
+  }
+  const available = isEncryptionAvailable()
+  file.weatherKey = available
+    ? { encrypted: true, data: safeStorage.encryptString(key.trim()).toString('base64') }
+    : { encrypted: false, data: key.trim() }
+  writeFile(file)
+  return { stored: true, plaintext: !available }
 }
