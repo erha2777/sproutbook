@@ -1,0 +1,265 @@
+/**
+ * 默认信息模板 —— 首次启动时写入 field_definitions。
+ *
+ * 与你原始需求的对照（关键改动都注明了理由）：
+ *
+ *  | 你的字段       | 本模板实现                                              | 为什么 |
+ *  |----------------|--------------------------------------------------------|--------|
+ *  | 植物名称       | common_name（系统列，锁定的必填）                       | 列表/搜索/排序都要用，放独立列而不是 JSON |
+ *  | 别名           | aliases（标签，多值）                                   | 别名通常有多个 |
+ *  | 图片           | cover_image（图片类型）                                 | 走 images 表，不塞进 JSON |
+ *  | 开花时期       | bloom_months（月份区间）                                | 「春季」无法被日历和统计使用 |
+ *  | 是否需要春化   | needs_vernalization（是否）                             | — |
+ *  | 寿命           | lifespan（单选）                                        | — |
+ *  | 花期           | bloom_duration（数字·天）                               | 与「开花时期」区分：一个是什么时候开，一个是开多久 |
+ *  | 香味           | fragrance（单选）                                       | — |
+ *  | 所属科         | family（系统列）                                        | 统计与分组要按科聚合 |
+ *  | 毒             | 拆成 4 个安全字段（等级/部位/症状/急救）                 | 「有毒」两个字既不能筛选也不能指导急救 |
+ *  | 耐热           | heat_tolerance（数字·最高耐受 ℃）                        | 可参与极端高温预警 |
+ *  | 耐寒           | cold_hardiness（数字·最低耐受 ℃）                        | 可参与霜冻预警，这是它最大的价值 |
+ *  | 生长环境       | light_requirement（多选）                               | 很多植物既能全日照也能半阴 |
+ *  | 光照时长       | light_hours（数值区间·小时）                             | 与环境档案里的实际光照做匹配度计算 |
+ *  | 其他益处/害处  | benefits / drawbacks                                    | — |
+ */
+
+import type { NewFieldDefinition } from './types'
+
+type Seed = Omit<NewFieldDefinition, 'ownerKind'>
+
+const speciesFields: Seed[] = [
+  // ---- 基础 ----
+  {
+    key: 'common_name',
+    label: '植物名称',
+    groupName: '基础',
+    type: 'text',
+    isRequired: true,
+    helpText: '最常用的中文名。系统字段，不可删除。'
+  },
+  {
+    key: 'scientific_name',
+    label: '学名',
+    groupName: '基础',
+    type: 'text',
+    helpText: '拉丁学名，如 Rosa chinensis。用于和各种资料对齐。'
+  },
+  {
+    key: 'aliases',
+    label: '别名',
+    groupName: '基础',
+    type: 'tags',
+    helpText: '用逗号分隔多个别名。'
+  },
+  {
+    key: 'family',
+    label: '所属科',
+    groupName: '基础',
+    type: 'text',
+    helpText: '如 蔷薇科。统计页会按科聚合，建议统一写法。'
+  },
+  {
+    key: 'genus',
+    label: '所属属',
+    groupName: '基础',
+    type: 'text'
+  },
+
+  // ---- 形态 ----
+  {
+    key: 'growth_habit',
+    label: '株型',
+    groupName: '形态',
+    type: 'select',
+    options: ['草本', '灌木', '乔木', '藤本', '多肉', '球根', '水生', '蕨类', '附生'],
+    helpText: '决定将来「花园视图」用哪套生长阶段素材。'
+  },
+  {
+    key: 'mature_height',
+    label: '成株高度',
+    groupName: '形态',
+    type: 'number',
+    unit: 'cm'
+  },
+  {
+    key: 'lifespan',
+    label: '寿命',
+    groupName: '形态',
+    type: 'select',
+    options: ['一年生', '二年生', '多年生', '短命多年生']
+  },
+
+  // ---- 习性 ----
+  {
+    key: 'bloom_months',
+    label: '开花时期',
+    groupName: '习性',
+    type: 'month_range',
+    helpText: '可跨年，例如 11 ~ 2 月。'
+  },
+  {
+    key: 'bloom_duration',
+    label: '花期',
+    groupName: '习性',
+    type: 'number',
+    unit: '天',
+    helpText: '单朵或单次开花持续多少天。'
+  },
+  {
+    key: 'needs_vernalization',
+    label: '是否需要春化',
+    groupName: '习性',
+    type: 'bool',
+    helpText: '需要低温春化的植物，冬季不能搬进暖气房。'
+  },
+  {
+    key: 'fragrance',
+    label: '香味',
+    groupName: '习性',
+    type: 'select',
+    options: ['无香', '淡香', '浓香', '异味']
+  },
+  {
+    key: 'light_requirement',
+    label: '生长环境',
+    groupName: '习性',
+    type: 'multiselect',
+    options: ['全日照', '半阴', '全阴', '明亮散射光'],
+    helpText: '可多选。与环境档案的实际光照做匹配度提示。'
+  },
+  {
+    key: 'light_hours',
+    label: '光照时长',
+    groupName: '习性',
+    type: 'hours_range',
+    unit: '小时',
+    helpText: '每日直射光照需求，如 6 ~ 8。'
+  },
+  {
+    key: 'heat_tolerance',
+    label: '耐热',
+    groupName: '习性',
+    type: 'number',
+    unit: '℃',
+    helpText: '可耐受的最高温度。用于极端高温预警。'
+  },
+  {
+    key: 'cold_hardiness',
+    label: '耐寒',
+    groupName: '习性',
+    type: 'number',
+    unit: '℃',
+    helpText: '可耐受的最低温度（负数）。用于霜冻预警。'
+  },
+  {
+    key: 'dormancy_months',
+    label: '休眠期',
+    groupName: '习性',
+    type: 'month_range'
+  },
+  {
+    key: 'water_need',
+    label: '需水量',
+    groupName: '习性',
+    type: 'select',
+    options: ['少', '中等', '多', '干透浇透']
+  },
+
+  // ---- 安全（全部标记为 isSafety：AI 填充后必须人工确认）----
+  {
+    key: 'toxicity_level',
+    label: '毒性等级',
+    groupName: '安全',
+    type: 'select',
+    options: ['无毒', '微毒', '有毒', '剧毒', '未知'],
+    isSafety: true,
+    helpText: '安全字段：AI 填充后必须人工核实，应用不会自动确认。'
+  },
+  {
+    key: 'toxic_parts',
+    label: '有毒部位',
+    groupName: '安全',
+    type: 'multiselect',
+    options: ['叶', '花', '果实', '种子', '根', '茎', '汁液', '全株'],
+    isSafety: true
+  },
+  {
+    key: 'toxic_symptoms',
+    label: '中毒症状',
+    groupName: '安全',
+    type: 'longtext',
+    isSafety: true
+  },
+  {
+    key: 'first_aid',
+    label: '急救处理',
+    groupName: '安全',
+    type: 'longtext',
+    isSafety: true
+  },
+  {
+    key: 'pet_safe',
+    label: '对宠物安全',
+    groupName: '安全',
+    type: 'bool',
+    isSafety: true
+  },
+
+  // ---- 其他 ----
+  { key: 'benefits', label: '其他益处', groupName: '其他', type: 'longtext' },
+  { key: 'drawbacks', label: '其他害处', groupName: '其他', type: 'longtext' },
+  { key: 'care_notes', label: '养护要点', groupName: '其他', type: 'longtext' },
+  { key: 'notes', label: '备注', groupName: '其他', type: 'longtext' }
+]
+
+const plantFields: Seed[] = [
+  { key: 'nickname', label: '昵称', groupName: '基础', type: 'text', isRequired: true, helpText: '例如「阳台那盆月季」。' },
+  { key: 'acquired_at', label: '入手 / 播种日期', groupName: '基础', type: 'date', helpText: '生长进度与养护计划的时间基准。' },
+  { key: 'pot_size', label: '盆径', groupName: '基础', type: 'text' },
+  { key: 'plant_notes', label: '备注', groupName: '其他', type: 'longtext' }
+]
+
+/**
+ * 系统字段 → 数据库列的映射。
+ * 这些字段在模板里可见、可改标签、可排序，但**不可删除**，
+ * 且值存放于独立列（便于建索引、做搜索与聚合），不写进 attributes_json。
+ */
+export const SYSTEM_COLUMNS: Record<string, string> = {
+  common_name: 'common_name',
+  scientific_name: 'scientific_name',
+  family: 'family',
+  genus: 'genus',
+  aliases: 'aliases_json',
+  nickname: 'nickname',
+  acquired_at: 'acquired_at'
+}
+
+export function defaultFieldDefinitions(): NewFieldDefinition[] {
+  return [
+    ...speciesFields.map((f) => ({ ...f, ownerKind: 'species' as const })),
+    ...plantFields.map((f) => ({ ...f, ownerKind: 'plant' as const }))
+  ]
+}
+
+/** 提供了随包发布的常见物种名，用于「所属科」等字段的输入建议。 */
+export const FAMILY_SUGGESTIONS = [
+  '蔷薇科',
+  '菊科',
+  '天南星科',
+  '景天科',
+  '百合科',
+  '兰科',
+  '唇形科',
+  '仙人掌科',
+  '大戟科',
+  '秋海棠科',
+  '苦苣苔科',
+  '凤梨科',
+  '石蒜科',
+  '木犀科',
+  '杜鹃花科',
+  '山茶科',
+  '夹竹桃科',
+  '五加科',
+  '荨麻科',
+  '竹芋科'
+]

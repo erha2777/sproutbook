@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# 同一分支的旧任务自动取消，避免排队
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: 类型检查 / 自检 / 构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # 这一步不需要启动 Electron，跳过约 100MB 的运行时下载以加快 CI
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      # src/main/smoke.ts 不依赖 Electron 与打包器，可在纯 Node 下跑完整数据链路
+      - name: 数据层端到端自检
+        run: pnpm smoke
+
+      - name: 构建产物
+        run: pnpm build
+
+      - name: 上传自检报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: .cache/smoke-report.txt
+          if-no-files-found: ignore
+
+  package-smoke:
+    name: 打包冒烟（${{ matrix.os }}）
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: --win
+          - os: ubuntu-latest
+            args: --linux
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建
+        run: pnpm build
+
+      # --dir 只产出未压缩的应用目录，用于验证打包配置是否正确，不生成安装器
+      - name: 验证打包配置
+        run: pnpm exec electron-builder ${{ matrix.args }} --dir --publish never
+
+      - name: 列出打包产物
+        shell: bash
+        run: ls -la release/ || true

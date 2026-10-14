@@ -1,0 +1,29 @@
+# pnpm 11 的配置入口（部分设置在 .npmrc 里已不生效，必须放这里）。
+#
+# nodeLinker: hoisted
+#   使用扁平化（npm 风格）的 node_modules 布局，而不是默认的「符号链接 + .pnpm 虚拟 store」。
+#   原因：pnpm 默认布局在 Windows 上会创建 junction，而 Node 的 ESM 解析器在部分路径下
+#   不会 realpath 这些 junction，导致工具链（vite → rollup / fdir / esbuild 等）
+#   解析不到自己的传递依赖，报 ERR_MODULE_NOT_FOUND / ERR_PACKAGE_PATH_NOT_EXPORTED。
+#   扁平布局让任意层级的解析都能成功，Electron + Vite + electron-builder 组合下明显更稳。
+nodeLinker: hoisted
+
+# 上游版本范围 bug 的临时修正：
+# electron-builder@26 的 app-builder-lib 声明依赖 "@electron/get": "^3.0.0"，
+# 但它的代码要用 ElectronDownloadCacheMode 这个枚举，而该枚举在 3.0.0 里并不存在，
+# 于是打包时会崩在 resolveCacheMode（Cannot read properties of undefined）。
+# 强制它用 3.1.0 即可。不影响到 electron 自己需要的 ^5.0.0（那是另一条依赖分支）。
+overrides:
+  app-builder-lib>@electron/get: 3.1.0
+
+# pnpm 10+ 默认禁止依赖执行安装脚本（供应链安全），这里显式逐个声明。
+#
+#   electron            = true  → postinstall 下载 Electron 运行时二进制，没有它应用无法启动
+#   esbuild             = true  → postinstall 安装平台原生二进制，Vite 打包必需
+#   electron-winstaller = false → 只有 Squirrel.Windows 目标才需要，本项目用 NSIS，故不放行
+#
+# 新增依赖时若提示 ERR_PNPM_IGNORED_BUILDS，请先确认该包确实需要脚本再改成 true。
+allowBuilds:
+  electron: true
+  esbuild: true
+  electron-winstaller: false

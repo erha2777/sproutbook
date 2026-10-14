@@ -1,0 +1,36 @@
+MIT License
+
+Copyright (c) 2026 Sproutbook contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+注意 / Note:
+
+本仓库不包含任何第三方游戏（包括但不限于《星露谷物语》/ Stardew Valley）的
+美术、音频、字体或其它素材。界面全部由 CSS 与系统字体绘制。
+参考截图仅用于个人 UI 风格研究，不随本项目分发。
+
+This repository contains no art, audio, font, or other assets from any
+third-party game. The UI is drawn entirely with CSS and system fonts.
+Any reference screenshots are for personal UI style study only and are not
+distributed with this project.
+
+未来若引入第三方像素素材，必须逐个核实其许可并在 CREDITS.md 中登记来源与授权。

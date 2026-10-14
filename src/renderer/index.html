@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      安全策略：禁止一切远程资源加载（default-src 'none'）。
+      允许 inline 是为了兼容 Vite 开发服务器的 HMR 注入；生产环境可进一步收紧。
+      应用不加载任何远程内容，外部链接一律交给系统浏览器打开。
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' plantimg: data: blob:; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:*;"
+    />
+    <title>Sproutbook · 植物养护管理</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

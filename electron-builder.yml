@@ -1,0 +1,66 @@
+appId: com.sproutbook.app
+productName: Sproutbook
+copyright: Copyright © 2026 Sproutbook contributors
+
+# 直接复用 pnpm 已经下载好的 Electron 运行时，而不是在打包时重新下载。
+#
+# 好处有三：
+#   1. 打包完全离线可用，不受网络 / 代理 / 企业证书影响（本机就是因为 TLS 中间人
+#      导致 electron-builder 自带的下载器校验失败）；
+#   2. 打包用的 Electron 版本与开发时严格一致，避免「本地能跑、装完不一样」；
+#   3. 省掉每次打包一次约 100MB 的重复下载。
+# 该目录由 electron 的 postinstall 生成，包含完整的发行版文件。
+electronDist: node_modules/electron/dist
+
+directories:
+  output: release
+  buildResources: build
+
+# 告诉 electron-builder：node_modules 不用你管。
+# 本项目运行时依赖为空，全部代码已被 electron-vite 打包进 out/。
+# 详见 build/before-build.cjs 里的注释（也顺带规避了 electron-builder 26
+# 与 pnpm 11 输出格式不兼容导致的打包失败）。
+beforeBuild: ./build/before-build.cjs
+
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/node_modules/**/{test,__tests__,tests,example,examples,docs,doc}/**'
+
+# 用户数据一律放 userData，绝不打进安装包
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Sproutbook
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.lifestyle
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+
+linux:
+  target:
+    - AppImage
+  category: Utility
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+
+# 发布目标：GitHub Release。
+# 本地打包脚本都带了 --publish never，所以普通构建不会误发布；
+# 只有 CI 里的 `electron-builder --publish always` 会真正上传。
+publish:
+  provider: github
+  releaseType: release

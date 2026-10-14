@@ -1,0 +1,38 @@
+{
+  "name": "sproutbook",
+  "productName": "Sproutbook",
+  "version": "0.1.0",
+  "description": "像素风植物养护管理应用 / A pixel-art plant care manager",
+  "main": "./out/main/index.js",
+  "author": "Sproutbook contributors",
+  "license": "MIT",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "build": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && electron-vite build",
+    "start": "electron-vite preview",
+    "smoke": "electron-vite build && electron . --smoke",
+    "dist": "electron-vite build && electron-builder --publish never",
+    "dist:win": "electron-vite build && electron-builder --win --publish never"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "@types/react": "19.1.2",
+    "@types/react-dom": "19.1.2",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "41.10.7",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "rollup": "4.64.5",
+    "typescript": "5.9.3",
+    "vite": "7.3.7"
+  }
+}

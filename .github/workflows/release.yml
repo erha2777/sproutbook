@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 打包 ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: --win
+          - os: macos-latest
+            args: --mac
+          - os: ubuntu-latest
+            args: --linux
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # 发布前必须通过自检 —— 有失败项就不要发出去
+      - name: 数据层自检
+        run: pnpm smoke
+
+      - name: 构建
+        run: pnpm build
+
+      - name: 打包并发布到 Release
+        run: pnpm exec electron-builder ${{ matrix.args }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 未配置签名证书时，macOS 不做公证；签名相关告警可忽略
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: 上传构件（便于排查失败）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.yml
+          if-no-files-found: ignore

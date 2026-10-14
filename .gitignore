@@ -1,0 +1,47 @@
+# ---- 依赖与构建产物 ----
+node_modules/
+out/
+dist/
+release/
+*.tsbuildinfo
+.vite/
+
+# ---- 本地包管理缓存（不是源码）----
+.pnpm-store/
+.cache/
+
+# ---- 密钥与本地配置（绝不提交）----
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+
+# ---- 用户数据（绝不提交）----
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backups/
+userdata/
+data/
+
+# ---- 编辑器 / 系统 ----
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 第三方参考截图（个人 UI 风格研究用，不随项目分发）----
+# 这些是商业游戏的界面截图，仅用于本地参考。
+# 公开仓库不应包含它们，详见 LICENSE 与 CREDITS.md。
+preview/
+
+# ---- 日志 ----
+*.log
+npm-debug.log*
+pnpm-debug.log*
