@@ -89,12 +89,21 @@ function Shell(): ReactNode {
   /** 版本号从主进程读，避免界面写死后与 package.json 脱节 */
   const [appVersion, setAppVersion] = useState<string | null>(null)
 
+  /** 侧栏角标：已过期 + 该做了的养护任务数 */
+  const [carePending, setCarePending] = useState(0)
+
   useEffect(() => {
     void (async () => {
       try {
         setAppVersion((await window.api.app.info()).version)
       } catch {
         // 拿不到就不显示版本号，不影响使用
+      }
+      try {
+        const overview = await window.api.care.overview(new Date().getFullYear())
+        setCarePending(overview.overdue + overview.due)
+      } catch {
+        // 养护表还没就绪时静默跳过，不因为角标影响启动
       }
     })()
   }, [])
@@ -172,10 +181,22 @@ function Shell(): ReactNode {
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
               {item.key === 'species' && speciesCount !== null ? (
-                <span className="spacer" />
+                <>
+                  <span className="spacer" />
+                  <span className="small muted">{speciesCount}</span>
+                </>
               ) : null}
-              {item.key === 'species' && speciesCount !== null ? (
-                <span className="small muted">{speciesCount}</span>
+              {/*
+                养护计划的角标：不开这个页面也能看到有几件事压着。
+                只算「已过期 + 该做了」——把远期任务也算进来就等于没有信号了。
+              */}
+              {item.key === 'plans' && carePending > 0 ? (
+                <>
+                  <span className="spacer" />
+                  <span className="nav-badge" title={`${carePending} 件事需要处理`}>
+                    {carePending}
+                  </span>
+                </>
               ) : null}
             </button>
           ))}

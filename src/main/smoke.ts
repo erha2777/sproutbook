@@ -35,6 +35,7 @@ import {
   dueDescription,
   generateTasks,
   monthsCovered,
+  spreadDay,
   summarizeTasks,
   urgencyOf,
   windowRange
@@ -741,6 +742,17 @@ export function runSmoke(outFile: string): number {
       check('任务按日期升序', gen.map((t) => t.dueDate).join(',') === [...gen.map((t) => t.dueDate)].sort().join(','))
       check('任务日期落在正确的月和年', gen.every((t) => t.dueDate.startsWith('2026-')))
       check('专属规则只生成一条（单月）', gen.filter((t) => t.title === '专属重剪').length === 1)
+
+      // 锚点日按植株错开：否则七株的任务全挤在 1 号，月历上「1 号 8 项、其余全空」
+      check('锚点日落在当月天数内', spreadDay(2026, 2, 9) <= 28, String(spreadDay(2026, 2, 9)))
+      check('锚点日不超过 31', [1, 2, 3, 4, 5, 6, 7, 8].every((s) => spreadDay(2026, 1, s) <= 31))
+      check('2 月不会给出 30 号', spreadDay(2026, 2, 5) <= 29, String(spreadDay(2026, 2, 5)))
+      {
+        const days = new Set([1, 2, 3, 4, 5, 6, 7].map((s) => spreadDay(2026, 6, s)))
+        check('不同植株的锚点日确实分散开', days.size >= 4, [...days].join(','))
+        const spread = generateTasks(testRules, '照护月季', 2026, { spreadSeed: 3 })
+        check('生成任务用了错开后的日期', spread.every((t) => !t.dueDate.endsWith('-01')), spread[0]?.dueDate)
+      }
 
       // 同名规则去重：通用与专属写了同一件事时不该出现两条
       const dupRules = [

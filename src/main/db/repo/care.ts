@@ -446,7 +446,9 @@ export function generateTasksForPlant(
     const rules = listCareRules(db, { hemisphere: options.hemisphere ?? 'N' })
     const allGenerated = generateTasks(rules, speciesName, year, {
       hemisphere: options.hemisphere ?? 'N',
-      defaultWindowDays: options.windowDays ?? 15
+      defaultWindowDays: options.windowDays ?? 15,
+      // 按植株错开锚点日：否则七株的任务全挤在同一天，月历就没法看了
+      spreadSeed: plantId
     })
 
     // 时间窗已经走完的月份不再生成：那些日子计划还不存在，不该记成欠账

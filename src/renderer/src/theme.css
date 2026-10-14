@@ -440,6 +440,158 @@ img {
   color: var(--ink-soft);
 }
 
+/* 从月历跳过来的任务高亮一下，否则用户不知道跳到了哪里 */
+.task-row.highlighted {
+  border-color: var(--leaf-dark);
+  box-shadow: 0 0 0 3px rgba(124, 196, 78, 0.45);
+}
+
+/* ---------- 月历 ---------- */
+
+.care-calendar {
+  border: 3px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+}
+.cal-head,
+.cal-body {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.cal-head-cell {
+  padding: 5px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-soft);
+  border-bottom: 2px solid var(--wood-outline);
+  background: var(--wood-panel-dark);
+}
+.cal-cell {
+  min-height: 84px;
+  padding: 4px 5px;
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cal-cell.empty {
+  background: rgba(0, 0, 0, 0.05);
+}
+/* 今天要一眼看到 —— 这是「我现在在哪」的锚点 */
+.cal-cell.today {
+  background: #fff8dc;
+  box-shadow: inset 0 0 0 2px var(--leaf-dark);
+}
+.cal-day {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.cal-cell.today .cal-day {
+  color: var(--ink);
+  font-weight: 700;
+}
+.cal-add {
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0;
+  padding: 0 2px;
+}
+/* 「＋」只在悬停时出现，否则格子太花 */
+.cal-cell:hover .cal-add {
+  opacity: 0.8;
+}
+.cal-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cal-chip {
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  padding: 1px 4px;
+  border: 1px solid var(--wood-outline);
+  background: #fffbf0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+.cal-chip.overdue {
+  border-color: var(--danger);
+  background: #ffe4de;
+}
+.cal-chip.due {
+  border-color: #8a5f10;
+  background: #fff3d6;
+}
+.cal-chip.done {
+  background: #dff0d8;
+  border-color: #2f6b26;
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+.cal-chip.skipped {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.cal-more {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.cal-legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border-top: 2px solid var(--wood-outline);
+  flex-wrap: wrap;
+}
+.cal-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--wood-outline);
+  margin-left: 6px;
+}
+.cal-dot.overdue {
+  background: #ffe4de;
+  border-color: var(--danger);
+}
+.cal-dot.due {
+  background: #fff3d6;
+  border-color: #8a5f10;
+}
+.cal-dot.pending {
+  background: #fffbf0;
+}
+.cal-dot.done {
+  background: #dff0d8;
+  border-color: #2f6b26;
+}
+.cal-dot.skipped {
+  background: #e8ddc8;
+}
+
+/* 侧栏上的待办角标：不开应用也能一眼看到有几件事压着 */
+.nav-badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 0 5px;
+  text-align: center;
+  font-size: 11px;
+  background: var(--danger);
+  color: #fff;
+  border: 1px solid var(--wood-outline);
+}
+
 .pixel-card {
   background: var(--wood-panel);
   border: var(--step) solid var(--wood-outline);

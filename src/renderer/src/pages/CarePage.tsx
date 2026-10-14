@@ -26,6 +26,7 @@ import { Badge, Button, EmptyState, Notice, Panel, SectionTitle, SelectInput, Sp
 import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
 import { CareRuleManager } from '../components/CareRuleManager'
+import { CareCalendar } from '../components/CareCalendar'
 
 const URGENCY_TONE: Record<CareUrgency, 'safety' | 'warn' | 'info' | 'muted' | 'ok'> = {
   overdue: 'safety',
@@ -48,7 +49,7 @@ export function CarePage(): ReactNode {
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [plantFilter, setPlantFilter] = useState('')
-  const [tab, setTab] = useState<'todo' | 'logs'>('todo')
+  const [tab, setTab] = useState<'todo' | 'calendar' | 'logs'>('todo')
   const [tasks, setTasks] = useState<CareTaskListItem[]>([])
   const [overdue, setOverdue] = useState<CareTaskListItem[]>([])
   const [overview, setOverview] = useState<CareOverview | null>(null)
@@ -61,6 +62,10 @@ export function CarePage(): ReactNode {
   const [showRules, setShowRules] = useState(false)
   const [noteFor, setNoteFor] = useState<number | null>(null)
   const [noteText, setNoteText] = useState('')
+  /** 从月历点进来的任务：滚动并高亮一下，否则用户不知道跳到了哪里 */
+  const [highlight, setHighlight] = useState<number | null>(null)
+  /** 从月历空白日点「＋」新增任务时的预设日期 */
+  const [draftDate, setDraftDate] = useState<string | undefined>(undefined)
 
   const bounds = useMemo(() => monthBounds(year, month), [year, month])
 
@@ -163,7 +168,7 @@ export function CarePage(): ReactNode {
     const urgency = urgencyOf(task, today)
     const closed = task.status !== 'pending'
     return (
-      <div className="task-row">
+      <div className={"task-row" + (highlight === task.id ? " highlighted" : "")}>
         <span className="task-icon">{CARE_ACTION_ICONS[task.actionType]}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="row tight" style={{ alignItems: 'center' }}>
@@ -313,6 +318,9 @@ export function CarePage(): ReactNode {
           <Button size="small" variant={tab === 'todo' ? 'primary' : 'ghost'} onClick={() => setTab('todo')}>
             待办
           </Button>
+          <Button size="small" variant={tab === 'calendar' ? 'primary' : 'ghost'} onClick={() => setTab('calendar')}>
+            月历
+          </Button>
           <Button size="small" variant={tab === 'logs' ? 'primary' : 'ghost'} onClick={() => setTab('logs')}>
             养护日志（{logs.length}）
           </Button>
@@ -367,6 +375,26 @@ export function CarePage(): ReactNode {
             </>
           )}
         </Panel>
+      ) : tab === 'calendar' ? (
+        <Panel>
+          <SectionTitle right={<span className="small muted">点任务可跳到待办列表处理</span>}>
+            {year} 年 {month} 月
+          </SectionTitle>
+          <CareCalendar
+            year={year}
+            month={month}
+            tasks={tasks}
+            onPickTask={(t) => {
+              // 跳到待办并高亮：月历负责「看清节奏」，处理动作回到列表
+              setTab('todo')
+              setHighlight(t.id)
+            }}
+            onPickDay={(date) => {
+              setEditing('new')
+              setDraftDate(date)
+            }}
+          />
+        </Panel>
       ) : (
         <Panel>
           <SectionTitle>养护日志</SectionTitle>
@@ -398,10 +426,15 @@ export function CarePage(): ReactNode {
         <CareTaskDialog
           task={editing === 'new' ? null : editing}
           plants={plants}
-          defaultDate={`${year}-${String(month).padStart(2, '0')}-01`}
-          onClose={() => setEditing(null)}
+          defaultDate={draftDate ?? `${year}-${String(month).padStart(2, '0')}-01`}
+          onClose={() => {
+            setEditing(null)
+            setDraftDate(undefined)
+          }}
           onSaved={() => {
             setEditing(null)
+            setDraftDate(undefined)
+            setHighlight(null)
             void reload()
           }}
         />

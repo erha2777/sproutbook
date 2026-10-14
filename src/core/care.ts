@@ -97,6 +97,26 @@ export function monthsCovered(rule: Pick<CareRule, 'monthFrom' | 'monthTo'>): nu
   return out
 }
 
+/** 某年某月有多少天。 */
+export function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate()
+}
+
+/**
+ * 生成任务时的「锚点日」。
+ *
+ * 规则只到月，所以原则上可以全放在 1 号 —— 但那样七株植物的任务会全挤在
+ * 同一天（月历上就是「1 号 8 项、其余全空」），失去参考价值。
+ * 这里按植株错开，把同月的工作量摊开。
+ *
+ * 注意这不是「精确排期」：真正可做的区间是时间窗，锚点日只是让你有个先后。
+ */
+export function spreadDay(year: number, month: number, seed: number): number {
+  const max = daysInMonth(year, month)
+  const raw = 1 + (Math.abs(Math.trunc(seed)) * 7) % 27
+  return Math.min(raw, max)
+}
+
 export interface GeneratedTask {
   dueDate: string
   title: string
@@ -110,18 +130,20 @@ export interface GeneratedTask {
 /**
  * 把规则展开成某一年的一组任务。
  *
- * 每月一条，日期取当月 1 日，时间窗默认 ±15 天 —— 也就是「这个月内做都行」。
- * 不细化到具体某天，是因为规则本身只到月；假装精确反而是误导。
+ * 每月一条，日期取该月的锚点日（见 spreadDay），时间窗默认 ±15 天 ——
+ * 也就是「这个月内做都行」。不细化到具体某天，是因为规则本身只到月；
+ * 假装精确反而是误导。
  */
 export function generateTasks(
   rules: CareRule[],
   speciesName: string | null,
   year: number,
-  options: { hemisphere?: 'N' | 'S'; defaultWindowDays?: number } = {}
+  options: { hemisphere?: 'N' | 'S'; defaultWindowDays?: number; spreadSeed?: number } = {}
 ): GeneratedTask[] {
   const hemisphere = options.hemisphere ?? 'N'
   const windowDays = options.defaultWindowDays ?? 15
   const name = speciesName?.trim().toLowerCase() ?? ''
+  const seed = options.spreadSeed ?? 0
 
   const applicable = rules.filter((r) => {
     if (r.hemisphere !== hemisphere) return false
@@ -134,7 +156,8 @@ export function generateTasks(
 
   for (const rule of applicable) {
     for (const month of monthsCovered(rule)) {
-      const dueDate = `${year}-${String(month).padStart(2, '0')}-01`
+      const day = spreadDay(year, month, seed)
+      const dueDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
       // 同一株同一月同一件事只留一条：通用规则和物种规则可能重复
       const signature = `${dueDate}|${rule.actionType}|${rule.title}`
       if (seen.has(signature)) continue
