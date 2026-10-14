@@ -12,12 +12,13 @@
 import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
 import { writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { closeDatabase, getLastReport, initDatabase } from './db'
+import { closeDatabase, dataDir, dbFilePath, getLastReport, imagesDir, initDatabase } from './db'
 import { registerIpc } from './ipc'
 import { handleImageProtocol, registerImageScheme } from './services/images'
 import { runSmoke } from './smoke'
 import { applySandboxDecision } from './sandbox'
 import type { SandboxDecision } from './sandbox'
+import { logStartup, logWritability, startupLogPath } from './startupLog'
 
 const isSmoke = process.argv.includes('--smoke')
 const isDev = !app.isPackaged
@@ -44,6 +45,15 @@ try {
   console.error('[sandbox] 处理沙箱策略时出错（继续按默认沙箱启动）:', error)
 }
 
+logStartup('应用启动', {
+  version: app.getVersion(),
+  electron: process.versions.electron,
+  packaged: app.isPackaged,
+  argv: process.argv.slice(1),
+  sandboxDisabled: sandboxDecision.disabled,
+  sandboxReason: sandboxDecision.reason
+})
+
 function smokeOutPath(): string {
   const arg = process.argv.find((a) => a.startsWith('--smoke-out='))
   if (arg) return arg.slice('--smoke-out='.length)
@@ -69,20 +79,28 @@ if (isSmoke) {
 // 自定义协议特权注册必须早于 ready
 registerImageScheme()
 
-// 单实例：SQLite 是单写入者模型，两个进程同时写会互相锁死
-if (!isSmoke) {
-  const gotLock = app.requestSingleInstanceLock()
-  if (!gotLock) {
-    app.quit()
-  } else {
-    app.on('second-instance', () => {
-      const [win] = BrowserWindow.getAllWindows()
-      if (win) {
-        if (win.isMinimized()) win.restore()
-        win.focus()
-      }
-    })
-  }
+/**
+ * 单实例锁。
+ *
+ * SQLite 是单写入者模型，两个进程同时操作同一个库会互相锁死。
+ *
+ * ⚠️ 关键：拿不到锁时**必须让后续所有初始化都停下来**。
+ * 只调用 `app.quit()` 是不够的 —— 它是异步的，`app.whenReady()` 依然会触发，
+ * 于是第二个实例照样去打开同一个数据库文件，用户看到的就是
+ * 「数据库初始化失败：unable to open database file」。
+ */
+const hasSingleInstanceLock = isSmoke ? true : app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const [win] = BrowserWindow.getAllWindows()
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
+  })
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -175,7 +193,26 @@ app.whenReady().then(() => {
     return
   }
 
+  // 没抢到单实例锁：直接退出，绝不碰数据库。
+  // 否则会和已经运行的实例抢同一个 SQLite 文件，用户看到的是
+  // 「unable to open database file」这种极具误导性的报错。
+  if (!hasSingleInstanceLock) {
+    console.log('[app] 已有另一个 Sproutbook 实例在运行，本实例退出。')
+    app.exit(0)
+    return
+  }
+
   try {
+    logStartup('开始初始化数据库', {
+      userData: app.getPath('userData'),
+      dataDir: dataDir(),
+      dbFile: dbFilePath()
+    })
+    // 把每个关键目录的可写性记下来 —— 数据库打不开时，这一行通常直接给出答案
+    logWritability('用户数据目录', app.getPath('userData'))
+    logWritability('数据目录', dataDir())
+    logWritability('图片目录', imagesDir())
+
     const result = initDatabase()
     if (result.report.applied.length > 0) {
       console.log(
@@ -185,13 +222,45 @@ app.whenReady().then(() => {
     if (result.seeded.fields > 0) {
       console.log(`[db] 首次启动，写入默认模板 ${result.seeded.fields} 个字段`)
     }
+    logStartup('数据库初始化成功', {
+      from: result.report.from,
+      to: result.report.to,
+      seededFields: result.seeded.fields
+    })
   } catch (error) {
-    // 数据库起不来是致命错误，必须让用户看到明确原因
+    // 数据库起不来是致命错误，必须让用户看到**可操作**的原因，而不是一句 SQLite 原文
     const message = error instanceof Error ? error.message : String(error)
+    const dataDirPath = app.getPath('userData')
     console.error('[db] 初始化失败:', error)
+    logStartup('数据库初始化失败', error)
+    logWritability('失败后复查用户数据目录', dataDirPath)
+
+    const logPath = startupLogPath()
     dialog.showErrorBox(
       '数据库初始化失败',
-      `${message}\n\n你的数据保存在：\n${app.getPath('userData')}\n\n请备份该目录后反馈此问题，不要直接删除。`
+      [
+        `错误信息：${message}`,
+        '',
+        `数据目录：${dataDirPath}`,
+        logPath ? `启动日志：${logPath}` : '',
+        '',
+        '请按顺序尝试：',
+        '',
+        '1) 结束所有 Sproutbook 进程后重试（最常见）',
+        '   任务管理器 →「详细信息」标签页 → 找到 Sproutbook.exe → 结束任务。',
+        '   如果有窗口看不见的残留进程，必须在这一页里找。',
+        '',
+        '2) 检查数据目录是否被占用或权限异常',
+        '   上面的启动日志会写明每个目录是否可写，把日志发来即可定位。',
+        '',
+        '3) 备份后重建数据目录',
+        '   备份文件在 backups 子目录里，每个都是完整可用的 SQLite 数据库，',
+        '   可以用 DB Browser 之类的工具直接打开，不会丢数据。',
+        '',
+        '如果以上都无效，请把这份错误信息和启动日志一起反馈。'
+      ]
+        .filter((line) => line !== '')
+        .join('\n')
     )
     app.exit(1)
     return
