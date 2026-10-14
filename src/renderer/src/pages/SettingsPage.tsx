@@ -184,8 +184,15 @@ export function SettingsPage(): ReactNode {
             <TextInput value={settings.chatModel} onChange={(v) => void patch({ chatModel: v })} placeholder="deepseek-chat" />
           </Field>
 
-          <Field label="视觉模型（预留）" help="识图功能将使用这个模型，当前版本尚未启用。">
-            <TextInput value={settings.visionModel} onChange={(v) => void patch({ visionModel: v })} placeholder="gpt-4o-mini" />
+          <Field
+            label="视觉模型"
+            help="识图用这个模型。留空会回落到上面的对话模型 —— deepseek-flash 本身就能读图，不必填两遍。"
+          >
+            <TextInput
+              value={settings.visionModel}
+              onChange={(v) => void patch({ visionModel: v })}
+              placeholder="留空即用对话模型"
+            />
           </Field>
 
           <Field

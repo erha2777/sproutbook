@@ -218,7 +218,7 @@ CREATE TABLE care_rules (
 );
 CREATE INDEX idx_rule_lookup ON care_rules(species_key, hemisphere, month_from);
 
--- 养护日志：时间线与将来「生长展现」的数据源
+-- 养护日志：时间线（已实现）与将来「生长展现」的数据源 —— 后者仍未做
 CREATE TABLE care_logs (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   plant_id   INTEGER NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
