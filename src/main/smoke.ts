@@ -195,6 +195,28 @@ export interface SmokeReport {
   database: Record<string, unknown>
 }
 
+/**
+ * 保存物种，并断言一定成功。
+ *
+ * saveSpecies 的 species 现在可以是 null（UPDATE 影响 0 行时不再递一个
+ * id:0 的假对象回来）。自检里那些调用都是**准备数据**，拿不到就说明
+ * 前提已经不成立，应该立刻炸掉 —— 而不是让 null 悄悄流进后面的断言，
+ * 变成一条看不懂的失败。
+ *
+ * 刻意**不用 `!`** 压住：那等于把检查关掉，和原来的毛病一样。
+ */
+function saveSpeciesOk(
+  db: Db,
+  input: Parameters<typeof saveSpecies>[1],
+  origin?: 'manual' | 'ai' | 'import'
+): ReturnType<typeof saveSpecies> & { species: NonNullable<ReturnType<typeof saveSpecies>['species']> } {
+  const r = saveSpecies(db, input, origin)
+  if (!r.species) {
+    throw new Error('自检准备数据失败：' + JSON.stringify(r.errors))
+  }
+  return r as ReturnType<typeof saveSpecies> & { species: NonNullable<ReturnType<typeof saveSpecies>['species']> }
+}
+
 export async function runSmoke(outFile: string): Promise<number> {
   const checks: CheckResult[] = []
   const workDir = mkdtempSync(join(tmpdir(), 'sproutbook-smoke-'))
@@ -244,7 +266,7 @@ export async function runSmoke(outFile: string): Promise<number> {
     check('植株字段可读取', plantDefs.length >= 3, `${plantDefs.length} 个`)
 
     // --- 物种写入：覆盖 boolean / number / 多值 / 月份区间 四类绑定 ---
-    const saved = saveSpecies(db, {
+    const saved = saveSpeciesOk(db, {
       values: {
         common_name: '月季',
         scientific_name: 'Rosa chinensis',
@@ -275,7 +297,7 @@ export async function runSmoke(outFile: string): Promise<number> {
     //  2. IPC 处理器漏了第三个参数，导致「撤回核实」实际永远走「标记」分支 ——
     //     界面提示成功，数据却没变。
     // 现在「需要核实的字段」只有安全字段，所以先写一批 AI 来源（含非安全字段）。
-    const withAi = saveSpecies(db, {
+    const withAi = saveSpeciesOk(db, {
       id: speciesId,
       values: { common_name: '月季' },
       source: 'ai',
@@ -376,18 +398,24 @@ export async function runSmoke(outFile: string): Promise<number> {
     check('非花月份不命中', !byMonthMiss.items.some((s) => s.id === speciesId))
 
     // --- 部分更新不丢字段 ---
-    const updated = saveSpecies(db, { id: speciesId, values: { common_name: '月季（更新）', pot_size: '20cm' } })
+    const updated = saveSpeciesOk(db, { id: speciesId, values: { common_name: '月季（更新）', pot_size: '20cm' } })
     check('部分更新成功', Object.keys(updated.errors).length === 0)
     check('未提交的字段保持原值', updated.species.attributes.cold_hardiness === -15, `实际 ${updated.species.attributes.cold_hardiness}`)
     check('已提交的字段被更新', updated.species.commonName === '月季（更新）')
 
-    // --- 必填校验 ---
+    /*
+     * 这两处**故意**让它失败（测必填校验和非法类型），所以不能用 saveSpeciesOk ——
+     * 那个辅助会直接抛「自检准备数据失败」，把一条正常的断言变成崩溃。
+     * 顺带钉住：校验失败时 species 是 null，不再递一个 id:0 的假对象回去。
+     */
     const missing = saveSpecies(db, { values: { scientific_name: 'X' } })
     check('缺少必填字段被拒绝', Object.keys(missing.errors).length > 0, JSON.stringify(missing.errors))
+    check('校验失败时 species 为 null（不是 id:0 的假对象）', missing.species === null, String(missing.species))
 
     // --- 非法类型输入不会写入脏数据 ---
     const badType = saveSpecies(db, { values: { common_name: '测试', cold_hardiness: '很冷' } })
     check('非法数字被拒绝', Object.keys(badType.errors).includes('cold_hardiness'), JSON.stringify(badType.errors))
+    check('非法类型时不返回半成品对象', badType.species === null, String(badType.species))
 
     // --- 植株 ---
     const plantSaved = savePlant(db, {
@@ -462,11 +490,11 @@ export async function runSmoke(outFile: string): Promise<number> {
     })
     check(
       '自定义必填字段留空时被拒绝',
-      'smoke_required_field' in saveSpecies(db, { id: speciesId, values: { smoke_required_field: '' } }).errors
+      'smoke_required_field' in saveSpeciesOk(db, { id: speciesId, values: { smoke_required_field: '' } }).errors
     )
     check(
       '自定义必填字段填了就通过',
-      Object.keys(saveSpecies(db, { id: speciesId, values: { smoke_required_field: '有值了' } }).errors).length === 0
+      Object.keys(saveSpeciesOk(db, { id: speciesId, values: { smoke_required_field: '有值了' } }).errors).length === 0
     )
     check(
       '自定义必填字段的值确实落库',
@@ -492,7 +520,7 @@ export async function runSmoke(outFile: string): Promise<number> {
       updateField(db, typedField.id, { type: 'longtext' }).type === 'longtext'
     )
     // 写一条数据进去
-    saveSpecies(db, { id: speciesId, values: { smoke_typed_field: '约 15 厘米' } })
+    saveSpeciesOk(db, { id: speciesId, values: { smoke_typed_field: '约 15 厘米' } })
     check('改类型测试数据已写入', fieldUsage(db, typedField.id) > 0, String(fieldUsage(db, typedField.id)))
     checkThrows(
       '有数据时禁止改类型（避免值静默失效）',
@@ -1002,7 +1030,7 @@ export async function runSmoke(outFile: string): Promise<number> {
       checkThrows('月份越界时拒绝', () => saveCareRule(db as Db, { ...myRule, id: undefined, monthFrom: 13 }), '1~12')
 
       // ---- 仓储：生成任务 ----
-      const careSpecies = saveSpecies(db, { values: { common_name: '照护月季' } })
+      const careSpecies = saveSpeciesOk(db, { values: { common_name: '照护月季' } })
       const carePlant = savePlant(db, {
         speciesId: careSpecies.species.id,
         nickname: '照护测试株',
@@ -2176,7 +2204,7 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('空阶段数组存成 null（＝不限阶段）', noPhase.activePhases === null)
 
       // ---- 仓储：植株阶段 ----
-      const careSpecies2 = saveSpecies(db, { values: { common_name: '阶段测试株' } })
+      const careSpecies2 = saveSpeciesOk(db, { values: { common_name: '阶段测试株' } })
       const carePlant2 = savePlant(db, {
         speciesId: careSpecies2.species.id,
         nickname: '阶段测试株',
@@ -2708,7 +2736,7 @@ export async function runSmoke(outFile: string): Promise<number> {
     // 所以不测「导出成功」，直接导进一个新库再比字段值。
     {
       const oddName = '月季,"斗雪红"' // 名称里同时有逗号和引号，专门恶心 CSV
-      const exportSpecies = saveSpecies(db, {
+      const exportSpecies = saveSpeciesOk(db, {
         values: {
           common_name: oddName,
           scientific_name: 'Rosa chinensis',

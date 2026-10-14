@@ -524,7 +524,7 @@ function findExistingPlant(db: Db, values: Record<string, unknown>): { id: numbe
 function createRelationTarget(db: Db, target: RelationTarget, name: string): number | null {
   if (target === 'species') {
     const saved = saveSpecies(db, { values: { common_name: name }, source: 'manual' })
-    return Object.keys(saved.errors).length === 0 ? saved.species.id : null
+    return Object.keys(saved.errors).length === 0 ? saved.species!.id : null
   }
   if (target === 'environments') {
     const row = db.run(
