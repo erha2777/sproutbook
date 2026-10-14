@@ -201,6 +201,18 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
     )
   }, [species, defs])
 
+  /**
+   * AI 填过的安全字段**总数**，用作待核实数量的分母。
+   *
+   * 只报「还有 N 个没核实」会产生歧义：「有 1 个安全相关字段是 AI 填写的，
+   * 尚未核实」既能读成「还剩 1 个」，也能读成「一共就 1 个」。
+   * 把分母一起说出来就不会误会了。
+   */
+  const aiSafetyTotal = useMemo(() => {
+    if (!species) return 0
+    return Object.keys(species.confidence).filter((k) => defs.find((d) => d.key === k)?.isSafety).length
+  }, [species, defs])
+
   if (loading) {
     return (
       <Panel>
@@ -264,7 +276,21 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
         {pendingSafety.length > 0 ? (
           <div style={{ marginTop: 10 }}>
             <Notice tone="warn">
-              有 <b>{pendingSafety.length}</b> 个<b>安全相关字段</b>是 AI 填写的，尚未人工核实。
+              {/*
+                区分「还剩 N 个」和「一共就 N 个」：
+                只写「有 N 个安全相关字段尚未核实」会被读成后者，
+                而实际常见的情况是前者（已经核实过一部分了）。
+              */}
+              {pendingSafety.length === aiSafetyTotal ? (
+                <>
+                  有 <b>{aiSafetyTotal}</b> 个安全相关字段是 AI 填写的，目前一个都还没核实。
+                </>
+              ) : (
+                <>
+                  AI 一共填了 <b>{aiSafetyTotal}</b> 个安全相关字段，其中 <b>{aiSafetyTotal - pendingSafety.length}</b>{' '}
+                  个已核实，还剩 <b>{pendingSafety.length}</b> 个没核实。
+                </>
+              )}
               请对照可靠资料确认后再标记 —— 这类信息填错的后果和学名写错完全不是一回事。
               <div className="row tight" style={{ marginTop: 9 }}>
                 <Button variant="primary" size="small" onClick={() => void setVerified(pendingSafety, true)}>
@@ -274,10 +300,10 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
               </div>
             </Notice>
           </div>
-        ) : species && Object.keys(species.confidence).length > 0 ? (
+        ) : species && aiSafetyTotal > 0 ? (
           <div style={{ marginTop: 10 }}>
             <Notice tone="ok">
-              安全相关字段都已人工核实。其余 AI 填入的字段属于普通信息，只作来源记录，不要求逐项确认。
+              AI 填写的 <b>{aiSafetyTotal}</b> 个安全相关字段都已人工核实。其余 AI 填入的字段属于普通信息，只作来源记录，不要求逐项确认。
             </Notice>
           </div>
         ) : null}
@@ -366,7 +392,7 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
             right={
               pendingSafety.length > 0 ? (
                 <Button size="small" onClick={() => void setVerified(pendingSafety, true)}>
-                  全部核实（{pendingSafety.length}）
+                  核实剩余 {pendingSafety.length} 个
                 </Button>
               ) : (
                 <Badge tone="ok">安全字段已核实</Badge>
