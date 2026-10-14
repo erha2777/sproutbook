@@ -15,9 +15,19 @@
 import type { Db } from '../../db/connection'
 import { redact } from '../secrets'
 
+/**
+ * 多段内容里的一段。
+ *
+ * 纯文本模型只认字符串；视觉模型要的是「文本 + 图片」的数组
+ *（OpenAI 兼容格式）。所以 content 两种都要收。
+ */
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: string | ChatContentPart[]
 }
 
 export interface ChatRequest {

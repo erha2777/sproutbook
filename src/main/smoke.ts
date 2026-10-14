@@ -23,6 +23,7 @@ import { loadFieldDefinitions } from './db/repo/common'
 import { assessPlantsWeather } from './services/weather'
 import { GEOCODE_CACHE_KEY, lookupLocation, readWeatherConfig, saveWeatherConfig } from './services/weather-providers'
 import type { GeoResult } from './services/weather-providers'
+import { buildIdentifyMessages, parseIdentifyResponse } from './services/ai/identify'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { listPlants, plantStats, savePlant } from './db/repo/plants'
@@ -1575,6 +1576,82 @@ export async function runSmoke(outFile: string): Promise<number> {
         // 排序：紧急的排最前
         const mixed = summarizeRisks([...weekRisks, ...heat])
         check('紧急的排在留意的前面', mixed[0]?.severity === 'severe', String(mixed[0]?.severity))
+      }
+
+      // ---- 识图：消息构造与回答解析 ----
+      //
+      // 这一段**不用联网**也能测：构造消息和解析回答都是纯函数。
+      // 而解析恰恰是最该测的地方 —— 模型不按格式返回是常态。
+      {
+        const dataUrl = 'data:image/jpeg;base64,AAAA'
+
+        const plain = buildIdentifyMessages(dataUrl)
+        check('识图消息是两段：系统提示 + 用户', plain.length === 2)
+        check('系统提示要求只输出 JSON', String(plain[0].content).includes('只输出一个 JSON'))
+        check('系统提示要求不确定就别硬凑', String(plain[0].content).includes('不要为了凑数编造'))
+        const userParts = Array.isArray(plain[1].content) ? plain[1].content : []
+        check('用户那一段带上了图片', userParts.some((p) => p.type === 'image_url'), JSON.stringify(userParts.map((p) => p.type)))
+        check('图片用的是传进来的 data URL', JSON.stringify(plain[1].content).includes(dataUrl))
+
+        const withHint = buildIdentifyMessages(dataUrl, '叶子有点发黄')
+        check('带补充说明时写进文本里', JSON.stringify(withHint[1].content).includes('叶子有点发黄'))
+
+        // 正常返回
+        const normal = parseIdentifyResponse(
+          JSON.stringify({
+            candidates: [
+              { name: '绿萝', scientificName: 'Epipremnum aureum', confidence: 0.9, reason: '心形叶、攀援' },
+              { name: '龟背竹', scientificName: '', confidence: 0.4, reason: '叶形相近但无裂' },
+              { name: '合果芋', scientificName: 'Syngonium', confidence: 0.25, reason: '叶脉相似' }
+            ]
+          })
+        )
+        check('解析出三个候选', normal.length === 3, String(normal.length))
+        check('按置信度从高到低', normal[0].name === '绿萝' && normal[2].name === '合果芋')
+        check('学名为空串时归一成 null', normal[1].scientificName === null)
+
+        // 模型爱犯的几种格式毛病，都不该让结果丢掉
+        check(
+          'confidence 写成百分数会换算',
+          parseIdentifyResponse('{"candidates":[{"name":"月季","confidence":85}]}')[0].confidence === 0.85
+        )
+        check(
+          'confidence 是字符串也认',
+          parseIdentifyResponse('{"candidates":[{"name":"月季","confidence":"0.7"}]}')[0].confidence === 0.7
+        )
+        check(
+          '没有 confidence 时给中间值而不是丢掉',
+          parseIdentifyResponse('{"candidates":[{"name":"月季"}]}')[0].confidence === 0.5
+        )
+        check(
+          '超过 1 的百分数会被夹到 0~1',
+          parseIdentifyResponse('{"candidates":[{"name":"月季","confidence":150}]}')[0].confidence === 1
+        )
+        check(
+          '包在 markdown 代码块里也能解析',
+          parseIdentifyResponse('好的，结果如下：\n\`\`\`json\n{"candidates":[{"name":"月季","confidence":0.8}]}\n\`\`\`').length === 1
+        )
+        check(
+          '直接返回数组也认',
+          parseIdentifyResponse('[{"name":"月季","confidence":0.8}]').length === 1
+        )
+        check(
+          '换了字段名（results / plants）也认',
+          parseIdentifyResponse('{"results":[{"name":"月季","confidence":0.8}]}').length === 1 &&
+            parseIdentifyResponse('{"plants":[{"name":"月季","confidence":0.8}]}').length === 1
+        )
+        check(
+          '超过三个候选只取前三个',
+          parseIdentifyResponse(
+            JSON.stringify({ candidates: [0.9, 0.8, 0.7, 0.6, 0.5].map((c, i) => ({ name: '候选' + i, confidence: c })) })
+          ).length === 3
+        )
+        check('缺少名称的条目被跳过', parseIdentifyResponse('{"candidates":[{"confidence":0.9},{"name":"月季"}]}').length === 1)
+
+        // 认不出：模型给空数组，或者干脆说人话
+        check('模型给空数组时返回空', parseIdentifyResponse('{"candidates":[]}').length === 0)
+        check('模型只会说人话时返回空而不是崩掉', parseIdentifyResponse('抱歉，这张照片太模糊了，我认不出。').length === 0)
+        check('完全不是 JSON 时返回空', parseIdentifyResponse('').length === 0)
       }
 
       // ---- 地名解析的缓存 ----
