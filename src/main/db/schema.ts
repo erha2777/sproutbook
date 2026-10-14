@@ -364,12 +364,31 @@ ALTER TABLE plants ADD COLUMN phase TEXT;
 ALTER TABLE plants ADD COLUMN phase_changed_at TEXT;
 `
 
+/**
+ * 规则的适用物种从单值改成数组。
+ *
+ * 起因：用户真实的底肥方案里，多个物种共用一套配比
+ * （「绣球、无花果、月季」一套，「杜鹃、中华木绣球、三角梅」另一套）。
+ * 单值逼出了「一物种一条规则」，改一次配比要改好几处。
+ *
+ * 旧数据是纯字符串（物种名或 '*'），读写两端都能兼容，
+ * 这里只是把它统一成 JSON 数组形式，方便排查和后续查询。
+ */
+const V6_MULTI_SPECIES = /* sql */ `
+UPDATE care_rules
+   SET species_key = json_array(species_key)
+ WHERE species_key IS NOT NULL
+   AND species_key <> ''
+   AND species_key NOT LIKE '[%';
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
   { version: 3, name: 'month_sets', run: migrateMonthRangesToSets },
   { version: 4, name: 'care_cycle', sql: V4_CARE_CYCLE },
-  { version: 5, name: 'phenology', sql: V5_PHASES }
+  { version: 5, name: 'phenology', sql: V5_PHASES },
+  { version: 6, name: 'multi_species', sql: V6_MULTI_SPECIES }
 ]
 
 export const LATEST_VERSION = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0)

@@ -33,12 +33,16 @@ import {
   compareTasks,
   dateSpansFor,
   daysBetween,
+  describeSpeciesKeys,
   dueDescription,
   generateTasks,
   isCarePhase,
   monthsCovered,
   normalizePhases,
+  parseSpeciesKeys,
   phaseAgeDays,
+  ruleMatchesSpecies,
+  serializeSpeciesKeys,
   spreadDay,
   summarizeTasks,
   urgencyOf,
@@ -737,10 +741,10 @@ export function runSmoke(outFile: string): number {
         activePhases: null
       }
       const testRules = [
-        { ...ruleBase, id: 1, speciesKey: '*', monthFrom: 3, monthTo: 4, actionType: 'fertilize' as const, title: '通用追肥', detail: null },
-        { ...ruleBase, id: 2, speciesKey: '照护月季', monthFrom: 2, monthTo: null, actionType: 'prune' as const, title: '专属重剪', detail: null },
-        { ...ruleBase, id: 3, speciesKey: '别的植物', monthFrom: 5, monthTo: null, actionType: 'water' as const, title: '不该出现', detail: null },
-        { ...ruleBase, id: 4, speciesKey: '*', hemisphere: 'S' as const, monthFrom: 3, monthTo: null, actionType: 'water' as const, title: '南半球规则', detail: null }
+        { ...ruleBase, id: 1, speciesKeys: ['*'], monthFrom: 3, monthTo: 4, actionType: 'fertilize' as const, title: '通用追肥', detail: null },
+        { ...ruleBase, id: 2, speciesKeys: ['照护月季'], monthFrom: 2, monthTo: null, actionType: 'prune' as const, title: '专属重剪', detail: null },
+        { ...ruleBase, id: 3, speciesKeys: ['别的植物'], monthFrom: 5, monthTo: null, actionType: 'water' as const, title: '不该出现', detail: null },
+        { ...ruleBase, id: 4, speciesKeys: ['*'], hemisphere: 'S' as const, monthFrom: 3, monthTo: null, actionType: 'water' as const, title: '南半球规则', detail: null }
       ]
 
       const gen = generateTasks(testRules, '照护月季', 2026)
@@ -765,8 +769,8 @@ export function runSmoke(outFile: string): number {
 
       // 同名规则去重：通用与专属写了同一件事时不该出现两条
       const dupRules = [
-        { ...ruleBase, id: 10, speciesKey: '*', monthFrom: 3, monthTo: null, actionType: 'water' as const, title: '重复的浇水', detail: null },
-        { ...ruleBase, id: 11, speciesKey: '照护月季', monthFrom: 3, monthTo: null, actionType: 'water' as const, title: '重复的浇水', detail: null }
+        { ...ruleBase, id: 10, speciesKeys: ['*'], monthFrom: 3, monthTo: null, actionType: 'water' as const, title: '重复的浇水', detail: null },
+        { ...ruleBase, id: 11, speciesKeys: ['照护月季'], monthFrom: 3, monthTo: null, actionType: 'water' as const, title: '重复的浇水', detail: null }
       ]
       check('同月同动作同标题只生成一条', generateTasks(dupRules, '照护月季', 2026).length === 1)
 
@@ -793,7 +797,7 @@ export function runSmoke(outFile: string): number {
       const cycleRule = {
         ...ruleBase,
         id: 20,
-        speciesKey: '*',
+        speciesKeys: ['*'],
         monthFrom: 3,
         monthTo: 4,
         actionType: 'fertilize' as const,
@@ -885,7 +889,7 @@ export function runSmoke(outFile: string): number {
       check('种子规则都是已核实的人工来源', listCareRules(db).every((r) => r.source === 'seed' && r.verified))
 
       const myRule = saveCareRule(db, {
-        speciesKey: '照护月季',
+        speciesKeys: ['照护月季'],
         hemisphere: 'N',
         climateZone: null,
         monthFrom: 6,
@@ -1071,6 +1075,96 @@ export function runSmoke(outFile: string): number {
         listCareTasks(db, { plantId: carePlantId }).some((t) => t.dueDate.startsWith('2026-01'))
       )
 
+      // ---- 适用物种多选 ----
+      //
+      // 起因：用户真实的底肥方案里「绣球、无花果、月季」共用一套配比，
+      // 单值会逼出「一物种一条规则」，改一次配比要改好几处。
+      check('旧数据：单个物种名解析成一个元素的数组', JSON.stringify(parseSpeciesKeys('月季')) === '["月季"]')
+      check('旧数据：星号仍是通用', JSON.stringify(parseSpeciesKeys('*')) === '["*"]')
+      check(
+        '空值当通用',
+        JSON.stringify(parseSpeciesKeys('')) === '["*"]' && JSON.stringify(parseSpeciesKeys(null)) === '["*"]'
+      )
+      check(
+        '新数据：JSON 数组正常解析',
+        JSON.stringify(parseSpeciesKeys('["绣球","无花果","月季"]')) === '["绣球","无花果","月季"]'
+      )
+      check('数组里的重复项被去掉', JSON.stringify(parseSpeciesKeys('["月季","月季"]')) === '["月季"]')
+      check('通用与其他物种混写时收敛成通用', JSON.stringify(parseSpeciesKeys('["*","月季"]')) === '["*"]')
+      check('坏 JSON 退回当单个名字', JSON.stringify(parseSpeciesKeys('[不是JSON')) === '["[不是JSON"]')
+
+      check('序列化：通用', serializeSpeciesKeys(['*']) === '["*"]')
+      check('序列化：空数组＝通用', serializeSpeciesKeys([]) === '["*"]')
+      check('序列化：多物种', serializeSpeciesKeys(['绣球', '月季']) === '["绣球","月季"]')
+      check('序列化：混入通用则只剩通用', serializeSpeciesKeys(['月季', '*']) === '["*"]')
+      check(
+        '序列化后能原样解析回来',
+        JSON.stringify(parseSpeciesKeys(serializeSpeciesKeys(['杜鹃', '三角梅']))) === '["杜鹃","三角梅"]'
+      )
+
+      check('通用规则适用于任何物种', ruleMatchesSpecies(['*'], '月季') && ruleMatchesSpecies(['*'], null))
+      check('多物种规则命中其中之一', ruleMatchesSpecies(['绣球', '无花果', '月季'], '无花果'))
+      check('多物种规则不命中列表外的物种', !ruleMatchesSpecies(['绣球', '无花果', '月季'], '蓝莓'))
+      check('物种名为空时不命中专属规则', !ruleMatchesSpecies(['月季'], null) && !ruleMatchesSpecies(['月季'], '  '))
+      check('匹配忽略大小写与首尾空格', ruleMatchesSpecies(['Rose'], ' rose '))
+      check('显示文本：通用', describeSpeciesKeys(['*']) === '通用')
+      check('显示文本：多物种顿号连接', describeSpeciesKeys(['绣球', '月季']) === '绣球、月季')
+
+      // 生成任务时确实按多物种匹配
+      {
+        const multiRules = [
+          {
+            ...ruleBase,
+            id: 40,
+            speciesKeys: ['绣球', '无花果', '月季'],
+            monthFrom: 6,
+            monthTo: null,
+            actionType: 'fertilize' as const,
+            title: '共同底肥',
+            detail: null
+          }
+        ]
+        for (const name of ['绣球', '无花果', '月季']) {
+          check(`多物种规则对「${name}」生效`, generateTasks(multiRules, name, 2026).some((t) => t.title === '共同底肥'))
+        }
+        check('多物种规则对列表外的物种不生效', generateTasks(multiRules, '蓝莓', 2026).length === 0)
+      }
+
+      // 存进库再读出来仍是一组
+      {
+        const multi = saveCareRule(db, {
+          speciesKeys: ['绣球', '无花果', '月季'],
+          hemisphere: 'N',
+          climateZone: null,
+          monthFrom: 10,
+          monthTo: 10,
+          repeatDays: null,
+          rotation: null,
+          activePhases: null,
+          actionType: 'fertilize',
+          title: '自检多物种规则',
+          detail: null,
+          priority: 2,
+          source: 'manual',
+          verified: true
+        })
+        check('多物种规则能存下来', JSON.stringify(multi.speciesKeys) === '["绣球","无花果","月季"]', JSON.stringify(multi.speciesKeys))
+        check(
+          '重新读出来仍是一组',
+          JSON.stringify(listCareRules(db).find((r) => r.id === multi.id)?.speciesKeys) === '["绣球","无花果","月季"]'
+        )
+        check('按其中一个物种能筛到它', listCareRules(db, { speciesKey: '无花果' }).some((r) => r.id === multi.id))
+        check('按列表外的物种筛不到', !listCareRules(db, { speciesKey: '蓝莓' }).some((r) => r.id === multi.id))
+        // 传 '*' 的语义是「适用于任何植物的规则」，也就是通用规则；
+        // 多物种规则只对列出的那几个生效，不属于这一类
+        check(
+          '星号筛选只返回通用规则',
+          listCareRules(db, { speciesKey: '*' }).every((r) => r.speciesKeys.includes('*'))
+        )
+        check('按具体物种筛选会带上通用规则', listCareRules(db, { speciesKey: '绣球' }).some((r) => r.speciesKeys.includes('*')))
+        deleteCareRule(db, multi.id)
+      }
+
       deleteCareRule(db, myRule.id)
       check('可删除规则', listCareRules(db, { speciesKey: '照护月季' }).every((r) => r.id !== myRule.id))
     }
@@ -1079,7 +1173,7 @@ export function runSmoke(outFile: string): number {
     {
       const phaseRule = (activePhases: CarePhase[] | null, id = 30) => ({
         id,
-        speciesKey: '*',
+        speciesKeys: ['*'],
         hemisphere: 'N' as const,
         climateZone: null,
         monthFrom: 3,
@@ -1139,7 +1233,7 @@ export function runSmoke(outFile: string): number {
 
       // ---- 仓储：规则的生效阶段能存能取 ----
       const saved = saveCareRule(db, {
-        speciesKey: '阶段测试株',
+        speciesKeys: ['阶段测试株'],
         hemisphere: 'N',
         climateZone: null,
         monthFrom: 3,
@@ -1162,7 +1256,7 @@ export function runSmoke(outFile: string): number {
       )
 
       const noPhase = saveCareRule(db, {
-        speciesKey: '阶段测试株',
+        speciesKeys: ['阶段测试株'],
         hemisphere: 'N',
         climateZone: null,
         monthFrom: 3,

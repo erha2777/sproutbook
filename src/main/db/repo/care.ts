@@ -25,7 +25,18 @@ import type {
   CareTaskPatch,
   CareTaskQuery
 } from '../../../shared/api'
-import { CARE_PHASE_LABELS, addDays, generateTasks, isCarePhase, normalizePhases, summarizeTasks, todayIso } from '../../../core/care'
+import {
+  CARE_PHASE_LABELS,
+  addDays,
+  generateTasks,
+  isCarePhase,
+  normalizePhases,
+  parseSpeciesKeys,
+  ruleMatchesSpecies,
+  serializeSpeciesKeys,
+  summarizeTasks,
+  todayIso
+} from '../../../core/care'
 import type { CarePhase } from '../../../core/types'
 
 // ---------------------------------------------------------------------------
@@ -54,7 +65,7 @@ interface CareRuleRow {
 function mapRule(row: CareRuleRow): CareRule {
   return {
     id: row.id,
-    speciesKey: row.species_key,
+    speciesKeys: parseSpeciesKeys(row.species_key),
     hemisphere: row.hemisphere as CareHemisphere,
     climateZone: row.climate_zone,
     monthFrom: row.month_from,
@@ -101,18 +112,22 @@ export function listCareRules(
 ): CareRule[] {
   const where: string[] = []
   const params: Array<string | number> = []
-  if (options.speciesKey) {
-    where.push('species_key = ?')
-    params.push(options.speciesKey)
-  }
   if (options.hemisphere) {
     where.push('hemisphere = ?')
     params.push(options.hemisphere)
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
-  return db
+  const rules = db
     .all<CareRuleRow>(`SELECT * FROM care_rules ${whereSql} ORDER BY species_key, month_from, priority`, ...params)
     .map(mapRule)
+
+  // 适用物种是多值，SQL 的等值比较表达不了「列表里包含这个物种」，
+  // 所以在 JS 里过滤。规则数量是几十条量级，不值得为它做关联表。
+  if (options.speciesKey) {
+    const want = options.speciesKey
+    return rules.filter((r) => ruleMatchesSpecies(r.speciesKeys, want))
+  }
+  return rules
 }
 
 export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
@@ -135,7 +150,7 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
          repeat_days=?, rotation_json=?, active_phases=?, action_type=?, title=?, detail=?, priority=?,
          source=?, verified=?
        WHERE id=?`,
-      input.speciesKey.trim() || '*',
+      serializeSpeciesKeys(input.speciesKeys),
       input.hemisphere,
       input.climateZone,
       input.monthFrom,
@@ -160,7 +175,7 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
     `INSERT INTO care_rules (species_key, hemisphere, climate_zone, month_from, month_to,
        repeat_days, rotation_json, active_phases, action_type, title, detail, priority, source, verified)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    input.speciesKey.trim() || '*',
+    serializeSpeciesKeys(input.speciesKeys),
     input.hemisphere,
     input.climateZone,
     input.monthFrom,

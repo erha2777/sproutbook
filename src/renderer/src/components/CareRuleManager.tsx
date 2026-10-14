@@ -5,7 +5,7 @@
  * 不填具体日期。生成任务时会自动展开成每月一条并带上时间窗。
  */
 
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareActionType, CarePhase, CareRule } from '@core/types'
 import {
@@ -16,6 +16,7 @@ import {
   CARE_PHASE_LABELS,
   CARE_PHASE_OPTIONS,
   UNIVERSAL_SPECIES_KEY,
+  isUniversalRule,
   monthsCovered
 } from '@core/care'
 import { Badge, Button, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextArea, TextInput, useToast } from './ui'
@@ -24,7 +25,8 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 
 
 interface Draft {
   id?: number
-  speciesKey: string
+  /** 适用的物种名。含 '*' 表示所有植物 */
+  speciesKeys: string[]
   monthFrom: string
   monthTo: string
   repeatDays: string
@@ -40,7 +42,7 @@ interface Draft {
 }
 
 const BLANK: Draft = {
-  speciesKey: UNIVERSAL_SPECIES_KEY,
+  speciesKeys: [UNIVERSAL_SPECIES_KEY],
   monthFrom: '3',
   monthTo: '',
   repeatDays: '',
@@ -65,6 +67,16 @@ export function CareRuleManager({
   const [loading, setLoading] = useState(true)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
+  /** 手填的物种名（库里还没有的那些） */
+  const [newSpecies, setNewSpecies] = useState('')
+  /** 就地展开的表单行：展开后要滚进视野，否则点靠底部的规则时表单在屏幕外 */
+  const formRowRef = useRef<HTMLTableRowElement | null>(null)
+
+  useEffect(() => {
+    if (!draft?.id) return
+    // block:'nearest' 只滚最小距离，不会把用户已经看到的内容顶走
+    formRowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [draft?.id])
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -95,7 +107,7 @@ export function CareRuleManager({
         .filter(Boolean)
       await window.api.care.saveRule({
         id: draft.id,
-        speciesKey: draft.speciesKey.trim() || UNIVERSAL_SPECIES_KEY,
+        speciesKeys: draft.speciesKeys.length > 0 ? draft.speciesKeys : [UNIVERSAL_SPECIES_KEY],
         hemisphere: 'N',
         climateZone: null,
         monthFrom: Number(draft.monthFrom),
@@ -131,15 +143,10 @@ export function CareRuleManager({
     }
   }
 
-  const speciesOptions = [
-    { value: UNIVERSAL_SPECIES_KEY, label: '通用（所有植物）' },
-    ...speciesNames.map((n) => ({ value: n, label: n }))
-  ]
-
   /** 从一条规则生成编辑草稿。 */
   const draftFrom = (rule: CareRule): Draft => ({
     id: rule.id,
-    speciesKey: rule.speciesKey,
+    speciesKeys: rule.speciesKeys,
     monthFrom: String(rule.monthFrom),
     monthTo: rule.monthTo === null ? '' : String(rule.monthTo),
     repeatDays: rule.repeatDays === null ? '' : String(rule.repeatDays),
@@ -153,6 +160,17 @@ export function CareRuleManager({
   })
 
   /**
+   * 可选的物种名：库里的 + 这条规则已经选上的。
+   *
+   * 后者很重要 —— 用户参考里的绣球、杜鹃、蓝莓现在还没建物种，
+   * 如果只能从库里选，这些规则根本没法录。所以下面还留了手填入口。
+   */
+  const selectableSpecies = (draft: Draft): string[] => {
+    const set = new Set<string>([...speciesNames, ...draft.speciesKeys.filter((k) => k !== UNIVERSAL_SPECIES_KEY)])
+    return [...set].sort((a, b) => a.localeCompare(b, 'zh'))
+  }
+
+  /**
    * 规则表单。
    *
    * 抽成函数是因为它有两个落点：新增时出现在列表上方（按钮就在那儿），
@@ -162,6 +180,7 @@ export function CareRuleManager({
   const ruleForm = (): ReactNode => {
     if (!draft) return null
     const phasesActive = draft.phases.length > 0
+    const universalOn = draft.speciesKeys.includes(UNIVERSAL_SPECIES_KEY)
     return (
       <Panel flat>
         <SectionTitle
@@ -176,28 +195,11 @@ export function CareRuleManager({
           {draft.id ? '编辑规则' : '新增规则'}
         </SectionTitle>
         <div className="form-grid">
-          <Field label="适用于" help="通用规则对所有植物生效；也可以绑定到某个物种名。">
-            <SelectInput value={draft.speciesKey} onChange={(v) => setDraft({ ...draft, speciesKey: v })} options={speciesOptions} />
-          </Field>
           <Field label="动作">
             <SelectInput
               value={draft.actionType}
               onChange={(v) => setDraft({ ...draft, actionType: v as CareActionType })}
               options={CARE_ACTION_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-            />
-          </Field>
-          <Field
-            label={phasesActive ? '起始月份（已忽略）' : '起始月份'}
-            help={phasesActive ? '下面勾了生效阶段，月份就不再参与判断。保留数值只是为了取消阶段勾选后能恢复。' : undefined}
-          >
-            <SelectInput value={draft.monthFrom} onChange={(v) => setDraft({ ...draft, monthFrom: v })} options={MONTH_OPTIONS} />
-          </Field>
-          <Field label={phasesActive ? '结束月份（已忽略）' : '结束月份'} help={phasesActive ? undefined : '留空表示只在这一件事发生在起始月。'}>
-            <SelectInput
-              value={draft.monthTo}
-              onChange={(v) => setDraft({ ...draft, monthTo: v })}
-              placeholder="（仅起始月）"
-              options={[{ value: '', label: '（仅起始月）' }, ...MONTH_OPTIONS]}
             />
           </Field>
           <Field label="优先级" help="数字越小越优先。">
@@ -209,6 +211,96 @@ export function CareRuleManager({
                 { value: '2', label: '2 · 中（常规养护）' },
                 { value: '3', label: '3 · 低（有空再说）' }
               ]}
+            />
+          </Field>
+        </div>
+
+        {/*
+          适用物种支持多选。真实的底肥方案里多个物种共用一套配比
+          （「绣球、无花果、月季」一套），单值会逼出「一物种一条规则」，
+          改一次配比要改好几处。
+        */}
+        <Field
+          label="适用于"
+          help="可以同时选多个物种 —— 共用同一套做法的植物不必各建一条规则。"
+        >
+          <div className="row tight" style={{ flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`tag-toggle${universalOn ? ' on' : ''}`}
+              onClick={() => setDraft({ ...draft, speciesKeys: universalOn ? [] : [UNIVERSAL_SPECIES_KEY] })}
+            >
+              🌍 所有植物
+            </button>
+          </div>
+          {!universalOn ? (
+            <>
+              <div className="row tight" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+                {selectableSpecies(draft).map((name) => {
+                  const on = draft.speciesKeys.includes(name)
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      className={`tag-toggle${on ? ' on' : ''}`}
+                      onClick={() =>
+                        setDraft({
+                          ...draft,
+                          speciesKeys: on ? draft.speciesKeys.filter((k) => k !== name) : [...draft.speciesKeys, name]
+                        })
+                      }
+                    >
+                      {name}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="row tight" style={{ marginTop: 6 }}>
+                <div style={{ flex: 1 }}>
+                  <TextInput
+                    value={newSpecies}
+                    onChange={setNewSpecies}
+                    placeholder="物种还没建？直接输入名字，例如「绣球」"
+                  />
+                </div>
+                <Button
+                  disabled={!newSpecies.trim()}
+                  onClick={() => {
+                    const name = newSpecies.trim()
+                    if (!name) return
+                    setDraft({
+                      ...draft,
+                      speciesKeys: draft.speciesKeys.includes(name) ? draft.speciesKeys : [...draft.speciesKeys, name]
+                    })
+                    setNewSpecies('')
+                  }}
+                >
+                  添加
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </Field>
+        {!universalOn && draft.speciesKeys.length === 0 ? (
+          <Notice tone="warn">还没有选任何物种 —— 这条规则不会对任何植物生效。</Notice>
+        ) : null}
+
+        <div className="form-grid">
+          <Field
+            label={phasesActive ? '起始月份（已忽略）' : '起始月份'}
+            help={phasesActive ? '下面勾了生效阶段，月份就不再参与判断。保留数值只是为了取消阶段勾选后能恢复。' : undefined}
+          >
+            <SelectInput value={draft.monthFrom} onChange={(v) => setDraft({ ...draft, monthFrom: v })} options={MONTH_OPTIONS} />
+          </Field>
+          <Field
+            label={phasesActive ? '结束月份（已忽略）' : '结束月份'}
+            help={phasesActive ? undefined : '留空表示只在这一件事发生在起始月。'}
+          >
+            <SelectInput
+              value={draft.monthTo}
+              onChange={(v) => setDraft({ ...draft, monthTo: v })}
+              placeholder="（仅起始月）"
+              options={[{ value: '', label: '（仅起始月）' }, ...MONTH_OPTIONS]}
             />
           </Field>
         </div>
@@ -343,10 +435,16 @@ export function CareRuleManager({
                   <Fragment key={rule.id}>
                     <tr>
                       <td className="small">
-                        {rule.speciesKey === UNIVERSAL_SPECIES_KEY ? (
-                          <Badge tone="info">通用</Badge>
+                        {isUniversalRule(rule.speciesKeys) ? (
+                          <Badge tone="info">🌍 所有植物</Badge>
                         ) : (
-                          <b>{rule.speciesKey}</b>
+                          <div className="row tight" style={{ flexWrap: 'wrap' }}>
+                            {rule.speciesKeys.map((k) => (
+                              <Badge key={k} tone="muted">
+                                {k}
+                              </Badge>
+                            ))}
+                          </div>
                         )}
                       </td>
                       {/*
@@ -398,7 +496,7 @@ export function CareRuleManager({
                     </tr>
                     {/* 编辑表单就地展开在这一行下面，不用来回滚 */}
                     {draft?.id === rule.id ? (
-                      <tr className="rule-edit-row">
+                      <tr className="rule-edit-row" ref={formRowRef}>
                         <td colSpan={6}>{ruleForm()}</td>
                       </tr>
                     ) : null}

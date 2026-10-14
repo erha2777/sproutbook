@@ -282,14 +282,18 @@ export type CarePhase = 'growing' | 'budding' | 'blooming' | 'dormant' | 'recove
 /**
  * 物种养护规则。
  *
- * `speciesKey` 为 `'*'` 时是通用规则（所有植物都适用），
+ * `speciesKeys` 含 `'*'` 时是通用规则（所有植物都适用），
  * 否则按**物种名**匹配 —— 规则库是给人看、可导出分享的数据，
  * 用名字比用自增 ID 有意义。代价是改物种名会让专属规则失配，
  * 所以生成任务时会把「用了哪些规则」记在计划里备查。
+ *
+ * 之所以是数组：真实的底肥方案里多个物种共用一套配比
+ * （「绣球、无花果、月季」一套，「杜鹃、中华木绣球、三角梅」另一套），
+ * 单值会逼出「一物种一条规则」，改一次配比要改好几处，迟早不同步。
  */
 export interface CareRule {
   id: number
-  speciesKey: string
+  speciesKeys: string[]
   hemisphere: CareHemisphere
   climateZone: string | null
   monthFrom: number

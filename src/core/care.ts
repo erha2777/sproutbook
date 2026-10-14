@@ -43,6 +43,68 @@ export const CARE_ACTION_OPTIONS = (Object.keys(CARE_ACTION_LABELS) as CareActio
 export const UNIVERSAL_SPECIES_KEY = '*'
 
 // ---------------------------------------------------------------------------
+// 规则的适用物种
+// ---------------------------------------------------------------------------
+
+/**
+ * 一条规则可以同时适用于多个物种。
+ *
+ * 起因是用户真实的底肥方案：「绣球、无花果、月季」共用一套配比，
+ * 「杜鹃、中华木绣球、三角梅」共用另一套，蓝莓单独一套。
+ * 原来的单值 species_key 只能一物种一条规则 —— 三个组合要建七条，
+ * 改一次配比得改七处，迟早不同步。
+ *
+ * 存储用 JSON 数组。旧数据是纯字符串（单个物种名或 `*`），
+ * 解析时原样当成一个 key，不必先迁移也能读。
+ */
+export function parseSpeciesKeys(raw: string | null | undefined): string[] {
+  const trimmed = (raw ?? '').trim()
+  if (!trimmed) return [UNIVERSAL_SPECIES_KEY]
+  if (trimmed === UNIVERSAL_SPECIES_KEY) return [UNIVERSAL_SPECIES_KEY]
+
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) {
+        const list = [...new Set(parsed.map((s) => String(s).trim()).filter(Boolean))]
+        if (list.length > 0) {
+          // 「通用 + 某个物种」是冗余的，通用已经覆盖一切
+          return list.includes(UNIVERSAL_SPECIES_KEY) ? [UNIVERSAL_SPECIES_KEY] : list
+        }
+      }
+    } catch {
+      // 坏数据退回当单个名字处理，不因为一条规则读不出来就整个列表失败
+    }
+  }
+  return [trimmed]
+}
+
+export function serializeSpeciesKeys(keys: string[]): string {
+  const cleaned = [...new Set(keys.map((k) => k.trim()).filter(Boolean))]
+  if (cleaned.length === 0 || cleaned.includes(UNIVERSAL_SPECIES_KEY)) {
+    return JSON.stringify([UNIVERSAL_SPECIES_KEY])
+  }
+  return JSON.stringify(cleaned)
+}
+
+export function isUniversalRule(keys: string[]): boolean {
+  return keys.includes(UNIVERSAL_SPECIES_KEY)
+}
+
+/** 规则的适用物种里是否包含这株植物的物种。 */
+export function ruleMatchesSpecies(keys: string[], speciesName: string | null): boolean {
+  if (isUniversalRule(keys)) return true
+  const name = speciesName?.trim().toLowerCase() ?? ''
+  if (name === '') return false
+  return keys.some((k) => k.trim().toLowerCase() === name)
+}
+
+/** 界面上显示用：通用 或 「月季、绣球、无花果」 */
+export function describeSpeciesKeys(keys: string[]): string {
+  return isUniversalRule(keys) ? '通用' : keys.join('、')
+}
+
+// ---------------------------------------------------------------------------
 // 物候阶段
 // ---------------------------------------------------------------------------
 
@@ -279,15 +341,12 @@ export function generateTasks(
 ): GeneratedTask[] {
   const hemisphere = options.hemisphere ?? 'N'
   const defaultWindow = options.defaultWindowDays ?? 15
-  const name = speciesName?.trim().toLowerCase() ?? ''
   const seed = options.spreadSeed ?? 0
   const phase = options.phase ?? null
 
   const applicable = rules.filter((r) => {
     if (r.hemisphere !== hemisphere) return false
-    const key = r.speciesKey.trim().toLowerCase()
-    const speciesOk = key === UNIVERSAL_SPECIES_KEY || (name !== '' && key === name)
-    if (!speciesOk) return false
+    if (!ruleMatchesSpecies(r.speciesKeys, speciesName)) return false
 
     // 限定了阶段：只有植株正处于其中某个阶段时才生效。
     // 注意「没标记阶段」的情况：这时阶段规则一律不生效 ——
