@@ -7,7 +7,7 @@
 
 import type { Db } from '../connection'
 import type { FieldValue, Species } from '../../../core/types'
-import { splitAttributes } from '../../../core/attributes'
+import { requiredErrors, splitAttributes } from '../../../core/attributes'
 import { jsonArray, jsonObject, likeParam, loadFieldDefinitions, mapFieldDefinition, writeAttrIndex } from './common'
 import type { FieldDefinitionRow } from './common'
 
@@ -212,8 +212,26 @@ export function saveSpecies(
 
     const col = split.columns
     const name = String(col.common_name ?? existingRow?.common_name ?? '').trim()
-    if (!name) {
-      return { species: id ? (getSpecies(db, id) ?? emptySpecies()) : emptySpecies(), errors: { common_name: '植物名称 是必填项' }, pendingReview: [] }
+
+    /*
+     * 必填校验走模板定义，而不是硬编码某个字段名。
+     * 之前只检查 common_name，用户在「信息模板」里标的「必填」形同虚设。
+     */
+    const finalValue = (def: (typeof defs)[number]): FieldValue | undefined => {
+      if (def.columnName) {
+        const v = def.columnName in col ? col[def.columnName] : (existingRow as Record<string, unknown> | null)?.[def.columnName]
+        return (v ?? null) as FieldValue
+      }
+      return mergedAttrs[def.key]
+    }
+
+    const requiredIssues = requiredErrors(defs, finalValue)
+    if (Object.keys(requiredIssues).length > 0) {
+      return {
+        species: id ? (getSpecies(db, id) ?? emptySpecies()) : emptySpecies(),
+        errors: requiredIssues,
+        pendingReview: []
+      }
     }
 
     const aliases = String(col.aliases_json ?? existingRow?.aliases_json ?? '[]')

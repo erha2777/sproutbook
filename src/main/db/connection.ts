@@ -41,6 +41,8 @@ function normalizeAll(params: RawBind[]): BindValue[] {
 export class Db {
   readonly raw: DatabaseSync
   private readonly cache = new Map<string, StatementSync>()
+  /** 事务嵌套深度。SQLite 不支持嵌套事务，内层必须退化为普通执行。 */
+  private txDepth = 0
 
   constructor(file: string) {
     this.raw = new DatabaseSync(file)
@@ -102,12 +104,20 @@ export class Db {
    * 注意：不支持嵌套 —— 嵌套调用会退化为普通执行（外层的提交仍然生效）。
    */
   transaction<T>(fn: () => T): T {
+    // 已经在事务里就不要再 BEGIN —— SQLite 会报
+    //「cannot start a transaction within a transaction」。
+    // 内层的异常照常抛出，由最外层统一 ROLLBACK，语义上等价于嵌套事务。
+    if (this.txDepth > 0) return fn()
+
     this.raw.exec('BEGIN')
+    this.txDepth++
     try {
       const result = fn()
+      this.txDepth--
       this.raw.exec('COMMIT')
       return result
     } catch (error) {
+      this.txDepth--
       try {
         this.raw.exec('ROLLBACK')
       } catch {
@@ -125,8 +135,4 @@ export class Db {
       // 已关闭时忽略
     }
   }
-}
-
-export function sqliteVersion(db: Db): string {
-  return String(db.pragma<string>('user_version') ?? '') && String(db.scalar<string>('SELECT sqlite_version() AS v') ?? 'unknown')
 }

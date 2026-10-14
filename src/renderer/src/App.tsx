@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import { Component, useCallback, useEffect, useState } from 'react'
+import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, Sign, ToastProvider, cx, useToast } from './components/ui'
 import { GardenPage } from './pages/GardenPage'
 import { SpeciesPage } from './pages/SpeciesPage'
@@ -84,6 +84,19 @@ function Shell(): ReactNode {
    * 用户就不用自己去设置页里找了。
    */
   const [compatHint, setCompatHint] = useState(false)
+
+  /** 版本号从主进程读，避免界面写死后与 package.json 脱节 */
+  const [appVersion, setAppVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setAppVersion((await window.api.app.info()).version)
+      } catch {
+        // 拿不到就不显示版本号，不影响使用
+      }
+    })()
+  }, [])
 
   useEffect(() => {
     void (async () => {
@@ -176,7 +189,15 @@ function Shell(): ReactNode {
         </Panel>
         <span className="spacer" />
         <Panel flat>
-          <div className="small muted">v0.1.0 · 早期版本</div>
+          {/*
+            版本号从 app:info 读，不要写死。
+            之前这里硬编码「v0.1.0 · 早期版本」，发版时必然忘记改，
+            界面显示的版本会和真实版本不一致 —— 用户报 bug 时这很要命。
+          */}
+          <div className="small muted">
+            {appVersion ? `v${appVersion}` : ''}
+            {appVersion?.startsWith('0.') ? ' · 早期版本' : ''}
+          </div>
         </Panel>
       </aside>
 
@@ -220,6 +241,7 @@ function Shell(): ReactNode {
         ) : null}
 
         <div className="content">
+          <PageErrorBoundary resetKey={route.name}>
           {route.name === 'garden' ? <GardenPage onGoSpecies={() => setRoute({ name: 'species' })} /> : null}
 
           {route.name === 'species' ? (
@@ -273,13 +295,60 @@ function Shell(): ReactNode {
               onGoGarden={() => setRoute({ name: 'garden' })}
             />
           ) : null}
+          </PageErrorBoundary>
         </div>
       </main>
     </div>
   )
 }
 
-/** 兜底错误边界用的小组件，便于将来扩展。 */
+/**
+ * 页面级错误边界。
+ *
+ * 桌面应用最糟糕的失败方式是「白屏」：窗口还在、进程还活着，
+ * 但用户看到一片空白，既不知道出了什么事，也没有任何自救手段。
+ * 之前没有错误边界，任何页面在渲染期抛错都会导致整个界面消失。
+ *
+ * 这里兜住错误，给出人话说明 + 重新加载按钮，并把技术细节打到控制台。
+ * 切换路由时自动复位，避免一个页面出错后整个应用卡在错误页上。
+ */
+class PageErrorBoundary extends Component<{ children: ReactNode; resetKey: string }, { error: Error | null }> {
+  override state: { error: Error | null } = { error: null }
+
+  static getDerivedStateFromError(error: Error): { error: Error } {
+    return { error }
+  }
+
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error('[ui] 页面渲染失败:', error, info.componentStack)
+  }
+
+  override componentDidUpdate(prev: { resetKey: string }): void {
+    if (prev.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null })
+    }
+  }
+
+  override render(): ReactNode {
+    if (this.state.error) {
+      return (
+        <CenteredMessage>
+          <h2 style={{ marginTop: 0 }}>这个页面出错了</h2>
+          <p className="small muted">你的数据没有受影响，都在本机。可以重新加载再试，或切换到别的页面。</p>
+          <pre
+            className="mono small"
+            style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 180, overflow: 'auto' }}
+          >
+            {this.state.error.message}
+          </pre>
+        </CenteredMessage>
+      )
+    }
+    return this.props.children
+  }
+}
+
+/** 居中提示容器：用于错误边界等「整页替代」场景。 */
 export function CenteredMessage({ children }: { children: ReactNode }): ReactNode {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>

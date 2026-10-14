@@ -15,7 +15,7 @@ import type { FieldDefinition, FieldOwner, FieldType, RelationTarget } from '@co
 import { RELATION_TARGETS } from '@core/types'
 import { FIELD_TYPES } from '@core/fieldTypes'
 import type { FieldUsageSummary } from '@shared/api'
-import { Badge, Button, EmptyState, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextArea, TextInput, cx, useToast } from '../components/ui'
+import { Badge, Button, EmptyState, Field, Modal, Notice, Panel, SelectInput, Spinner, TextArea, TextInput, cx, useToast } from '../components/ui'
 
 export function TemplatesPage(): ReactNode {
   const toast = useToast()

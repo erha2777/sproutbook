@@ -336,6 +336,33 @@ export function runSmoke(outFile: string): number {
     checkThrows('重复字段标识被拒绝', () =>
       createField(db as Db, { ownerKind: 'species', key: 'smoke_test_field', label: '重复', groupName: '其他', type: 'text' })
     )
+
+    // --- 用户自定义的「必填」必须真的生效 ---
+    //
+    // 曾经的 bug：模板页有「必填」开关，但保存时只硬编码校验了 common_name，
+    // 于是用户标了必填的字段照样能存空 —— 界面承诺了、程序没执行。
+    const requiredField = createField(db, {
+      ownerKind: 'species',
+      key: 'smoke_required_field',
+      label: '自检必填',
+      groupName: '其他',
+      type: 'text',
+      isRequired: true
+    })
+    check(
+      '自定义必填字段留空时被拒绝',
+      'smoke_required_field' in saveSpecies(db, { id: speciesId, values: { smoke_required_field: '' } }).errors
+    )
+    check(
+      '自定义必填字段填了就通过',
+      Object.keys(saveSpecies(db, { id: speciesId, values: { smoke_required_field: '有值了' } }).errors).length === 0
+    )
+    check(
+      '自定义必填字段的值确实落库',
+      getSpecies(db, speciesId)?.attributes.smoke_required_field === '有值了'
+    )
+    // 已经写入过数据，按保护规则只能归档不能删除（这条规则本身有别的检查覆盖）
+    setFieldArchived(db, requiredField.id, true)
     checkThrows('非法字段标识被拒绝', () =>
       createField(db as Db, { ownerKind: 'species', key: 'BadKey!', label: '非法', groupName: '其他', type: 'text' })
     )

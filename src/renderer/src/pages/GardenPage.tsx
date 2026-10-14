@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import type { Environment, PlantStatus } from '@core/types'
 import type { PlantListItem, PlantListItemStats } from '@shared/api'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
-import { Badge, Button, EmptyState, Modal, Panel, SectionTitle, SelectInput, Spinner, TextInput, cx, useDebounced, useToast } from '../components/ui'
+import { Badge, Button, EmptyState, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 import { PlantEditorModal } from './PlantEditor'
 
 export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactNode {

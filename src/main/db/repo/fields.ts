@@ -12,6 +12,7 @@ import type { FieldDefinition, FieldDefinitionPatch, FieldOwner, NewFieldDefinit
 import { loadFieldDefinitions, mapFieldDefinition } from './common'
 import type { FieldDefinitionRow } from './common'
 import { insertFieldDefinition } from '../seed'
+import { rebuildAttrIndex } from '../migrate'
 
 export { loadFieldDefinitions }
 
@@ -81,7 +82,21 @@ export function updateField(db: Db, id: number, patch: FieldDefinitionPatch): Fi
     }
     if (patch.sortOrder !== undefined) db.run('UPDATE field_definitions SET sort_order = ? WHERE id = ?', patch.sortOrder, id)
     if (patch.archivedAt !== undefined) {
+      const wasArchived = current.archivedAt !== null
+      const willArchive = patch.archivedAt !== null
       db.run('UPDATE field_definitions SET archived_at = ? WHERE id = ?', patch.archivedAt, id)
+
+      /*
+       * 归档状态变化必须重建投影索引。
+       *
+       * 归档只是把字段从「活动字段」里去掉，但 attr_index 里**已有的行不会自己消失** ——
+       * 结果是按这个字段筛选仍然能命中，而且全量重建的行数对不上
+       *（自检的「重建后行数与原来一致」就是这么抓到的）。
+       * 取消归档同理：需要把它重新投影回去。
+       */
+      if (wasArchived !== willArchive) {
+        rebuildAttrIndex(db)
+      }
     }
 
     const updated = getField(db, id)

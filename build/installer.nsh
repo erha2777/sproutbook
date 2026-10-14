@@ -33,7 +33,7 @@
 !macro customCheckAppRunning
   ; Is a process literally named Sproutbook.exe running?
   ; findstr /B anchors the match to the start of the CSV line, so
-  ; "Sproutbook-0.1.0-win-x64.exe" can never be mistaken for it.
+  ; "Sproutbook-<版本>-win-x64.exe" can never be mistaken for it.
   nsExec::ExecToStack '"$SYSDIR\cmd.exe" /C tasklist /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""'
   Pop $0 ; exit code: 0 = found
   Pop $1

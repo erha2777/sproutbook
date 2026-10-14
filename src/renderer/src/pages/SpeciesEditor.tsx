@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import type { AiAutofillResult, FieldDefinition } from '@core/types'
 import type { SpeciesListItem } from '@shared/api'
 import { makeRequestId } from '../lib/util'
-import { Badge, Button, EmptyState, Field, Modal, Notice, Panel, SectionTitle, Sign, Spinner, TextInput, cx, useToast } from '../components/ui'
+import { Badge, Button, Field, Modal, Notice, Panel, SectionTitle, Sign, Spinner, TextInput, cx, useToast } from '../components/ui'
 import { DynamicForm } from '../components/DynamicForm'
 import type { FormValues } from '../components/DynamicForm'
 import { AiDraftDialog } from '../components/AiDraftDialog'
@@ -441,13 +441,5 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
         </Panel>
       ) : null}
     </div>
-  )
-}
-
-export function SpeciesEditorEmpty(): ReactNode {
-  return (
-    <Panel>
-      <EmptyState title="未选择物种" hint="请从物种库选择一个条目。" />
-    </Panel>
   )
 }

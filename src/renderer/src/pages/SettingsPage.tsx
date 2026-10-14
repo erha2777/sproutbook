@@ -139,7 +139,7 @@ export function SettingsPage(): ReactNode {
             <TextInput value={settings.chatModel} onChange={(v) => void patch({ chatModel: v })} placeholder="deepseek-chat" />
           </Field>
 
-          <Field label="视觉模型（预留）" help="识图功能将使用这个模型，v0.1 暂未启用。">
+          <Field label="视觉模型（预留）" help="识图功能将使用这个模型，当前版本尚未启用。">
             <TextInput value={settings.visionModel} onChange={(v) => void patch({ visionModel: v })} placeholder="gpt-4o-mini" />
           </Field>
 

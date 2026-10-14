@@ -31,14 +31,6 @@ export const FIELD_TYPES: FieldTypeMeta[] = [
   { type: 'relation', label: '关联', multiValued: false, hint: '关联到养护位置、物种库等另一个实体' }
 ]
 
-export function fieldTypeMeta(type: FieldType): FieldTypeMeta | undefined {
-  return FIELD_TYPES.find((t) => t.type === type)
-}
-
-export function isMultiValued(type: FieldType): boolean {
-  return fieldTypeMeta(type)?.multiValued ?? false
-}
-
 const MONTH_NAMES = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二']
 
 export function monthLabel(m: number): string {

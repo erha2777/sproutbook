@@ -4,7 +4,7 @@
 
 import type { Db } from '../connection'
 import type { FieldValue, Plant, PlantStatus, PlantWithSpecies } from '../../../core/types'
-import { splitAttributes } from '../../../core/attributes'
+import { requiredErrors, splitAttributes } from '../../../core/attributes'
 import { jsonObject, likeParam, loadFieldDefinitions, writeAttrIndex } from './common'
 
 export interface PlantRow {
@@ -174,8 +174,24 @@ export function savePlant(db: Db, input: SavePlantInput): SavePlantResult {
       input.nickname ?? col.nickname ?? existingRow?.nickname ?? ''
     ).trim()
 
-    if (!nickname) {
-      return { plant: id ? getPlant(db, id) : null, errors: { nickname: '昵称 是必填项' } }
+    /*
+     * 必填校验：对**合并后的最终值**检查，而不是只看本次提交的字段。
+     *
+     * 之前只硬编码校验了 nickname，于是用户在「信息模板」里把任何字段标成
+     * 「必填」都不生效 —— 界面承诺了、程序没执行。现在统一走模板定义。
+     * 读取器要同时覆盖两条存储路径：系统字段在独立列里，其余在 attributes_json。
+     */
+    const finalValue = (def: (typeof defs)[number]): FieldValue | undefined => {
+      if (def.columnName) {
+        const v = def.columnName in col ? col[def.columnName] : (existingRow as Record<string, unknown> | null)?.[def.columnName]
+        return (v ?? null) as FieldValue
+      }
+      return mergedAttrs[def.key]
+    }
+
+    const requiredIssues = requiredErrors(defs, finalValue)
+    if (Object.keys(requiredIssues).length > 0) {
+      return { plant: id ? getPlant(db, id) : null, errors: requiredIssues }
     }
 
     /*

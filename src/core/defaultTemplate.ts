@@ -276,27 +276,3 @@ export function defaultFieldDefinitions(): NewFieldDefinition[] {
     ...plantFields.map((f) => ({ ...f, ownerKind: 'plant' as const }))
   ]
 }
-
-/** 提供了随包发布的常见物种名，用于「所属科」等字段的输入建议。 */
-export const FAMILY_SUGGESTIONS = [
-  '蔷薇科',
-  '菊科',
-  '天南星科',
-  '景天科',
-  '百合科',
-  '兰科',
-  '唇形科',
-  '仙人掌科',
-  '大戟科',
-  '秋海棠科',
-  '苦苣苔科',
-  '凤梨科',
-  '石蒜科',
-  '木犀科',
-  '杜鹃花科',
-  '山茶科',
-  '夹竹桃科',
-  '五加科',
-  '荨麻科',
-  '竹芋科'
-]

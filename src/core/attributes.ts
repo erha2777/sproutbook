@@ -6,7 +6,7 @@
  */
 
 import { SYSTEM_COLUMNS } from './defaultTemplate'
-import { coerceFieldValue, projectFieldValue, indexTextForSearch } from './fieldTypes'
+import { coerceFieldValue, projectFieldValue, indexTextForSearch, validateRequired } from './fieldTypes'
 import type { ProjectionRow } from './fieldTypes'
 import type { FieldDefinition, FieldValue } from './types'
 
@@ -57,23 +57,22 @@ export function splitAttributes(
   return { split: { columns, attributes }, errors }
 }
 
-/** 必填校验（在所有字段 coerce 之后调用）。 */
-export function collectRequiredErrors(
+/**
+ * 必填校验 —— 对**合并后的最终值**校验，而不是只校验本次提交的字段。
+ *
+ * 为什么不能在 splitAttributes 里顺手做：那里只看到本次提交的键，
+ * 缺键无法区分「用户清空」和「本次没改」。所以调用方要传一个
+ * 「按字段取最终值」的读取器（列字段取列，其余取 attributes_json）。
+ */
+export function requiredErrors(
   defs: FieldDefinition[],
-  attributes: Record<string, FieldValue>,
-  columns: Record<string, unknown>
+  read: (def: FieldDefinition) => FieldValue | undefined
 ): Record<string, string> {
   const errors: Record<string, string> = {}
   for (const def of defs) {
     if (def.archivedAt || !def.isRequired) continue
-    const raw = def.columnName ? columns[def.columnName] : attributes[def.key]
-    const empty =
-      raw === null ||
-      raw === undefined ||
-      (typeof raw === 'string' && raw.trim() === '') ||
-      (Array.isArray(raw) && raw.length === 0) ||
-      (def.columnName === 'aliases_json' && (raw === '[]' || raw === ''))
-    if (empty) errors[def.key] = `${def.label} 是必填项`
+    const message = validateRequired(def, read(def) ?? null)
+    if (message) errors[def.key] = message
   }
   return errors
 }
@@ -99,29 +98,6 @@ export function projectAttributes(
 export function buildSearchBlob(defs: FieldDefinition[], attributes: Record<string, FieldValue>, extra: string[] = []): string {
   const parts = [...extra.filter(Boolean), indexTextForSearch(defs, attributes)]
   return parts.join(' ').toLowerCase().replace(/\s+/g, ' ').trim()
-}
-
-export function parseJsonArray(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.map(String)
-  if (typeof raw !== 'string' || !raw) return []
-  try {
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.map(String) : []
-  } catch {
-    return []
-  }
-}
-
-export function parseJsonObject<T = Record<string, FieldValue>>(raw: unknown, fallback: T): T {
-  if (raw && typeof raw === 'object') return raw as T
-  if (typeof raw !== 'string' || !raw) return fallback
-  try {
-    const parsed = JSON.parse(raw)
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as T
-    return fallback
-  } catch {
-    return fallback
-  }
 }
 
 export { SYSTEM_COLUMNS }

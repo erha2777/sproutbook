@@ -6,7 +6,7 @@
  */
 
 import type { ReactNode } from 'react'
-import type { FieldDefinition, FieldValue, NumberRange } from '@core/types'
+import type { FieldDefinition, NumberRange } from '@core/types'
 import { normalizeMonths } from '@core/fieldTypes'
 import { CheckChips, Checkbox, Field, MonthSetInput, NumberRangeInput, SelectInput, TagInput, TextArea, TextInput, Badge, cx } from './ui'
 
@@ -262,14 +262,4 @@ export function DynamicForm({
       ))}
     </div>
   )
-}
-
-/** 把领域对象上的属性整理成表单值（补上系统列的当前值）。 */
-export function toFormValues(attributes: Record<string, FieldValue>, columns: Record<string, unknown>): FormValues {
-  const out: FormValues = { ...attributes }
-  for (const [key, value] of Object.entries(columns)) {
-    if (value === undefined || value === null) continue
-    out[key] = value
-  }
-  return out
 }

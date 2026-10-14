@@ -3,7 +3,6 @@
  */
 
 import { app } from 'electron'
-import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { Db } from './connection'
 import { backupDatabase, ensureDir, listBackups } from './backup'
@@ -79,10 +78,6 @@ export function initDatabase(): InitResult {
 export function getDb(): Db {
   if (!instance) throw new Error('数据库尚未初始化')
   return instance
-}
-
-export function hasDatabase(): boolean {
-  return instance !== null
 }
 
 export function getLastReport(): MigrationReport | null {
