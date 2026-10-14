@@ -208,10 +208,34 @@ export function SettingsPage(): ReactNode {
                 placeholder={settings.hasApiKey ? '••••••••（已配置，留空不修改）' : 'sk-...'}
               />
               <Button
+                /*
+                 * **等写完了再说保存成功。**
+                 *
+                 * 原来是不 await 就无条件弹绿色的「密钥已保存」。写盘失败时
+                 * 会同时冒出红色失败和绿色成功，用户不知道该信哪条。
+                 *
+                 * 这里**不走 patch()** —— patch 内部自己 catch 了，永远不抛，
+                 * 所以包一层 try/catch 是没用的（我第一版就是这么写的，
+                 * 等于白改）。而 patch 被二十来处用着、都依赖它吞错，
+                 * 不该为了这一处改它的契约。直接调 API 自己判断成败。
+                 */
                 onClick={() => {
-                  void patch({ apiKey: apiKeyDraft })
-                  setApiKeyDraft('')
-                  toast.push(apiKeyDraft.trim() ? '密钥已保存' : '已清空密钥', 'success')
+                  void (async () => {
+                    const hadDraft = apiKeyDraft.trim().length > 0
+                    try {
+                      const next = await window.api.ai.setSettings({ apiKey: apiKeyDraft })
+                      setSettings(next)
+                      setKeyWarning(await window.api.ai.keyWarning())
+                      setApiKeyDraft('')
+                      toast.push(hadDraft ? '密钥已保存' : '已清空密钥', 'success')
+                    } catch (error) {
+                      // 不清输入框：失败了还留在那儿，用户可以重试
+                      toast.push(
+                        `保存失败：${error instanceof Error ? error.message : '未知错误'}。密钥未改动。`,
+                        'error'
+                      )
+                    }
+                  })()
                 }}
               >
                 保存密钥
@@ -219,8 +243,23 @@ export function SettingsPage(): ReactNode {
               <Button
                 variant="ghost"
                 onClick={() => {
-                  void window.api.ai.clearApiKey().then(setSettings)
-                  toast.push('密钥已清除', 'success')
+                  void (async () => {
+                    /*
+                     * **这条原来连 catch 都没有。**
+                     *
+                     * 清除失败时，绿色「密钥已清除」照弹，而钥匙串里的密钥还在 ——
+                     * 用户以为已经从本机删掉了。涉及密钥的假承诺尤其不能有。
+                     */
+                    try {
+                      setSettings(await window.api.ai.clearApiKey())
+                      toast.push('密钥已清除', 'success')
+                    } catch (error) {
+                      toast.push(
+                        `清除失败：${error instanceof Error ? error.message : '未知错误'}。密钥仍然保存在本机。`,
+                        'error'
+                      )
+                    }
+                  })()
                 }}
               >
                 清除
