@@ -228,6 +228,12 @@ function createWindow(): void {
   // 可以给多个 --screenshot-click，按顺序依次点击（例如先开弹窗、再点里面的按钮）
   const shotClicks = isDev ? process.argv.filter((a) => a.startsWith('--screenshot-click=')) : []
   const shotScroll = isDev ? process.argv.find((a) => a.startsWith('--screenshot-scroll=')) : undefined
+  // 支持 --screenshot-type=<文字>：往当前聚焦的输入框里逐字输入。
+  //
+  // 加这个是因为「输入框打不进字」这类 bug 光看截图发现不了 ——
+  // 之前 CarePage 的备注框每敲一个字符就被卸载重建、焦点丢失，
+  // 截图完全看不出来，只有真的敲进去才能验证。
+  const shotType = isDev ? process.argv.find((a) => a.startsWith('--screenshot-type=')) : undefined
 
   if (shot) {
     mainWindow.webContents.once('did-finish-load', () => {
@@ -250,6 +256,36 @@ function createWindow(): void {
               logStartup('界面自检：点击元素', { text, clicked })
               // 等界面响应完再点下一个 / 截图
               await new Promise((resolve) => setTimeout(resolve, 900))
+            }
+
+            if (shotType) {
+              const text = shotType.slice('--screenshot-type='.length)
+              // 逐字输入，每字之间留一点时间：如果输入框在重渲染时被销毁重建，
+              // 第二个字就会落空 —— 这正是要抓的现象
+              const result = await mainWindow?.webContents.executeJavaScript(
+                `(async () => {
+                   const el = document.activeElement;
+                   if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) {
+                     return { ok: false, reason: '没有聚焦的输入框', tag: el ? el.tagName : null };
+                   }
+                   const text = ${JSON.stringify(text)};
+                   const setter = Object.getOwnPropertyDescriptor(
+                     el.tagName === 'INPUT' ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype,
+                     'value'
+                   ).set;
+                   for (const ch of text) {
+                     setter.call(el, (el.value || '') + ch);
+                     el.dispatchEvent(new Event('input', { bubbles: true }));
+                     await new Promise((r) => setTimeout(r, 120));
+                   }
+                   // 输入完再查一次：焦点还在不在、值对不对
+                   const stillFocused = document.activeElement === el;
+                   const sameNode = document.body.contains(el);
+                   return { ok: true, value: el.value, stillFocused, sameNode, want: text };
+                })()`
+              )
+              logStartup('界面自检：输入文字', result)
+              await new Promise((resolve) => setTimeout(resolve, 300))
             }
 
             if (shotScroll) {

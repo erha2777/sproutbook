@@ -138,7 +138,8 @@ export function TextInput({
   placeholder,
   invalid,
   disabled,
-  type = 'text'
+  type = 'text',
+  autoFocus
 }: {
   value: string
   onChange: (value: string) => void
@@ -146,6 +147,8 @@ export function TextInput({
   invalid?: boolean
   disabled?: boolean
   type?: string
+  /** 呈现后就聚焦。用于「点了按钮才出现、出现就是为了让你打字」的输入框 */
+  autoFocus?: boolean
 }): ReactNode {
   return (
     <input
@@ -154,6 +157,7 @@ export function TextInput({
       type={type}
       placeholder={placeholder}
       disabled={disabled}
+      autoFocus={autoFocus}
       onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
     />
   )

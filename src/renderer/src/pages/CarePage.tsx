@@ -7,7 +7,7 @@
  * 月份只用来筛选「这个月原本要做什么」。
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareLog, CarePhase, CareTask } from '@core/types'
 import type { CareOverview, CareTaskListItem, PlantPhaseInfo } from '@shared/api'
@@ -203,7 +203,17 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
 
   const monthSummary = summarizeTasks(tasks, today)
 
-  const TaskRow = ({ task }: { task: CareTaskListItem }): ReactNode => {
+  /**
+   * 任务行 / 分组。
+   *
+   * 这两个是**普通函数**，必须直接调用 `taskRow(task)`，
+   * 不能写成 `<TaskRow task={t} />` —— 它们定义在 CarePage 内部，
+   * 每次重渲染都是新的函数对象。React 按类型标识比较元素，
+   * 用 JSX 组件语法会让它认为类型变了，从而卸载并重建整棵子树。
+   * 后果很具体：备注输入框每敲一个字符就被销毁重建、焦点丢失，
+   * 表现为「输入不了东西」。
+   */
+  const taskRow = (task: CareTaskListItem): ReactNode => {
     const urgency = urgencyOf(task, today)
     const closed = task.status !== 'pending'
     return (
@@ -235,7 +245,12 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
           {noteFor === task.id ? (
             <div className="row tight" style={{ marginTop: 6 }}>
               <div style={{ flex: 1 }}>
-                <TextInput value={noteText} onChange={setNoteText} placeholder="记一句当时的情况（可留空）" />
+                <TextInput
+                  value={noteText}
+                  onChange={setNoteText}
+                  placeholder="记一句当时的情况（可留空）"
+                  autoFocus
+                />
               </div>
               <Button size="small" variant="primary" onClick={() => void act(task.id, 'complete', noteText)}>
                 确认完成
@@ -283,16 +298,16 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
     )
   }
 
-  const Group = ({ title, list, tone }: { title: string; list: CareTaskListItem[]; tone?: string }): ReactNode => {
+  const taskGroup = (title: string, list: CareTaskListItem[], tone?: string): ReactNode => {
     if (list.length === 0) return null
     return (
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 14 }} key={title}>
         <div className="section-title">
           {title}
           {tone ? <Badge tone={tone as 'safety'}>{list.length}</Badge> : <span className="small muted">{list.length} 项</span>}
         </div>
         {list.map((t) => (
-          <TaskRow key={t.id} task={t} />
+          <Fragment key={t.id}>{taskRow(t)}</Fragment>
         ))}
       </div>
     )
@@ -464,11 +479,11 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
             />
           ) : (
             <>
-              <Group title="已过期" list={groups.overdue} tone="safety" />
-              <Group title="该做了" list={groups.due} tone="warn" />
-              <Group title="快到了" list={groups.soon} />
-              <Group title="这个月晚些" list={groups.later} />
-              <Group title="已完成 / 已跳过" list={groups.closed} />
+              {taskGroup('已过期', groups.overdue, 'safety')}
+              {taskGroup('该做了', groups.due, 'warn')}
+              {taskGroup('快到了', groups.soon)}
+              {taskGroup('这个月晚些', groups.later)}
+              {taskGroup('已完成 / 已跳过', groups.closed)}
             </>
           )}
         </Panel>
