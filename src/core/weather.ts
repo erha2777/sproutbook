@@ -123,12 +123,24 @@ function fmt(temp: number): string {
  *
  * 只返回**真的越界**的那些：预报没到物种承受范围就不产生任何条目，
  * 界面上也就不会有「一切正常」的噪音。
+ *
+ * ## 措辞上的一处讲究
+ *
+ * `forecastLabel` 是**预报取自哪里**（比如「湖南 · 某市」），
+ * `placeName` 是**这株植物放在哪**（比如「前院（东南136°）」）。两者必须分开说。
+ *
+ * 第一版把预报温度直接安在植株的位置上（「前院（东南136°）最高 31.2℃」），
+ * 读起来像是院子里的实测值 —— 但那是某市市中心那个格点的预报。
+ * 城市尺度的网格数据和实际院子可能差几度（热岛、地形、朝向都不在内）。
+ * 把不确定的东西说成确定的，比不说还糟。
  */
 export function assessWeatherRisks(
   plants: WeatherRiskInput[],
-  forecast: DailyTemp[]
+  forecast: DailyTemp[],
+  forecastLabel?: string | null
 ): WeatherRisk[] {
   const out: WeatherRisk[] = []
+  const where = forecastLabel?.trim() ? forecastLabel.trim() : '预报点'
 
   for (const p of plants) {
     const place = { frostProtected: p.frostProtected, canHeat: p.canHeat }
@@ -150,8 +162,8 @@ export function assessWeatherRisks(
           margin,
           severity: severityOf(margin),
           message:
-            `${p.placeName ?? '这株'}最低 ${fmt(day.tempMin)}，` +
-            `低于它能扛的 ${fmt(cold)}` +
+            `${where}预报最低 ${fmt(day.tempMin)}` +
+            (p.placeName ? `，${p.placeName}这株能扛到 ${fmt(cold)}` : `，它能扛到 ${fmt(cold)}`) +
             (p.frostProtected || p.canHeat ? '（已按养护位置调整）' : '') +
             `，超出 ${fmt(margin)}。`
         })
@@ -170,8 +182,9 @@ export function assessWeatherRisks(
           margin,
           severity: severityOf(margin),
           message:
-            `${p.placeName ?? '这株'}最高 ${fmt(day.tempMax)}，` +
-            `达到它能扛的 ${fmt(heat)} 上限，超出 ${fmt(margin)}。`
+            `${where}预报最高 ${fmt(day.tempMax)}` +
+            (p.placeName ? `，${p.placeName}这株能扛到 ${fmt(heat)} 上限` : `，它能扛到 ${fmt(heat)} 上限`) +
+            `，超出 ${fmt(margin)}。`
         })
       }
     }

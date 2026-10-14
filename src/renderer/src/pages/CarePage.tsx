@@ -43,13 +43,27 @@ import { CareCalendar } from '../components/CareCalendar'
  * 定义在模块层而不是 CarePage 内部：组件内定义会让每次渲染产生新的函数标识，
  * React 视为换了类型就整个重挂子树（之前笔记输入框打不进字就是这个原因）。
  */
+/**
+ * 天气任务的身份：同一株 + 同一天 + 同一个标题就算同一条。
+ *
+ * 抽成模块层函数是为了让**建之前的查重**和**按钮的禁用态**
+ * 用同一个定义 —— 两处各写一遍迟早会漂移，然后就是「按钮说已加入、
+ * 点了却又建一条」这种自相矛盾。
+ */
+function weatherTaskKey(plantId: number, date: string, title: string): string {
+  return `${plantId}|${date}|${title}`
+}
+
 function WeatherPanel({
   result,
+  addedKeys,
   busy,
   onRefresh,
   onCreateTask
 }: {
   result: WeatherWarningResult | null
+  /** 已经加进计划的任务身份，用来把按钮变成禁用态 */
+  addedKeys: Set<string>
   busy: boolean
   onRefresh: () => void
   onCreateTask: (risk: WeatherRiskItem) => void | Promise<void>
@@ -84,7 +98,11 @@ function WeatherPanel({
         </div>
       ) : (
         <div className="weather-risks">
-          {risks.map((r) => (
+          {risks.map((r) => {
+            const added = addedKeys.has(
+              weatherTaskKey(r.plantId, r.date, `${r.kind === 'frost' ? '防冻' : '防暑'}：${r.plantName}`)
+            )
+            return (
             <div key={`${r.kind}-${r.plantId}`} className={`weather-risk sev-${r.severity}`}>
               <div className="weather-risk-head">
                 <span className={`weather-badge sev-${r.severity}`}>
@@ -93,13 +111,18 @@ function WeatherPanel({
                 <b>{r.plantName}</b>
                 <span className="muted small">{r.date}</span>
                 <span style={{ flex: 1 }} />
-                <Button size="small" onClick={() => void onCreateTask(r)}>
-                  加进养护计划
-                </Button>
+                {added ? (
+                  <span className="small muted">✓ 已在养护计划里</span>
+                ) : (
+                  <Button size="small" onClick={() => void onCreateTask(r)}>
+                    加进养护计划
+                  </Button>
+                )}
               </div>
               <div className="small">{r.message}</div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -110,13 +133,28 @@ function WeatherPanel({
         </div>
       ) : null}
 
+      {/*
+        把实际用的坐标摆出来。用户反馈过「位置不够精准」——
+        与其解释预报有多粗，不如让他看见取的是哪个点，
+        再决定要不要到「设置 → 养护位置」填精确经纬度。
+      */}
+      {result.places.length > 0 ? (
+        <div className="small muted" style={{ marginTop: 6 }}>
+          预报点：
+          {result.places
+            .map((p) => `${p.label || p.name}（${p.latitude.toFixed(2)}, ${p.longitude.toFixed(2)}）`)
+            .join('、')}
+          <br />
+          这是网格预报，城市尺度，和你家院子可能有几度出入。
+          到「设置 → 养护位置」填精确的纬度 / 经度会更准。
+        </div>
+      ) : null}
+
       <div className="row tight" style={{ marginTop: 8 }}>
         <Button size="small" onClick={onRefresh} disabled={busy}>
           {busy ? '刷新中…' : '重新获取'}
         </Button>
-        <span className="small muted">
-          数据来自 Open-Meteo，只在打开这一页时请求一次
-        </span>
+        <span className="small muted">数据来自 Open-Meteo，只在打开这一页时请求一次</span>
       </div>
     </div>
   )
@@ -209,6 +247,20 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   const bounds = useMemo(() => monthBounds(year, month), [year, month])
 
   /**
+   * 已经加进计划里的天气任务。
+   *
+   * 从任务列表**推导**而不是自己记一份状态：完成 / 删除 / 撤销之后
+   * 列表会重新加载，这里跟着就对了，不会出现「任务删了按钮还写着已加入」。
+   */
+  const addedKeys = useMemo(() => {
+    const set = new Set<string>()
+    for (const t of [...tasks, ...overdue]) {
+      if (t.status === 'pending' && t.plantId !== null) set.add(weatherTaskKey(t.plantId, t.dueDate, t.title))
+    }
+    return set
+  }, [tasks, overdue])
+
+  /**
    * 取天气预警。
    *
    * 刻意放在 reload 之外：任务刷新频繁（完成一条就刷），
@@ -245,11 +297,25 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
       risk.kind === 'frost'
         ? '搬到避风处或室内；不能搬的用无纺布/旧床单罩住，别用塑料袋闷。降温当天浇透一次水（湿土比干土保温）。'
         : '避开正午浇水，改到清晨或傍晚；遮阳网或搬到半阴处；高温期间停施水溶肥。'
+    const title = `${what}：${risk.plantName}`
+    /*
+     * 先查重。
+     *
+     * 第一版没有这一步：用户点了 4 次就建出 4 条一模一样的任务
+     *（同植株、同日期、同标题）。按钮点下去没有任何反馈，
+     * 用户自然会怀疑「到底加上没有」然后再点一次 —— 所以两件事都要做：
+     * 这里挡住重复，界面上把已加入的状态显示出来。
+     */
+    const key = weatherTaskKey(risk.plantId, risk.date, title)
+    if (addedKeys.has(key)) {
+      toast.push('这条已经在养护计划里了', 'info')
+      return
+    }
     try {
       await window.api.care.createTask({
         plantId: risk.plantId,
         actionType: risk.kind === 'frost' ? 'protect' : 'water',
-        title: `${what}：${risk.plantName}`,
+        title,
         detail: `${risk.message}\n${action}\n〔依据天气预警，${risk.date}〕`,
         dueDate: risk.date,
         windowDays: 2,
@@ -609,6 +675,7 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         </SectionTitle>
         <WeatherPanel
           result={weather}
+          addedKeys={addedKeys}
           busy={weatherBusy}
           onRefresh={() => void loadWeather(true)}
           onCreateTask={createTaskFromRisk}

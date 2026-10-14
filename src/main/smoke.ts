@@ -1493,6 +1493,24 @@ export async function runSmoke(outFile: string): Promise<number> {
         check('超过 2℃ 以内算「留意」', cold[0]?.severity === 'watch')
         check('说明里写清楚了地点和温度', (cold[0]?.message ?? '').includes('前院') && (cold[0]?.message ?? '').includes('3℃'), cold[0]?.message)
 
+        /*
+         * 措辞：温度必须归给**预报点**，不能读成「你家院子实测」。
+         *
+         * 第一版写的是「前院（东南136°）最高 31.2℃」，用户看到就以为是院子的温度 ——
+         * 但那是某市市中心那个格点的预报。用户反馈「位置不够精准」指的就是这个。
+         */
+        {
+          const withLabel = assessWeatherRisks([zhudinghong], [day('2026-11-20', 3, 10)], '中国 · 湖南 · 某市')
+          const msg = withLabel[0]?.message ?? ''
+          check('温度归给预报点而不是植株位置', msg.includes('中国 · 湖南 · 某市预报最低'), msg)
+          check('植株位置另说，不再和温度绑在一起', msg.includes('前院这株能扛到'), msg)
+          // 钉子：不能出现「前院……最低 <温度>」这种读起来像实测的说法
+          check('不出现「前院最低 3℃」这种过度声称', !/前院[^，]*最低/.test(msg), msg)
+          // 没有预报点名字时也不能瞎安
+          const noLabel = assessWeatherRisks([zhudinghong], [day('2026-11-20', 3, 10)])
+          check('没有预报点名时不谎报位置', (noLabel[0]?.message ?? '').includes('预报点预报最低'), noLabel[0]?.message)
+        }
+
         // 关键行为：同一株放在能防冻的位置，就不该再报
         const sheltered = assessWeatherRisks([{ ...zhudinghong, frostProtected: true }], [day('2026-11-20', 3, 10)])
         check('能防冻的位置不再报霜冻', sheltered.length === 0, String(sheltered.length))
