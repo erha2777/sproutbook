@@ -142,11 +142,21 @@ function WeatherPanel({
         <div className="small muted" style={{ marginTop: 6 }}>
           预报点：
           {result.places
-            .map((p) => `${p.label || p.name}（${p.latitude.toFixed(2)}, ${p.longitude.toFixed(2)}）`)
+            .map(
+              (p) =>
+                `${p.label || p.name}（${p.latitude.toFixed(2)}, ${p.longitude.toFixed(2)}）` +
+                `${p.level === 'district' ? ' · 已到区县' : ' · 只到市'}`
+            )
             .join('、')}
           <br />
-          这是网格预报，城市尺度，和你家院子可能有几度出入。
-          到「设置 → 养护位置」填精确的纬度 / 经度会更准。
+          {/*
+            精度那句话要跟着实际情况走。
+            早期版本写死了「城市尺度」，可配了和风之后地名是能到区县的 ——
+            写死的话就成了另一句不实的话。
+          */}
+          {result.places.some((p) => p.level === 'district')
+            ? '位置已精确到你填的区县。天气本身仍是网格预报，和你家院子可能还有几度出入。'
+            : '这是网格预报，城市尺度，和你家院子可能有几度出入。到「设置 → 养护位置」填区县（或直接填经纬度）会更准。'}
         </div>
       ) : null}
 
@@ -154,7 +164,10 @@ function WeatherPanel({
         <Button size="small" onClick={onRefresh} disabled={busy}>
           {busy ? '刷新中…' : '重新获取'}
         </Button>
-        <span className="small muted">数据来自 Open-Meteo，只在打开这一页时请求一次</span>
+        {/* 这里**不能写死**，配了和风就不是 Open-Meteo 了 */}
+        <span className="small muted">
+          {result.providerLabel ? `数据来自 ${result.providerLabel}` : '天气数据'}，只在打开这一页时请求一次
+        </span>
       </div>
     </div>
   )
