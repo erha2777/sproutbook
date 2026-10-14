@@ -269,8 +269,13 @@ export function savePlant(db: Db, input: SavePlantInput): SavePlantResult {
 }
 
 export function archivePlant(db: Db, id: number): boolean {
-  db.run("UPDATE plants SET archived_at = datetime('now'), updated_at = datetime('now') WHERE id = ?", id)
-  return true
+  const r = db.run("UPDATE plants SET archived_at = datetime('now'), updated_at = datetime('now') WHERE id = ?", id)
+  /*
+   * 影响 0 行说明那条记录已经不在了 —— 如实返回 false。
+   * 一直 return true 的话，界面报「已删除」而对象还在列表里，
+   * 用户会以为删除功能坏了。
+   */
+  return Number(r.changes) > 0
 }
 
 export interface PlantStats {

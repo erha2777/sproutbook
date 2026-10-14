@@ -101,8 +101,13 @@ export function deleteMaterial(db: Db, id: number): boolean {
   if (used > 0) {
     throw new Error(`还有 ${used} 个配方在用这个材料，删掉会让那些配方缺一项。请先改配方，或保留它。`)
   }
-  db.run('DELETE FROM materials WHERE id = ?', id)
-  return true
+  const r = db.run('DELETE FROM materials WHERE id = ?', id)
+  /*
+   * 影响 0 行说明那条记录已经不在了 —— 如实返回 false。
+   * 一直 return true 的话，界面报「已删除」而对象还在列表里，
+   * 用户会以为删除功能坏了。
+   */
+  return Number(r.changes) > 0
 }
 
 // ---------------------------------------------------------------------------
@@ -264,14 +269,24 @@ export function saveRecipe(db: Db, input: RecipeInput): SaveRecipeResult {
 }
 
 export function archiveRecipe(db: Db, id: number): boolean {
-  db.run("UPDATE recipes SET archived_at = datetime('now') WHERE id = ?", id)
-  return true
+  const r = db.run("UPDATE recipes SET archived_at = datetime('now') WHERE id = ?", id)
+  /*
+   * 影响 0 行说明那条记录已经不在了 —— 如实返回 false。
+   * 一直 return true 的话，界面报「已删除」而对象还在列表里，
+   * 用户会以为删除功能坏了。
+   */
+  return Number(r.changes) > 0
 }
 
 /** 取消归档（配方误删的退路）。 */
 export function restoreRecipe(db: Db, id: number): boolean {
-  db.run('UPDATE recipes SET archived_at = NULL WHERE id = ?', id)
-  return true
+  const r = db.run('UPDATE recipes SET archived_at = NULL WHERE id = ?', id)
+  /*
+   * 影响 0 行说明那条记录已经不在了 —— 如实返回 false。
+   * 一直 return true 的话，界面报「已删除」而对象还在列表里，
+   * 用户会以为删除功能坏了。
+   */
+  return Number(r.changes) > 0
 }
 
 /** 统计：材料数与配方数，用于界面上的概览。 */
