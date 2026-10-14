@@ -456,11 +456,32 @@ interface QWeatherDaily {
  * 上层的风险判断（core/weather.ts）只认这一种形状，
  * 换数据源不该动到判断逻辑。
  */
+/**
+ * 取每日温度的结果。
+ *
+ * ## 为什么还要回一个「实际用了哪个源」
+ *
+ * 和风失败时会**静默退回 Open-Meteo**（别让用户这次什么都看不到）。
+ * 调用方如果按配置去写「数据来自和风天气」，就会在换源时**谎报来源和精度** ——
+ * 而设置页恰好教用户「填经纬度会更准」，正好触发这条假来源。
+ *
+ * **配置里选了什么，和这次实际用了什么，是两件事。**
+ */
+export interface DailyFetch {
+  days: DailyTemp[]
+  /** 这次**实际**用的数据源，不是配置里的那个 */
+  provider: WeatherProviderId
+  /** 和风被跳过的原因。实际用了和风时为 null */
+  fallbackReason: string | null
+}
+
 export async function fetchDaily(
   config: WeatherConfig,
   geo: GeoResult,
   days = 7
-): Promise<DailyTemp[] | null> {
+): Promise<DailyFetch | null> {
+  let fallbackReason: string | null = null
+
   if (geo.provider === 'qweather' && config.qweatherReady && geo.locationId) {
     const data = await fetchJson<{ code?: string; daily?: QWeatherDaily[] }>(
       `https://${config.qweatherHost}/v7/weather/${days === 3 ? '3d' : '7d'}?location=${encodeURIComponent(geo.locationId)}&key=${encodeURIComponent(config.qweatherKey ?? '')}`
@@ -474,9 +495,15 @@ export async function fetchDaily(
         if (!d.fxDate || !Number.isFinite(min) || !Number.isFinite(max)) continue
         out.push({ date: d.fxDate, tempMin: min, tempMax: max })
       }
-      if (out.length > 0) return out
+      if (out.length > 0) return { days: out, provider: 'qweather', fallbackReason: null }
     }
-    // 和风失败了就往下走 Open-Meteo，别让用户这次什么都看不到
+    /*
+     * 和风失败了就往下走 Open-Meteo，别让用户这次什么都看不到。
+     * 但**要记住为什么** —— 界面上得说出来，不能假装什么都没发生。
+     */
+    fallbackReason = data?.code ? `和风返回 ${data.code}` : '和风没有返回可用的数据'
+  } else if (config.provider === 'qweather') {
+    fallbackReason = geo.locationId ? '和风配置不完整' : '这个地点没有和风的 locationId（多半是手填的经纬度）'
   }
 
   const data = await fetchJson<{
@@ -495,5 +522,5 @@ export async function fetchDaily(
     if (typeof tempMin !== 'number' || typeof tempMax !== 'number') continue
     out.push({ date: time[i], tempMin, tempMax })
   }
-  return out.length > 0 ? out : null
+  return out.length > 0 ? { days: out, provider: 'open-meteo', fallbackReason } : null
 }

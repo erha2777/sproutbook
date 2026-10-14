@@ -24,8 +24,10 @@ import {
   fetchDaily,
   lookupLocation,
   readWeatherConfig,
+  type DailyFetch,
   type GeoResult,
-  type WeatherConfig
+  type WeatherConfig,
+  type WeatherProviderId
 } from './weather-providers'
 import { getSetting, setSetting, listEnvironments } from '../db/repo/misc'
 import { listPlants } from '../db/repo/plants'
@@ -59,6 +61,15 @@ export interface GeoPoint {
 export interface ForecastResult {
   point: GeoPoint
   days: DailyTemp[]
+  /**
+   * 这份预报**实际**是谁给的。
+   *
+   * 不能从配置推导 —— 和风失败时会静默退回 Open-Meteo，
+   * 按配置写就会谎报来源，而设置页恰好教用户「填经纬度会更准」。
+   */
+  provider: WeatherProviderId
+  /** 换源的原因。用的就是配置里选的那个源时为 null */
+  fallbackReason: string | null
   /** 取回的时间（ISO），界面用来显示「几点的数据」 */
   fetchedAt: string
 }
@@ -140,11 +151,11 @@ export async function getForecast(
   config: WeatherConfig,
   point: GeoResult,
   force = false
-): Promise<DailyTemp[] | null> {
+): Promise<ForecastResult | null> {
   const key = `${point.latitude.toFixed(3)},${point.longitude.toFixed(3)}`
   const cache = getSetting<Record<string, CacheEntry>>(db, CACHE_KEY, {})
   const hit = cache[key]
-  const sameSource = (hit as (CacheEntry & { provider?: string }) | undefined)?.provider === point.provider
+  const sameSource = hit?.provider === point.provider
   if (hit && sameSource) {
     const age = Date.now() - hit.at
     /*
@@ -154,17 +165,26 @@ export async function getForecast(
      * 连点几下就是几次调用。60 秒内的数据本来也没有实质差别，
      * 挡掉的只是误触和连点。
      */
-    if (age < CACHE_TTL_MS && (!force || age < FORCE_COOLDOWN_MS)) return hit.days
+    if (age < CACHE_TTL_MS && (!force || age < FORCE_COOLDOWN_MS)) return hit
   }
 
   countRequest(db)
-  const days = await fetchDaily(config, point)
-  if (!days) return null
+  const fetched = await fetchDaily(config, point)
+  if (!fetched) return null
 
-  cache[key] = { key, at: Date.now(), point: { latitude: point.latitude, longitude: point.longitude, label: point.label }, days, fetchedAt: new Date().toISOString() } as CacheEntry
-  ;(cache[key] as CacheEntry & { provider?: string }).provider = point.provider
+  const entry: CacheEntry = {
+    key,
+    at: Date.now(),
+    point: { latitude: point.latitude, longitude: point.longitude, label: point.label },
+    days: fetched.days,
+    // 记的是**这次实际用的源**，不是配置里的那个 —— 换源时要如实说出来
+    provider: fetched.provider,
+    fallbackReason: fetched.fallbackReason,
+    fetchedAt: new Date().toISOString()
+  }
+  cache[key] = entry
   setSetting(db, CACHE_KEY, cache)
-  return days
+  return entry
 }
 
 /** 清掉天气缓存。用户在设置里手动刷新时用。 */
@@ -179,8 +199,15 @@ export function clearWeatherCache(db: Db): void {
 // ---------------------------------------------------------------------------
 
 export interface WeatherWarningResult {
-  /** 这次实际用的是哪个数据源，界面要说明白 */
+  /** 这次**实际**用的是哪个数据源，界面要说明白 */
   providerLabel: string
+  /**
+   * 换源的原因（和风失败 / 没有 locationId / 配置不全）。
+   * 用的就是配置里选的那个源时为 null。
+   *
+   * **换源了就要说出来** —— 用户拿「已到区县」去信这份预报是会出事的。
+   */
+  fallbackReason: string | null
   /** 今天向数据源发了几次请求。和风免费额度有限，摆出来让用户看得见 */
   requestsToday: number
   /**
@@ -228,6 +255,7 @@ export async function assessPlantsWeather(
   const empty: WeatherWarningResult = {
     configured: false,
     providerLabel: '',
+    fallbackReason: null,
     requestsToday: 0,
     places: [],
     risks: [],
@@ -254,6 +282,11 @@ export async function assessPlantsWeather(
 
   const places: WeatherWarningResult['places'] = []
   /** 环境 id → 该地点的逐日预报。同一地点只请求一次。 */
+  /** 这次所有地点**实际**用的源。第一个成功的地点定下来就不再变 */
+  let actualProvider: WeatherProviderId | null = null
+  /** 换源的原因。没换源时为 null */
+  let fallbackReason: string | null = null
+
   const daysByEnvId = new Map<number, DailyTemp[]>()
   /** 每个环境对应的预报点显示名，例如「中国 · 湖南 · 某市」 */
   const daysLabel = new Map<number, string>()
@@ -261,7 +294,7 @@ export async function assessPlantsWeather(
   let error: string | null = null
 
   // 坐标相同的地点（比如「南向阳台」和「露台」都填了同一个城市）只请求一次
-  const daysByPoint = new Map<string, DailyTemp[]>()
+  const daysByPoint = new Map<string, DailyFetch>()
 
   for (const env of located) {
     /*
@@ -312,28 +345,47 @@ export async function assessPlantsWeather(
     }
 
     const pointKey = `${point.latitude.toFixed(3)},${point.longitude.toFixed(3)}`
-    let days = daysByPoint.get(pointKey)
-    if (!days) {
-      const fetched = await getForecast(db, config, point, force)
-      if (!fetched) {
+    /*
+     * **这里是 DailyFetch 和 DailyTemp[] 的分界。**
+     *
+     * daysByPoint 存的是完整的 DailyFetch（要留着"这份是谁给的"），
+     * 从下面这一行往后一律只传数组 —— 风险评估那一层不关心来源。
+     * 上次改这处来回打转，就是因为没先划清这条线。
+     */
+    let forecast = daysByPoint.get(pointKey)
+    if (!forecast) {
+      forecast = (await getForecast(db, config, point, force)) ?? undefined
+      if (!forecast) {
         error = error ?? '没能取到天气预报'
         continue
       }
-      days = fetched
-      daysByPoint.set(pointKey, days)
+      daysByPoint.set(pointKey, forecast)
       places.push({
         name: env.name,
         label: point.label,
         latitude: point.latitude,
         longitude: point.longitude,
-        days,
+        days: forecast.days,
         // 精度要摆在明面上：区县级和市级是两回事
         level: point.level,
-        provider: point.provider
+        /*
+         * **数据源用实际的那个**，不是配置里的。
+         * 和风失败时会退回 Open-Meteo，按配置写就会谎报来源和精度 ——
+         * 而设置页恰好教用户「填经纬度会更准」，正好触发这条假来源。
+         */
+        provider: forecast.provider
       })
+      /*
+       * 换源了就要说出来。同一次评估里所有地点走同一套配置，来源一致，
+       * 所以第一个成功的地点定下来就不再变。
+       */
+      if (actualProvider === null) {
+        actualProvider = forecast.provider
+        fallbackReason = forecast.fallbackReason
+      }
       fetchedAt = new Date().toISOString()
     }
-    daysByEnvId.set(env.id, days)
+    daysByEnvId.set(env.id, forecast.days)
     daysLabel.set(env.id, point.label || env.name)
   }
 
@@ -373,7 +425,15 @@ export async function assessPlantsWeather(
 
   return {
     configured: true,
-    providerLabel: config.provider === 'qweather' && config.qweatherReady ? '和风天气' : 'Open-Meteo',
+    /*
+     * **用实际的数据源，不是配置里的。**
+     *
+     * 和风失败时会静默退回 Open-Meteo，按配置写就会在换源时谎报来源和精度 ——
+     * 用户会拿「数据来自和风天气 · 已到区县」去信这份预报。
+     * actualProvider 由上面第一个成功的地点定下来。
+     */
+    providerLabel: (actualProvider ?? config.provider) === 'qweather' ? '和风天气' : 'Open-Meteo',
+    fallbackReason,
     requestsToday: readUsage(db).count,
     places: places.map((p) => ({
       name: p.name,
