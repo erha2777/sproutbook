@@ -5,7 +5,7 @@
  * 都要拿到同一个换算结果，两处各写一份必然对不上。
  */
 
-import type { MaterialKind, Recipe, RecipeItem } from './types'
+import type { MaterialKind, RecipeItem } from './types'
 
 export const MATERIAL_KIND_LABELS: Record<MaterialKind, string> = {
   substrate: '基质',
@@ -117,13 +117,4 @@ export function validateRecipe(input: {
   })
 
   return errors
-}
-
-/** 配方用到的材料 id 集合（用于「这个材料被哪些配方用了」）。 */
-export function materialIdsIn(recipe: Pick<Recipe, 'items'>): number[] {
-  const out = new Set<number>()
-  for (const item of recipe.items) {
-    if (item.materialId !== null) out.add(item.materialId)
-  }
-  return [...out]
 }

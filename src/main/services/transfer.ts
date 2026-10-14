@@ -19,7 +19,7 @@ import { columnHeader, exportFieldValue } from '../../core/transfer'
 import { PLANT_STATUS_KEYS, PLANT_STATUS_LABELS } from '../../core/status'
 import { coerceFieldValue } from '../../core/fieldTypes'
 import { loadFieldDefinitions } from '../db/repo/common'
-import { listSpecies, getSpecies, saveSpecies } from '../db/repo/species'
+import { listSpecies, saveSpecies } from '../db/repo/species'
 import { listPlants, savePlant } from '../db/repo/plants'
 import { listEnvironments } from '../db/repo/misc'
 import type { FieldDefinition, FieldOwner, FieldValue, PlantStatus, RelationTarget } from '../../core/types'
@@ -536,23 +536,4 @@ function createRelationTarget(db: Db, target: RelationTarget, name: string): num
     return Number(row.lastInsertRowid)
   }
   return null
-}
-
-/** 供界面展示「物种库 / 植株」这一层已被导出的条数 */
-export function exportCount(db: Db, kind: TransferKind): number {
-  const owner = OWNER_OF[kind]
-  return Number(db.scalar<number>(`SELECT COUNT(*) AS c FROM ${owner === 'species' ? 'species' : 'plants'} WHERE archived_at IS NULL`) ?? 0)
-}
-
-/** 目前未随导出走的字段类型（未来若增加图片打包，改这里）。 */
-export const NOT_EXPORTED_TYPES: string[] = ['image']
-
-export function loadDefinitionsFor(db: Db, kind: TransferKind): FieldDefinition[] {
-  return loadFieldDefinitions(db, OWNER_OF[kind]).filter((d) => !d.archivedAt)
-}
-
-/** 供自检使用：拿到某条物种的原始记录（含系统列）。 */
-export function rawSpecies(db: Db, id: number): { attributes: Record<string, FieldValue> } & Record<string, unknown> | null {
-  const s = getSpecies(db, id)
-  return s ? ({ ...s, attributes: s.attributes } as never) : null
 }

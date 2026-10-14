@@ -96,10 +96,3 @@ export function exportFieldValue(
 export function columnHeader(def: Pick<FieldDefinition, 'key' | 'label'>): string {
   return def.label?.trim() || def.key
 }
-
-/** 把可读值转成能被 coerceFieldValue 接受的输入（relation / select 已在调用方处理）。 */
-export function importFieldValue(raw: string): unknown {
-  const s = raw.trim()
-  if (s === '') return null
-  return s
-}

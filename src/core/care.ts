@@ -10,7 +10,7 @@
  * 都要用同一套判断，两处各写一份必然会出现「列表说逾期、日历说还早」。
  */
 
-import type { CareActionType, CarePhase, CareRule, CareTask, CareTaskStatus } from './types'
+import type { CareActionType, CarePhase, CareRule, CareTask } from './types'
 
 export const CARE_ACTION_LABELS: Record<CareActionType, string> = {
   water: '浇水',
@@ -535,8 +535,4 @@ export function summarizeTasks(tasks: CareTask[], today: string = todayIso()): {
     }
   }
   return { total: tasks.length, pending, done, skipped, overdue, due }
-}
-
-export function taskStatusLabel(status: CareTaskStatus): string {
-  return status === 'done' ? '已完成' : status === 'skipped' ? '已跳过' : '待办'
 }
