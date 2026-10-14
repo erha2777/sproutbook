@@ -239,9 +239,19 @@ const QWEATHER_ERROR_ADVICE: Record<string, string> = {
     '桌面应用不发 Referer，白名单一定拦；IP 白名单也会因为家里宽带换 IP 而失效。',
   'Invalid Host': 'API Host 填错了。到控制台 → 设置 里复制你自己的那串，注意别带 https:// 前缀。',
   Unauthorized: '凭据无效。检查 API Key 是否复制完整（前后别带空格），或它是否属于这个 API Host。',
-  Forbidden: '这个凭据没有访问 GeoAPI 的权限。到控制台给凭据勾上 GeoAPI。',
+  /*
+   * 403 和 429 各有**两种**含义，而且和风的公告明确说了
+   * 「超过每日请求量限制后返回 403 或 429」——
+   * 只写「Host 填错了」的话，用户额度用完时会去改一个完全正确的东西。
+   */
+  Forbidden:
+    '两种可能：① 这个凭据没有访问 GeoAPI 的权限（到控制台给它勾上）；' +
+    '② 当天的请求量用完了。和风对 API KEY 限 1000 次/天（2027-02-01 起生效），' +
+    '用 JWT 认证则无限制。超额后继续猛发请求可能被封 IP，先停下来。',
   'Invalid Parameter': '请求参数有误，多半是 API Host 里混进了多余字符。',
-  'Too Many Requests': '调用太频繁，过一会儿再试。',
+  'Too Many Requests':
+    '两种可能：① 调用太频繁，过一会儿再试；' +
+    '② 当天的请求量用完了（API KEY 限 1000 次/天）。超额后继续猛发可能被封 IP，先停下来。',
   'Invalid Token': '凭据无效，重新复制一次 API Key。'
 }
 
