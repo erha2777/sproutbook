@@ -20,6 +20,12 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { AiIdentifyCandidate, AiIdentifyResult } from '@shared/api'
+
+const LEVEL_TEXT: Record<string, string> = {
+  genus: '只到属',
+  species: '到种',
+  cultivar: '到品种'
+}
 import { Button, Field, Modal, Notice, Panel, Spinner, TextArea, cx } from './ui'
 
 export interface IdentifyDialogProps {
@@ -98,8 +104,18 @@ export function IdentifyDialog({
                   <Panel key={`${c.name}-${i}`}>
                     <div className="row" style={{ alignItems: 'baseline' }}>
                       <b style={{ fontSize: 15 }}>{c.name}</b>
+                      {/*
+                        品种名单独显示。认出「是朱顶红」不难，认出「是哪个品种」很难 ——
+                        两件事分开摆，用户才知道模型走到了哪一步。
+                      */}
+                      {c.cultivar ? <span className="identify-cultivar">{c.cultivar}</span> : null}
                       <span className="small muted">{c.scientificName ?? ''}</span>
                       <span style={{ flex: 1 }} />
+                      {c.level ? (
+                        <span className={`identify-level lv-${c.level}`} title="识别到了哪一层">
+                          {LEVEL_TEXT[c.level] ?? c.level}
+                        </span>
+                      ) : null}
                       <span className={cx('small', c.confidence >= 0.75 ? '' : 'muted')}>
                         {confidenceLabel(c.confidence)} {Math.round(c.confidence * 100)}%
                       </span>

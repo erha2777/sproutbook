@@ -1584,3 +1584,29 @@ img {
   gap: 8px;
   margin-top: 10px;
 }
+
+.identify-cultivar {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 2px;
+  background: #6b8f4a;
+  color: #fffdf5;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.identify-level {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 2px;
+  border: 1px solid #c8a878;
+  font-size: 11px;
+  color: #6b5a3a;
+  white-space: nowrap;
+}
+
+/* 只到属是最弱的一层，视觉上就要弱一些 */
+.identify-level.lv-genus {
+  border-style: dashed;
+  color: #9a8a6a;
+}
