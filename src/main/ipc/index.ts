@@ -38,6 +38,21 @@ import {
 } from '../db/repo/misc'
 import type { EnvironmentInput } from '../../core/types'
 import {
+  archiveRecipe,
+  deleteMaterial,
+  getRecipe,
+  listMaterials,
+  listRecipes,
+  materialUsage,
+  recipeKinds,
+  recipeStats,
+  restoreRecipe,
+  saveMaterial,
+  saveRecipe
+} from '../db/repo/recipes'
+import type { RecipeListOptions } from '../db/repo/recipes'
+import type { MaterialInput, RecipeInput } from '../../core/types'
+import {
   applyImport,
   buildExport,
   discardImport,
@@ -426,6 +441,23 @@ function registerImageIpc(): void {
     }
     return { imported, canceled: false, failures }
   })
+
+  // -------------------------------------------------------------------------
+  // 材料与配方
+  // -------------------------------------------------------------------------
+
+  handle('materials:list', (query?: string) => listMaterials(getDb(), query))
+  handle('materials:save', (input: MaterialInput) => saveMaterial(getDb(), input))
+  handle('materials:delete', (id: number) => deleteMaterial(getDb(), id))
+  handle('materials:usage', (id: number) => materialUsage(getDb(), id))
+
+  handle('recipes:list', (options?: RecipeListOptions) => listRecipes(getDb(), options ?? {}))
+  handle('recipes:get', (id: number) => getRecipe(getDb(), id))
+  handle('recipes:save', (input: RecipeInput) => saveRecipe(getDb(), input))
+  handle('recipes:archive', (id: number) => archiveRecipe(getDb(), id))
+  handle('recipes:restore', (id: number) => restoreRecipe(getDb(), id))
+  handle('recipes:kinds', () => recipeKinds(getDb()))
+  handle('recipes:stats', () => recipeStats(getDb()))
 
   // -------------------------------------------------------------------------
   // 导入导出

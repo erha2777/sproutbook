@@ -81,6 +81,21 @@ const api: SproutbookApi = {
     remove: (id) => call('images:delete', id),
     reveal: (fileName) => call('images:reveal', fileName)
   },
+  materials: {
+    list: (query) => call('materials:list', query),
+    save: (input) => call('materials:save', input),
+    remove: (id) => call('materials:delete', id),
+    usage: (id) => call('materials:usage', id)
+  },
+  recipes: {
+    list: (options) => call('recipes:list', options ?? {}),
+    get: (id) => call('recipes:get', id),
+    save: (input) => call('recipes:save', input),
+    archive: (id) => call('recipes:archive', id),
+    restore: (id) => call('recipes:restore', id),
+    kinds: () => call('recipes:kinds'),
+    stats: () => call('recipes:stats')
+  },
   transfer: {
     export: (kind, format) => call('transfer:export', kind, format),
     previewImport: (kind) => call('transfer:previewImport', kind),

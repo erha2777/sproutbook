@@ -267,6 +267,20 @@ img {
   color: var(--ink-soft);
 }
 
+/*
+ * 占位符必须一眼看出「这里还没填」。
+ *
+ * 之前完全没有这条规则，占位符用的是浏览器默认色，在 #fffbf0 的浅色输入框上
+ * 和真实值几乎一样 —— 配方编辑器里「用量 20」「备注 可选」看着像已经填好了，
+ * 用户会以为数据在那儿。斜体再加一层不依赖颜色的区分。
+ */
+.pixel-input::placeholder,
+.pixel-textarea::placeholder {
+  color: #a89a83;
+  opacity: 1; /* Firefox 默认会额外降透明度，显式关掉否则两边不一致 */
+  font-style: italic;
+}
+
 .pixel-input.invalid,
 .pixel-textarea.invalid,
 .pixel-select.invalid {
@@ -372,6 +386,19 @@ img {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 16px;
+}
+
+/*
+ * 配方卡片比植物卡片需要更多横向空间：摘要行「泥炭 : 珍珠岩 : 蛭石 = 5 : 3 : 2」
+ * 在 190px 宽里会折成三行，读起来很累。
+ */
+.recipe-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.recipe-grid .card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .pixel-card {

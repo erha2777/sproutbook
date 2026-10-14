@@ -254,10 +254,12 @@ function createWindow(): void {
 
             if (shotScroll) {
               const value = shotScroll.slice('--screenshot-scroll='.length)
-              // 长页面（例如设置页）需要滚动才能截到下面的面板
+              // 长页面（设置页、配方编辑弹窗）需要滚动才能截到下面的内容。
+              // 弹窗打开时内容在 .modal-body 里，滚主内容区是没用的 —— 优先滚弹窗。
               const scrolled = await mainWindow?.webContents.executeJavaScript(
                 `(() => {
-                   const el = document.querySelector('.content') || document.scrollingElement;
+                   const modal = document.querySelector('.modal-body');
+                   const el = modal || document.querySelector('.content') || document.scrollingElement;
                    if (!el) return null;
                    el.scrollTop = ${JSON.stringify(value)} === 'bottom' ? el.scrollHeight : Number(${JSON.stringify(value)}) || 0;
                    return el.scrollTop;

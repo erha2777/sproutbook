@@ -7,6 +7,7 @@ import { SpeciesEditor } from './pages/SpeciesEditor'
 import { TemplatesPage } from './pages/TemplatesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ComingSoonPage } from './pages/ComingSoonPage'
+import { RecipesPage } from './pages/RecipesPage'
 
 type Route =
   | { name: 'garden' }
@@ -279,22 +280,7 @@ function Shell(): ReactNode {
             />
           ) : null}
 
-          {route.name === 'recipes' ? (
-            <ComingSoonPage
-              icon="🧪"
-              title="配方"
-              description="把配土、肥料、药剂的做法存下来，直接用在养护计划里。"
-              schemaReady
-              bullets={[
-                '材料库：泥炭、珍珠岩、蛭石、缓释肥……统一管理单位与用途',
-                '配方支持比例写法（泥炭:珍珠岩:蛭石 = 5:3:2）与绝对用量两种方式',
-                '配方可被植株引用，记录「这盆用的是什么土」',
-                '按配方自动算出「配 10 盆需要多少材料」',
-                '养护计划里的施肥任务可以直接引用某个配方'
-              ]}
-              onGoGarden={() => setRoute({ name: 'garden' })}
-            />
-          ) : null}
+          {route.name === 'recipes' ? <RecipesPage /> : null}
           </PageErrorBoundary>
         </div>
       </main>

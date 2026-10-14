@@ -18,9 +18,8 @@ import { ImageStrip } from '../components/ImageStrip'
 export interface PlantEditorModalProps {
   plant: PlantListItem | null
   environments: Environment[]
-  /** 预选物种（例如从物种库「添加一株」进来） */
+  /** 预选物种（例如从物种库「添加一株」进来）。当前还没有入口调用，留给那个流程。 */
   presetSpeciesId?: number
-  presetSpeciesName?: string
   onClose: () => void
   onSaved: (plantId: number) => void
 }
@@ -29,7 +28,6 @@ export function PlantEditorModal({
   plant,
   environments,
   presetSpeciesId,
-  presetSpeciesName,
   onClose,
   onSaved
 }: PlantEditorModalProps): ReactNode {
@@ -40,7 +38,17 @@ export function PlantEditorModal({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [speciesQuery, setSpeciesQuery] = useState('')
   const [saving, setSaving] = useState(false)
-  const [savedId, setSavedId] = useState<number | null>(plant?.id ?? null)
+
+  /*
+   * 图片区是否可用，取决于这株植物在库里有没有 id。
+   *
+   * 这里原本是一个 state（`savedId` + `setSavedId`），本意是「保存后不关弹窗，
+   * 接着就能加图片」，但保存成功时从来没有调用过 setSavedId，
+   * 而调用方的 onSaved 又会直接关掉弹窗 —— 于是那份状态和对应的分支
+   * 永远走不到，且一旦将来真的让弹窗不关，第二次保存会因为没有 id 而
+   * 再插一条重复植株。改成从 plant 直接派生，语义清楚也不会有这个隐患。
+   */
+  const savedId = plant?.id ?? null
 
   /**
    * 「所属物种 / 养护位置 / 状态」现在是**模板字段**（relation / select），

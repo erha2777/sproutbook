@@ -196,6 +196,71 @@ export interface PlantWithSpecies extends Plant {
 }
 
 // ---------------------------------------------------------------------------
+// 材料与配方
+// ---------------------------------------------------------------------------
+
+export type MaterialKind = 'substrate' | 'fertilizer' | 'pesticide' | 'tool' | 'other'
+
+export interface Material {
+  id: number
+  name: string
+  kind: MaterialKind
+  /** 常用单位（升 / 克 / 毫升）。留空表示按「份」计。 */
+  unit: string | null
+  note: string | null
+}
+
+export type MaterialInput = Omit<Material, 'id'> & { id?: number }
+
+/**
+ * 配方条目。
+ *
+ * 两种写法并存，因为它们回答的是不同问题：
+ *  - **比例**（ratioPart）：配土这类「按份混合」的场景，关心的是泥炭 : 珍珠岩 : 蛭石 = 5 : 3 : 2
+ *  - **用量**（amount + unit）：肥料、药剂这类「每批加多少」的场景，关心的是 20 克
+ * 一条目可以只有比例、只有用量，也可以两者都有（既说明占比又给出建议量）。
+ *
+ * materialId 为空时用 name 记一个临时材料，这样「手边只有一包不知名的土」也能录进来。
+ */
+export interface RecipeItem {
+  id?: number
+  materialId: number | null
+  /** 材料库外的临时材料名；与 materialId 至少有一个 */
+  name: string | null
+  /** 比例份数 */
+  ratioPart: number | null
+  /** 绝对用量，与 unit 搭配 */
+  amount: number | null
+  unit: string | null
+  note: string | null
+  sortOrder: number
+}
+
+export interface Recipe {
+  id: number
+  name: string
+  /** 配土 / 肥料 / 药剂 …（自由文本，给出常用建议值） */
+  kind: string
+  note: string | null
+  items: RecipeItem[]
+  createdAt: string
+  archivedAt: string | null
+}
+
+export interface RecipeInput {
+  id?: number
+  name: string
+  kind: string
+  note: string | null
+  items: RecipeItem[]
+}
+
+export interface RecipeListItem extends Recipe {
+  /** 一行摘要，例如「泥炭 : 珍珠岩 : 蛭石 = 5 : 3 : 2」 */
+  summary: string
+}
+
+// ---------------------------------------------------------------------------
 // 图片
 // ---------------------------------------------------------------------------
 

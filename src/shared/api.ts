@@ -17,10 +17,14 @@ import type {
   FieldDefinitionPatch,
   FieldOwner,
   ImageRecord,
+  Material,
+  MaterialInput,
   NewFieldDefinition,
   Plant,
   PlantStatus,
   PlantWithSpecies,
+  RecipeInput,
+  RecipeListItem,
   SandboxShortcutStatus,
   SandboxStatus,
   Species
@@ -196,6 +200,24 @@ export interface SproutbookApi {
     pick(owner: { plantId?: number; speciesId?: number }): Promise<ImportResponse>
     remove(id: number): Promise<ImageRecord | null>
     reveal(fileName: string): Promise<boolean>
+  }
+  materials: {
+    list(query?: string): Promise<Material[]>
+    save(input: MaterialInput): Promise<Material>
+    /** 被配方引用的材料会被拒绝删除并抛出人话错误 */
+    remove(id: number): Promise<boolean>
+    /** 有多少个配方在用这个材料 */
+    usage(id: number): Promise<number>
+  }
+  recipes: {
+    list(options?: { query?: string; kind?: string; includeArchived?: boolean }): Promise<RecipeListItem[]>
+    get(id: number): Promise<RecipeListItem | null>
+    save(input: RecipeInput): Promise<{ recipe: RecipeListItem | null; errors: Record<string, string> }>
+    archive(id: number): Promise<boolean>
+    restore(id: number): Promise<boolean>
+    /** 配方里出现过的类型，供筛选下拉使用 */
+    kinds(): Promise<string[]>
+    stats(): Promise<{ materials: number; recipes: number }>
   }
   transfer: {
     export(

@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { Db } from './connection'
 import { backupDatabase, ensureDir, listBackups } from './backup'
 import type { BackupInfo } from './backup'
-import { currentVersion, migrate, rebuildAttrIndex } from './migrate'
+import { migrate, rebuildAttrIndex } from './migrate'
 import type { MigrationReport } from './migrate'
 import { seedAll } from './seed'
 
@@ -44,8 +44,8 @@ export function initDatabase(): InitResult {
 
   const db = new Db(file)
 
-  // 迁移前备份：只有已存在数据（版本 > 0）才需要
-  const before = currentVersion(db)
+  // 迁移前备份：只有已存在数据（版本 > 0）才需要。
+  // 起始版本由 migrate 的 onBefore 回传，不必在这里先查一次。
   const report = migrate(db, {
     onBefore: (from) => {
       if (from > 0) backupDatabase(db, file, backupsDir(), 5, `pre-v${from}`)

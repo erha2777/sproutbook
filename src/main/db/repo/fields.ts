@@ -58,8 +58,21 @@ export function updateField(db: Db, id: number, patch: FieldDefinitionPatch): Fi
     const current = getField(db, id)
     if (!current) throw new Error('字段不存在')
 
-    // 改类型是高危操作：已有数据可能无法解析，必须先告知影响面
+    /*
+     * 改类型是高危操作：已有数据是按旧类型存的，换成新类型后可能解析不了
+     *（例如 text 里的「约 15 厘米」变成 number 字段后就再也存不回去）。
+     * 这里守住底线：**有数据就不许改类型**，让用户新建字段并把旧的归档，
+     * 而不是让一批值在某次保存时静默失效。
+     *
+     * 之前这个 usage 算出来却没用过 —— 注释写了要警告，代码没接上。
+     */
     const usage = fieldUsage(db, id)
+    if (patch.type !== undefined && patch.type !== current.type && usage > 0) {
+      throw new Error(
+        `已有 ${usage} 条记录填过「${current.label}」，直接改类型会让这些值无法解析。` +
+          `请新建一个字段，再把这个字段归档。`
+      )
+    }
 
     if (patch.label !== undefined) db.run('UPDATE field_definitions SET label = ? WHERE id = ?', patch.label, id)
     if (patch.groupName !== undefined) db.run('UPDATE field_definitions SET group_name = ? WHERE id = ?', patch.groupName, id)

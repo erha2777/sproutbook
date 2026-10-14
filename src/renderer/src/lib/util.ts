@@ -1,6 +1,4 @@
-import type { PlantStatus } from '@core/types'
-
-/** 把数据库里的文件名转成渲染进程可用的图片地址（对应主进程注册的 plantimg:// 协议）。 */
+﻿/** 把数据库里的文件名转成渲染进程可用的图片地址（对应主进程注册的 plantimg:// 协议）。 */
 export function imageUrl(fileName: string | null | undefined): string | null {
   if (!fileName) return null
   return `plantimg://local/${encodeURIComponent(fileName)}`

@@ -20,12 +20,27 @@ import { currentVersion, migrate, rebuildAttrIndex } from './db/migrate'
 import { seedAll, seedFieldDefinitions } from './db/seed'
 import { backupDatabase } from './db/backup'
 import { loadFieldDefinitions } from './db/repo/common'
-import { createField, deleteField, fieldUsage, setFieldArchived } from './db/repo/fields'
+import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { listPlants, plantStats, savePlant } from './db/repo/plants'
 import { listEnvironments } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
+import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
+import type { RecipeItem } from '../core/types'
+import {
+  archiveRecipe,
+  deleteMaterial,
+  getRecipe,
+  listMaterials,
+  listRecipes,
+  materialUsage,
+  recipeKinds,
+  recipeStats,
+  restoreRecipe,
+  saveMaterial,
+  saveRecipe
+} from './db/repo/recipes'
 
 interface CheckResult {
   name: string
@@ -366,6 +381,34 @@ export function runSmoke(outFile: string): number {
     )
     // 已经写入过数据，按保护规则只能归档不能删除（这条规则本身有别的检查覆盖）
     setFieldArchived(db, requiredField.id, true)
+
+    // --- 有数据的字段禁止改类型 ---
+    //
+    // 之前 updateField 里算了 usage 却没用过：注释写着「改类型是高危操作」，
+    // 代码却放行。text 里的「约 15 厘米」变成 number 字段后就再也存不回去，
+    // 而用户要到下次保存时才发现。现在有数据就不许改。
+    const typedField = createField(db, {
+      ownerKind: 'species',
+      key: 'smoke_typed_field',
+      label: '自检类型字段',
+      groupName: '其他',
+      type: 'text'
+    })
+    check(
+      '没有数据时允许改类型',
+      updateField(db, typedField.id, { type: 'longtext' }).type === 'longtext'
+    )
+    // 写一条数据进去
+    saveSpecies(db, { id: speciesId, values: { smoke_typed_field: '约 15 厘米' } })
+    check('改类型测试数据已写入', fieldUsage(db, typedField.id) > 0, String(fieldUsage(db, typedField.id)))
+    checkThrows(
+      '有数据时禁止改类型（避免值静默失效）',
+      () => updateField(db as Db, typedField.id, { type: 'number' }),
+      '无法解析'
+    )
+    check('被拦住后类型没有被改掉', getField(db, typedField.id)?.type === 'longtext')
+    check('只改标签不受影响', updateField(db, typedField.id, { label: '改了标签' }).label === '改了标签')
+    setFieldArchived(db, typedField.id, true)
     checkThrows('非法字段标识被拒绝', () =>
       createField(db as Db, { ownerKind: 'species', key: 'BadKey!', label: '非法', groupName: '其他', type: 'text' })
     )
@@ -496,6 +539,133 @@ export function runSmoke(outFile: string): number {
       )
 
       oldDb.close()
+    }
+
+    // --- 材料与配方 ---
+    {
+      // 纯逻辑先测：比例摘要与按份数换算
+      const mix: RecipeItem[] = [
+        { materialId: 1, name: null, ratioPart: 5, amount: null, unit: null, note: null, sortOrder: 0 },
+        { materialId: 2, name: null, ratioPart: 3, amount: null, unit: null, note: null, sortOrder: 1 },
+        { materialId: 3, name: null, ratioPart: 2, amount: null, unit: null, note: null, sortOrder: 2 }
+      ]
+      const names = new Map([
+        [1, '泥炭'],
+        [2, '珍珠岩'],
+        [3, '蛭石']
+      ])
+      check('配方摘要按比例输出', summarizeRecipe(mix, names) === '泥炭 : 珍珠岩 : 蛭石 = 5 : 3 : 2', summarizeRecipe(mix, names))
+
+      const scaled = scaleRecipe(mix, 3, names)
+      check('按份数换算：比例条目乘以份数', scaled[0].text === '15 份' && scaled[2].text === '6 份', scaled.map((s) => s.text).join(' / '))
+
+      const withAmount: RecipeItem[] = [
+        { materialId: 4, name: null, ratioPart: 1, amount: 20, unit: '克', note: null, sortOrder: 0 }
+      ]
+      const scaledAmount = scaleRecipe(withAmount, 2, new Map([[4, '缓释肥']]))
+      check('同时有比例与用量时以用量为准显示', scaledAmount[0].text === '40 克', scaledAmount[0].text)
+
+      check('无比例条目时摘要退回列材料名', summarizeRecipe([{ materialId: null, name: '园土', ratioPart: null, amount: null, unit: null, note: null, sortOrder: 0 }]) === '园土')
+      check('空配方摘要不炸', summarizeRecipe([]) === '（还没有材料）')
+      check(
+        '未命名材料有兜底名字',
+        scaleRecipe([{ materialId: null, name: '  ', ratioPart: 1, amount: null, unit: null, note: null, sortOrder: 0 }], 1)[0].name === '（未命名材料）'
+      )
+
+      check('校验：缺名称', Boolean(validateRecipe({ name: '  ', items: mix }).name))
+      check(
+        '校验：条目既无材料也无名称',
+        Boolean(
+          validateRecipe({
+            name: 'x',
+            items: [{ materialId: null, name: null, ratioPart: 1, amount: null }]
+          })['0']
+        )
+      )
+      check(
+        '校验：条目既无比例也无用量',
+        Boolean(
+          validateRecipe({
+            name: 'x',
+            items: [{ materialId: 1, name: null, ratioPart: null, amount: null }]
+          })['0']
+        )
+      )
+      check(
+        '校验：比例为零被拒',
+        Boolean(
+          validateRecipe({
+            name: 'x',
+            items: [{ materialId: 1, name: null, ratioPart: 0, amount: null }]
+          })['0']
+        )
+      )
+      check('校验：合法配方无错误', Object.keys(validateRecipe({ name: '配土', items: mix })).length === 0)
+
+      // 仓储层
+      const peat = saveMaterial(db, { name: '自检泥炭', kind: 'substrate', unit: '升', note: '保水' })
+      const perlite = saveMaterial(db, { name: '自检珍珠岩', kind: 'substrate', unit: '升', note: null })
+      check('可新增材料', peat.id > 0 && peat.name === '自检泥炭')
+      checkThrows('重名材料被拒绝', () => saveMaterial(db as Db, { name: '自检泥炭', kind: 'substrate', unit: null, note: null }), '已经有叫')
+      check('材料按关键词可搜索', listMaterials(db, '珍珠').some((m) => m.id === perlite.id))
+      check('材料搜索匹配备注', listMaterials(db, '保水').some((m) => m.id === peat.id))
+
+      const saved = saveRecipe(db, {
+        name: '自检配土',
+        kind: '配土',
+        note: '一份的量',
+        items: [
+          { materialId: peat.id, name: null, ratioPart: 5, amount: null, unit: '升', note: null, sortOrder: 0 },
+          { materialId: perlite.id, name: null, ratioPart: 3, amount: null, unit: '升', note: null, sortOrder: 1 },
+          { materialId: null, name: '手边剩的园土', ratioPart: 2, amount: null, unit: null, note: null, sortOrder: 2 }
+        ]
+      })
+      check('可保存配方', Object.keys(saved.errors).length === 0 && saved.recipe !== null, JSON.stringify(saved.errors))
+      const recipeId = saved.recipe?.id ?? 0
+      check('配方条目全部落库', saved.recipe?.items.length === 3, String(saved.recipe?.items.length))
+      check(
+        '配方摘要带出材料库里的名字（含库外临时材料）',
+        saved.recipe?.summary === '自检泥炭 : 自检珍珠岩 : 手边剩的园土 = 5 : 3 : 2',
+        saved.recipe?.summary
+      )
+      // 校验失败走「返回 errors」而不是抛错 —— 与物种/植株的保存路径保持一致，
+      // 这样界面能把错误标在对应字段上，而不是弹一个笼统的异常
+      const badSave = saveRecipe(db, { name: '', kind: '配土', note: null, items: [] })
+      check('名称缺失时返回字段错误而非抛错', Boolean(badSave.errors.name), JSON.stringify(badSave.errors))
+      check('名称缺失时不落库', badSave.recipe === null)
+
+      // 整组替换：改条目后不应残留旧行
+      const updated = saveRecipe(db, {
+        id: recipeId,
+        name: '自检配土',
+        kind: '配土',
+        note: null,
+        items: [{ materialId: peat.id, name: null, ratioPart: 1, amount: null, unit: '升', note: null, sortOrder: 0 }]
+      })
+      check('修改配方后条目被整组替换（无残留）', updated.recipe?.items.length === 1, String(updated.recipe?.items.length))
+      check(
+        '整组替换后旧条目确实删了（不是只换了顺序）',
+        Number(db.scalar<number>('SELECT COUNT(*) AS c FROM recipe_items WHERE recipe_id = ?', recipeId) ?? 0) === 1
+      )
+
+      check('材料使用计数正确', materialUsage(db, peat.id) === 1, String(materialUsage(db, peat.id)))
+      checkThrows('被配方引用的材料禁止删除', () => deleteMaterial(db as Db, peat.id), '还有 1 个配方在用')
+      check('未被引用的材料可以删除', deleteMaterial(db, perlite.id) === true)
+      check('删除材料后配方条目不会被连带删除', getRecipe(db, recipeId)?.items.length === 1)
+
+      check('可按材料名搜到配方', listRecipes(db, { query: '自检泥炭' }).some((r) => r.id === recipeId))
+      check('可按类型筛选配方', listRecipes(db, { kind: '配土' }).some((r) => r.id === recipeId))
+      check('筛选不匹配的类型时为空', !listRecipes(db, { kind: '不存在的类型' }).some((r) => r.id === recipeId))
+
+      archiveRecipe(db, recipeId)
+      check('归档后不出现在默认列表', !listRecipes(db).some((r) => r.id === recipeId))
+      check('归档后仍可显式查询到', listRecipes(db, { includeArchived: true }).some((r) => r.id === recipeId))
+      restoreRecipe(db, recipeId)
+      check('可取消归档', listRecipes(db).some((r) => r.id === recipeId))
+
+      const stats = recipeStats(db)
+      check('配方统计可用', stats.recipes >= 1 && stats.materials >= 1, JSON.stringify(stats))
+      check('配方的类型列表可用于筛选', recipeKinds(db).includes('配土'))
     }
 
     // --- CSV 编解码（导出导入的地基，必须精确）---
