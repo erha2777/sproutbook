@@ -65,6 +65,22 @@ export type FieldValue = string | number | boolean | string[] | number[] | Month
 
 export type FieldOwner = 'species' | 'plant'
 
+/**
+ * 字段的显示条件。
+ *
+ * 「盆径」只在你选了盆栽时才有意义，「中毒症状」只在毒性等级不是无毒时才有意义 ——
+ * 无条件地把它们摆在表单上，一半时间都是噪音。
+ *
+ * 做成模板里的一条数据而不是写死在代码里，和这个应用一贯的做法一致：
+ * 想加一条条件不用改前端。
+ */
+export interface FieldVisibleWhen {
+  /** 依赖哪个字段（同一 owner 下的 key） */
+  key: string
+  /** 该字段取这些值之一时，本字段才显示 */
+  in: string[]
+}
+
 export interface FieldDefinition {
   id: number
   ownerKind: FieldOwner
@@ -86,6 +102,8 @@ export interface FieldDefinition {
   columnName: string | null
   /** 仅 type='relation' 时有意义：指向哪张表。 */
   relationTarget: RelationTarget | null
+  /** 为空表示总是显示 */
+  visibleWhen: FieldVisibleWhen | null
   sortOrder: number
   archivedAt: string | null
 }
@@ -103,6 +121,8 @@ export interface FieldDefinitionPatch {
   isRequired?: boolean
   isSafety?: boolean
   relationTarget?: RelationTarget | null
+  /** 传 null 表示清掉条件（总是显示） */
+  visibleWhen?: FieldVisibleWhen | null
   sortOrder?: number
   archivedAt?: string | null
 }
@@ -121,6 +141,8 @@ export interface NewFieldDefinition {
   isRequired?: boolean
   isSafety?: boolean
   relationTarget?: RelationTarget | null
+  /** 为空表示总是显示 */
+  visibleWhen?: FieldVisibleWhen | null
 }
 
 // ---------------------------------------------------------------------------

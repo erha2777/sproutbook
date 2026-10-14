@@ -10,8 +10,38 @@ import { coerceFieldValue, projectFieldValue, indexTextForSearch, validateRequir
 import type { ProjectionRow } from './fieldTypes'
 import type { FieldDefinition, FieldValue } from './types'
 
-export interface SplitResult {
-  /** 要写入独立列的值 */
+/**
+ * 这个字段在当前取值下该不该显示。
+ *
+ * 依赖的字段取不到值时**不显示** —— 比如「栽种方式」还没选，
+ * 就不该先问「盆径多少」。反过来，如果条件指向一个不存在的字段，
+ * 也当作不显示：拼错字段名时宁可少显示，也不要让一个字段永远藏着还查不出原因。
+ */
+export function isFieldVisible(
+  def: Pick<FieldDefinition, 'visibleWhen'>,
+  values: Record<string, FieldValue>
+): boolean {
+  const when = def.visibleWhen
+  if (!when || when.key === '' || when.in.length === 0) return true
+
+  const raw = values[when.key]
+  // 多值字段：任意一个值命中就算命中
+  const candidates: string[] = Array.isArray(raw)
+    ? raw.map((v) => String(v).trim())
+    : raw === null || raw === undefined
+      ? []
+      : [String(raw).trim()]
+
+  if (candidates.length === 0) return false
+  return candidates.some((v) => when.in.includes(v))
+}
+
+/** 按显示条件过滤字段。表单用它决定渲染哪些。 */
+export function visibleFields(defs: FieldDefinition[], values: Record<string, FieldValue>): FieldDefinition[] {
+  return defs.filter((d) => isFieldVisible(d, values))
+}
+
+export interface SplitResult {  /** 要写入独立列的值 */
   columns: Record<string, string | number | null>
   /** 要写入 attributes_json 的值 */
   attributes: Record<string, FieldValue>

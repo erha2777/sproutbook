@@ -93,6 +93,13 @@ export function updateField(db: Db, id: number, patch: FieldDefinitionPatch): Fi
     if (patch.relationTarget !== undefined) {
       db.run('UPDATE field_definitions SET relation_target = ? WHERE id = ?', patch.relationTarget ?? null, id)
     }
+    if (patch.visibleWhen !== undefined) {
+      db.run(
+        'UPDATE field_definitions SET visible_when_json = ? WHERE id = ?',
+        patch.visibleWhen ? JSON.stringify(patch.visibleWhen) : null,
+        id
+      )
+    }
     if (patch.sortOrder !== undefined) db.run('UPDATE field_definitions SET sort_order = ? WHERE id = ?', patch.sortOrder, id)
     if (patch.archivedAt !== undefined) {
       const wasArchived = current.archivedAt !== null

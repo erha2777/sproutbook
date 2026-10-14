@@ -27,6 +27,7 @@ export interface FieldDefinitionRow {
   is_safety: number
   column_name: string | null
   relation_target: string | null
+  visible_when_json: string | null
   sort_order: number
   archived_at: string | null
 }
@@ -58,8 +59,26 @@ export function mapFieldDefinition(row: FieldDefinitionRow): FieldDefinition {
     isSafety: row.is_safety === 1,
     columnName: row.column_name,
     relationTarget: (row.relation_target as FieldDefinition['relationTarget']) ?? null,
+    visibleWhen: parseVisibleWhen(row.visible_when_json),
     sortOrder: row.sort_order,
     archivedAt: row.archived_at
+  }
+}
+
+/**
+ * 解析显示条件。坏数据返回 null（＝总是显示），
+ * 不因为一条条件的 JSON 坏了就让整个表单的字段全消失。
+ */
+function parseVisibleWhen(raw: string | null): FieldDefinition['visibleWhen'] {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as { key?: unknown; in?: unknown }
+    if (typeof parsed?.key !== 'string' || parsed.key === '') return null
+    if (!Array.isArray(parsed.in)) return null
+    const list = parsed.in.map((v) => String(v).trim()).filter(Boolean)
+    return list.length > 0 ? { key: parsed.key, in: list } : null
+  } catch {
+    return null
   }
 }
 

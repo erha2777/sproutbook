@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { FieldDefinition, FieldOwner, FieldType, RelationTarget } from '@core/types'
+import type { FieldDefinition, FieldOwner, FieldType, FieldVisibleWhen, RelationTarget } from '@core/types'
 import { RELATION_TARGETS } from '@core/types'
 import { FIELD_TYPES } from '@core/fieldTypes'
 import type { FieldUsageSummary } from '@shared/api'
@@ -161,7 +161,17 @@ export function TemplatesPage(): ReactNode {
                       {f.helpText ? <div className="small muted">{f.helpText}</div> : null}
                     </td>
                     <td className="small">{FIELD_TYPES.find((t) => t.type === f.type)?.label ?? f.type}</td>
-                    <td className="small">{f.groupName}</td>
+                    <td className="small">
+                      {f.groupName}
+                      {f.visibleWhen ? (
+                        <div
+                          className="muted"
+                          title={`只在「${f.visibleWhen.key}」等于 ${f.visibleWhen.in.join('、')} 时显示`}
+                        >
+                          条件显示
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="small">{row.usage}</td>
                     <td>
                       <div className="row tight">
@@ -247,7 +257,26 @@ function FieldEditorModal({
   const [isRequired, setIsRequired] = useState(field?.isRequired ?? false)
   const [isSafety, setIsSafety] = useState(field?.isSafety ?? false)
   const [relationTarget, setRelationTargetState] = useState<RelationTarget>(field?.relationTarget ?? 'environments')
+  /** 显示条件：依赖哪个字段、取哪些值 */
+  const [condKey, setCondKey] = useState(field?.visibleWhen?.key ?? '')
+  const [condValues, setCondValues] = useState((field?.visibleWhen?.in ?? []).join('、'))
   const [saving, setSaving] = useState(false)
+
+  /** 同 owner 下的其它字段，作为「依赖字段」的候选 */
+  const condKeyOptions = useMemo(
+    () => existing.filter((f) => f.key !== field?.key).map((f) => ({ value: f.key, label: `${f.label}（${f.key}）` })),
+    [existing, field?.key]
+  )
+
+  /** 把两个输入框拼成 visibleWhen；没填 key 就是无条件。 */
+  const buildVisibleWhen = (): FieldVisibleWhen | null => {
+    const k = condKey.trim()
+    const list = condValues
+      .split(/[、,，\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    return k && list.length > 0 ? { key: k, in: list } : null
+  }
 
   const needsOptions = type === 'select' || type === 'multiselect'
   const needsRelation = type === 'relation'
@@ -286,7 +315,8 @@ function FieldEditorModal({
           helpText: helpText.trim() || null,
           isRequired,
           isSafety,
-          relationTarget: needsRelation ? relationTarget : null
+          relationTarget: needsRelation ? relationTarget : null,
+          visibleWhen: buildVisibleWhen()
         })
         toast.push('字段已更新', 'success')
       } else {
@@ -301,7 +331,8 @@ function FieldEditorModal({
           helpText: helpText.trim() || null,
           isRequired,
           isSafety,
-          relationTarget: needsRelation ? relationTarget : null
+          relationTarget: needsRelation ? relationTarget : null,
+          visibleWhen: buildVisibleWhen()
         })
         toast.push('字段已创建', 'success')
       }
@@ -405,6 +436,43 @@ function FieldEditorModal({
             安全相关字段（AI 填充后必须人工核实）
           </label>
         </div>
+
+        {/*
+          条件显示。
+          「盆径」只在你选了盆栽时才有意义，「中毒症状」只在毒性等级不是无毒时才有意义 ——
+          无条件地摆在表单上，一半时间是噪音。
+        */}
+        <Field
+          label="只在……时显示"
+          help="留空＝总是显示。例如让「盆径」只在栽种方式选了「盆栽」时出现。"
+        >
+          <div className="row tight">
+            <div style={{ flex: 1 }}>
+              <SelectInput
+                value={condKey}
+                onChange={setCondKey}
+                placeholder="（总是显示）"
+                options={[{ value: '', label: '（总是显示）' }, ...condKeyOptions]}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <TextInput
+                value={condValues}
+                onChange={setCondValues}
+                placeholder="等于这些值：盆栽 或 盆栽、地栽"
+              />
+            </div>
+          </div>
+        </Field>
+        {condKey && buildVisibleWhen() === null ? (
+          <Notice tone="warn">选了依赖字段但没填取值 —— 这样等于「总是显示」，请补上取值。</Notice>
+        ) : null}
+        {buildVisibleWhen() !== null ? (
+          <Notice tone="info">
+            这个字段只在 <b>{condKey}</b> 等于 <b>{condValues}</b> 时出现。
+            <b>隐藏不会清值</b> —— 选项切来切去不会把已填的内容弄丢。
+          </Notice>
+        ) : null}
 
         {!isEdit ? (
           <Notice tone="info">

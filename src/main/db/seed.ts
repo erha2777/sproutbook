@@ -64,8 +64,9 @@ export function insertFieldDefinition(db: Db, def: NewFieldDefinition, sortOrder
   const r = db.run(
     `INSERT INTO field_definitions
        (owner_kind, key, label, label_en, group_name, type, unit, options_json, default_json,
-        help_text, is_system, is_required, is_safety, column_name, relation_target, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        help_text, is_system, is_required, is_safety, column_name, relation_target,
+          visible_when_json, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     def.ownerKind,
     def.key,
     def.label,
@@ -81,6 +82,7 @@ export function insertFieldDefinition(db: Db, def: NewFieldDefinition, sortOrder
     def.isSafety ? 1 : 0,
     columnName,
     def.relationTarget ?? null,
+    def.visibleWhen ? JSON.stringify(def.visibleWhen) : null,
     sortOrder
   )
   return Number(r.lastInsertRowid)

@@ -6,8 +6,9 @@
  */
 
 import type { ReactNode } from 'react'
-import type { FieldDefinition, NumberRange } from '@core/types'
+import type { FieldDefinition, FieldValue, NumberRange } from '@core/types'
 import { normalizeMonths } from '@core/fieldTypes'
+import { isFieldVisible } from '@core/attributes'
 import { CheckChips, Checkbox, Field, MonthSetInput, NumberRangeInput, SelectInput, TagInput, TextArea, TextInput, Badge, cx } from './ui'
 
 export type FormValues = Record<string, unknown>
@@ -203,7 +204,17 @@ export function DynamicForm({
   onlyGroups,
   context
 }: DynamicFormProps): ReactNode {
-  const active = defs.filter((d) => !d.archivedAt && !excludeKeys.includes(d.key))
+  /*
+   * 按显示条件过滤。
+   *
+   * 只隐藏、不清值 —— 选了盆栽填好盆径、改成地栽再改回盆栽，盆径还在。
+   * 清值会让用户在两个选项之间来回切一下就把数据弄丢，那比多留一个隐藏字段糟得多。
+   *
+   * 这里是两个编辑器（物种 / 植株）唯一的字段渲染入口，所以改一处就够。
+   */
+  const active = defs.filter(
+    (d) => !d.archivedAt && !excludeKeys.includes(d.key) && isFieldVisible(d, values as Record<string, FieldValue>)
+  )
 
   // 按 groupName 归组，保持定义顺序
   const groups: Array<{ name: string; fields: FieldDefinition[] }> = []

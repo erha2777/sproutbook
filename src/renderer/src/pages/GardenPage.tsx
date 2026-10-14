@@ -17,10 +17,10 @@ import {
   GROWTH_SOURCE_LABELS,
   GROWTH_STAGE_LABELS,
   deriveGrowthStage,
-  describeSize,
+  describeEffectiveHeight,
+  effectiveHeight,
   growthLook,
   readMonthSet,
-  readNumber,
   sizeScaleFor
 } from '@core/growth'
 import { CARE_ACTION_ICONS, CARE_PHASE_ICONS, CARE_PHASE_LABELS, dueDescription, urgencyOf } from '@core/care'
@@ -125,15 +125,30 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
       const own = plant.attributes ?? {}
       const habitRaw = attrs.growth_habit
       const cultivationRaw = own.cultivation
+      const habit = typeof habitRaw === 'string' ? habitRaw : null
+      /*
+       * 大小：实测 > 推算 > 物种上限。
+       * 「成株高度」是这品种能长多大，不是这株现在多大 ——
+       * 一株刚买的乔木苗和一株养了十年的，不该画成一样大。
+       */
+      const heightInput = {
+        actualHeight: own.actual_height_cm,
+        matureHeight: attrs.mature_height,
+        ageYears: own.age_years,
+        habit
+      }
+      const height = effectiveHeight(heightInput)
       return {
-        habit: typeof habitRaw === 'string' ? habitRaw : null,
+        habit,
         cultivation: typeof cultivationRaw === 'string' ? cultivationRaw : null,
         bloomMonths: readMonthSet(attrs.bloom_months),
         dormancyMonths: readMonthSet(attrs.dormancy_months),
         // 物种填了花色就用真的，没填退回按名字散列
         flowerColor: flowerColorForSpecies(attrs as Record<string, unknown>, plant.species?.commonName),
-        // 成株高度决定花园里的显示比例 —— 乔木和多肉不该一样大
-        matureHeight: readNumber(attrs.mature_height)
+        /** 用来算显示高度的厘米数 */
+        heightCm: height.cm,
+        /** 带依据的一句话，例如「65 cm（按成株高度 × 苗龄推算）」 */
+        heightText: describeEffectiveHeight(heightInput)
       }
     },
     [speciesById]
@@ -273,7 +288,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                         look={growthLook(result.stage)}
                         cultivation={g.cultivation}
                         flowerColor={g.flowerColor}
-                        size={Math.round(PLOT_SPRITE_MAX * sizeScaleFor(g.matureHeight))}
+                        size={Math.round(PLOT_SPRITE_MAX * sizeScaleFor(g.heightCm))}
                       />
                     </div>
                     <div className="plot-name ellipsis">{plant.nickname}</div>
@@ -331,8 +346,8 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                         look={growthLook(result.stage)}
                         cultivation={g.cultivation}
                         flowerColor={g.flowerColor}
-                        size={Math.round(DETAIL_SPRITE_MAX * sizeScaleFor(g.matureHeight))}
-                        title={`${selectedPlant.nickname} · ${describeSize(g.matureHeight)}`}
+                        size={Math.round(DETAIL_SPRITE_MAX * sizeScaleFor(g.heightCm))}
+                        title={`${selectedPlant.nickname} · ${g.heightText}`}
                       />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -346,7 +361,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                         {selectedPlant.species?.commonName ?? '未关联物种'}
                         {g.habit ? ` · ${g.habit}` : ''}
                         {/* 把尺寸的依据也写出来，否则「为什么这株画得大」全靠猜 */}
-                        {` · ${describeSize(g.matureHeight)}`}
+                        {` · ${g.heightText}`}
                         {selectedPlant.envName ? ` · ${selectedPlant.envName}` : ''}
                         {` · ${PLANT_STATUS_ICONS[selectedPlant.status]} ${PLANT_STATUS_LABELS[selectedPlant.status]}`}
                       </div>

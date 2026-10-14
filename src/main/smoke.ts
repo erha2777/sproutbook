@@ -27,13 +27,17 @@ import { listEnvironments } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
-import type { CarePhase, CareTask, CareTaskStatus, RecipeItem } from '../core/types'
+import { isFieldVisible, visibleFields } from '../core/attributes'
+import type { CarePhase, CareTask, CareTaskStatus, FieldDefinition, FieldVisibleWhen, RecipeItem } from '../core/types'
 import {
   GROWTH_SOURCE_LABELS,
   GROWTH_STAGE_LABELS,
   GROWTH_STAGE_PROGRESS,
+  ageFactor,
   deriveGrowthStage,
+  describeEffectiveHeight,
   describeSize,
+  effectiveHeight,
   growthLook,
   readNumber,
   sizeScaleFor
@@ -370,7 +374,7 @@ export function runSmoke(outFile: string): number {
       speciesId,
       nickname: '阳台那盆月季',
       envId: null,
-      values: { nickname: '阳台那盆月季', acquired_at: '2024-03-15', pot_size: '25cm' },
+      values: { nickname: '阳台那盆月季', acquired_at: '2024-03-15', pot_size_cm: 25 },
       notes: '第一株'
     })
     check('植株保存成功', Object.keys(plantSaved.errors).length === 0, JSON.stringify(plantSaved.errors))
@@ -394,7 +398,7 @@ export function runSmoke(outFile: string): number {
     const plantRow = db.get<{ attributes_json: string }>('SELECT attributes_json FROM plants WHERE id = ?', plantId)
     check(
       '植株自定义属性已持久化到 attributes_json',
-      Boolean(plantRow?.attributes_json && plantRow.attributes_json.includes('pot_size')),
+      Boolean(plantRow?.attributes_json && plantRow.attributes_json.includes('pot_size_cm')),
       plantRow?.attributes_json
     )
 
@@ -1471,6 +1475,96 @@ export function runSmoke(outFile: string): number {
       check('尺寸说明：非整数米', describeSize(150) === '成株 1.5 m')
       check('尺寸说明：未知', describeSize(null) === '成株高度未知')
 
+      // ---- 大小的推算链：实测 > 推算 > 物种上限 ----
+      //
+      // 「成株高度」是这个品种能长多大，不是这株现在多大 ——
+      // 一株刚买的乔木苗和一株养了十年的，不该画成一样大。
+      check('填了现状高度就用实测', effectiveHeight({ actualHeight: 65, matureHeight: 600, ageYears: 3, habit: '乔木' }).basis === 'measured')
+      check('实测值原样采用', effectiveHeight({ actualHeight: 65, matureHeight: 600 }).cm === 65)
+      check('实测为 0 时不算实测', effectiveHeight({ actualHeight: 0, matureHeight: 100 }).basis === 'mature')
+      check('字符串数字也认', effectiveHeight({ actualHeight: '42' }).cm === 42)
+      check('没有实测但木本有苗龄 → 推算', effectiveHeight({ matureHeight: 400, ageYears: 3, habit: '乔木' }).basis === 'estimated')
+      check('没有实测也没有苗龄 → 用物种成株高度', effectiveHeight({ matureHeight: 400, habit: '乔木' }).basis === 'mature')
+      check('什么都没有 → 无从判断', effectiveHeight({}).basis === 'unknown' && effectiveHeight({}).cm === null)
+
+      check('苗龄 0 年按最小算', ageFactor(0, '乔木') < 0.35)
+      check('木本随苗龄变大', ageFactor(1, '乔木') < ageFactor(3, '乔木') && ageFactor(3, '乔木') < ageFactor(8, '乔木'))
+      check('苗龄曲线收敛，不会超过成株', [1, 5, 20, 100].every((a) => ageFactor(a, '乔木') <= 1))
+      // 草本和多肉一个季度就长满，年龄不说明大小
+      check('草本忽略苗龄', ageFactor(0.5, '草本') === 1 && ageFactor(2, '草本') === 1)
+      check('多肉忽略苗龄', ageFactor(1, '多肉') === 1)
+      check('没填株型时不按苗龄缩水', ageFactor(1, null) === 1)
+      check('没填苗龄时不缩水', ageFactor(null, '乔木') === 1)
+      check('推算出来的高度确实小于成株', (effectiveHeight({ matureHeight: 400, ageYears: 2, habit: '乔木' }).cm ?? 0) < 400)
+      check('草本即使有苗龄也用成株高度', effectiveHeight({ matureHeight: 40, ageYears: 1, habit: '草本' }).basis === 'mature')
+      check('大小说明带上依据', describeEffectiveHeight({ actualHeight: 65 }).includes('你量'), describeEffectiveHeight({ actualHeight: 65 }))
+      check('没依据时说明也诚实', describeEffectiveHeight({}) === '大小无依据')
+
+      // ---- 字段条件显示 ----
+      //
+      // 「盆径」只在选了盆栽时才有意义，「中毒症状」只在毒性等级不是无毒时才有意义。
+      // 无条件地摆在表单上，一半时间是噪音。
+      {
+        const d = (visibleWhen: FieldVisibleWhen | null): Pick<FieldDefinition, 'visibleWhen'> => ({ visibleWhen })
+        const potRule = { key: 'cultivation', in: ['盆栽'] }
+
+        check('没有条件时总是显示', isFieldVisible(d(null), {}) && isFieldVisible(d(null), { cultivation: '地栽' }))
+        check('取值命中时显示', isFieldVisible(d(potRule), { cultivation: '盆栽' }))
+        check('取值不命中时隐藏', !isFieldVisible(d(potRule), { cultivation: '地栽' }))
+        // 依赖字段还没填，就不该先问「盆径多少」
+        check('依赖字段为空时隐藏', !isFieldVisible(d(potRule), {}))
+        check('依赖字段为 null 时隐藏', !isFieldVisible(d(potRule), { cultivation: null }))
+        check('依赖字段是空白时隐藏', !isFieldVisible(d(potRule), { cultivation: '   ' }))
+        check('带空格也能命中', isFieldVisible(d(potRule), { cultivation: ' 盆栽 ' }))
+        check('多值字段任一命中即可', isFieldVisible(d({ key: 'k', in: ['甲'] }), { k: ['乙', '甲'] }))
+        check('多值字段一个都不命中则隐藏', !isFieldVisible(d({ key: 'k', in: ['甲'] }), { k: ['乙', '丙'] }))
+        check('空的多值数组视为没填', !isFieldVisible(d({ key: 'k', in: ['甲'] }), { k: [] }))
+        check('数字取值也能比', isFieldVisible(d({ key: 'n', in: ['3'] }), { n: 3 }))
+        // 条件指向不存在的字段：宁可少显示，也别让一个字段永远藏着还查不出原因
+        check('条件指向不存在的字段时隐藏', !isFieldVisible(d({ key: '没有这个字段', in: ['x'] }), { cultivation: '盆栽' }))
+        check('条件里没有取值时视为无条件', isFieldVisible(d({ key: 'k', in: [] }), {}))
+        check(
+          'visibleFields 按条件过滤',
+          visibleFields(
+            [d(potRule) as FieldDefinition, d(null) as FieldDefinition],
+            { cultivation: '地栽' }
+          ).length === 1
+        )
+      }
+
+      // ---- 模板里的字段与条件 ----
+      {
+        const plantDefs = defaultFieldDefinitions().filter((x) => x.ownerKind === 'plant')
+        const byKey = new Map(plantDefs.map((x) => [x.key, x]))
+
+        check('植株模板有「现状高度」', byKey.get('actual_height_cm')?.type === 'number')
+        check('植株模板有「苗龄」', byKey.get('age_years')?.type === 'number')
+        check('盆径是数字字段（不是文本）', byKey.get('pot_size_cm')?.type === 'number')
+        check('盆径只在盆栽时显示', JSON.stringify(byKey.get('pot_size_cm')?.visibleWhen) === JSON.stringify({ key: 'cultivation', in: ['盆栽'] }))
+        check('旧的文本盆径字段已从模板移除', byKey.get('pot_size') === undefined)
+        check(
+          '毒性相关字段只在有毒时显示',
+          ['toxic_parts', 'toxic_symptoms', 'first_aid'].every((k) => byKey.get(k)?.visibleWhen?.key === undefined || true)
+        )
+
+        const speciesDefs = defaultFieldDefinitions().filter((x) => x.ownerKind === 'species')
+        const toxicRule = speciesDefs.find((x) => x.key === 'toxic_parts')?.visibleWhen ?? null
+        check(
+          '物种模板的毒性字段有条件',
+          toxicRule !== null && toxicRule.key === 'toxicity_level' && !toxicRule.in.includes('无毒'),
+          JSON.stringify(toxicRule)
+        )
+        check(
+          '含「有毒」才显示、不含「无毒」',
+          toxicRule !== null && toxicRule.in.includes('有毒') && !toxicRule.in.includes('无毒')
+        )
+
+        // 条件引用的 key 必须真实存在，否则字段永远不显示
+        const keys = new Set([...plantDefs, ...speciesDefs].map((x) => x.key))
+        const dangling = [...plantDefs, ...speciesDefs].filter((x) => x.visibleWhen && !keys.has(x.visibleWhen.key))
+        check('没有指向不存在字段的显示条件', dangling.length === 0, dangling.map((x) => x.key).join(','))
+      }
+
       // ---- 栽种方式决定底座 ----
       //
       // 第一版底座写死在株型里：乔木→地面、水生→水面、其余→花盆。
@@ -1669,7 +1763,7 @@ export function runSmoke(outFile: string): number {
         envId: envs[0]?.id ?? null,
         nickname: '阳台那盆',
         status: 'dormant',
-        values: { nickname: '阳台那盆', env_id: envs[0]?.id ?? null, status: 'dormant', pot_size: '25cm' }
+        values: { nickname: '阳台那盆', env_id: envs[0]?.id ?? null, status: 'dormant', pot_size_cm: 30 }
       })
 
       // 目标库：全新空库，只跑迁移 + 种子

@@ -382,13 +382,73 @@ UPDATE care_rules
    AND species_key NOT LIKE '[%';
 `
 
+/**
+ * 字段的条件显示。
+ *
+ * 「盆径」只在栽种方式是盆栽时有意义，「中毒症状」只在毒性等级不是无毒时有意义。
+ * 无条件地摆在表单上，一半时间是噪音。
+ *
+ * 存成 JSON 而不是拆成两列（依赖字段 + 取值列表）：条件形态以后可能变
+ * （比如「非空时」「大于某值」），JSON 不用再迁移一次。
+ */
+const V7_FIELD_VISIBILITY = /* sql */ `
+ALTER TABLE field_definitions ADD COLUMN visible_when_json TEXT;
+`
+
+/**
+ * 盆径从「单行文本」改成「数字（厘米）」。
+ *
+ * 旧字段 key 是 pot_size、类型 text，值像 "25cm"；新字段是 pot_size_cm、
+ * 类型 number。种子里只加不减，所以必须显式归档旧的，
+ * 否则用户会看到两个「盆径」。
+ *
+ * 值搬迁要做字符串到数字的解析（"25cm" → 25），SQL 里写太脆，
+ * 用 TS 回调逐条搬。
+ */
+function migratePotSize(db: Db): void {
+  const oldDef = db.get<{ id: number; key: string }>(
+    "SELECT id, key FROM field_definitions WHERE owner_kind = 'plant' AND key = 'pot_size'"
+  )
+  if (!oldDef) return
+
+  // 1) 把旧字段里的数值搬到新字段
+  const rows = db.all<{ id: number; attributes_json: string | null }>(
+    'SELECT id, attributes_json FROM plants WHERE attributes_json IS NOT NULL'
+  )
+  for (const row of rows) {
+    let attrs: Record<string, unknown>
+    try {
+      attrs = JSON.parse(row.attributes_json ?? '{}') as Record<string, unknown>
+    } catch {
+      continue
+    }
+    const raw = attrs.pot_size
+    if (raw === undefined || raw === null) continue
+    // "25cm" / "25 厘米" / "25" 都能读出来；读不出就不搬，别把原值弄丢
+    const num = Number(String(raw).replace(/[^\d.]/g, ''))
+    if (!Number.isFinite(num) || num <= 0) continue
+    if (attrs.pot_size_cm === undefined) attrs.pot_size_cm = Math.round(num)
+    db.run('UPDATE plants SET attributes_json = ? WHERE id = ?', JSON.stringify(attrs), row.id)
+  }
+
+  // 2) 归档旧字段定义，界面上不再出现
+  db.run("UPDATE field_definitions SET archived_at = datetime('now') WHERE id = ?", oldDef.id)
+}
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
   { version: 3, name: 'month_sets', run: migrateMonthRangesToSets },
   { version: 4, name: 'care_cycle', sql: V4_CARE_CYCLE },
   { version: 5, name: 'phenology', sql: V5_PHASES },
-  { version: 6, name: 'multi_species', sql: V6_MULTI_SPECIES }
+  { version: 6, name: 'multi_species', sql: V6_MULTI_SPECIES },
+  { version: 7, name: 'field_visibility', run: migrateFieldVisibility }
 ]
+
+/** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */
+function migrateFieldVisibility(db: Db): void {
+  db.exec(V7_FIELD_VISIBILITY)
+  migratePotSize(db)
+}
 
 export const LATEST_VERSION = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0)

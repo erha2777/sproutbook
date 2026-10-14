@@ -291,3 +291,73 @@ export function describeSize(cm: number | null | undefined): string {
   const text = v >= 100 ? `${(v / 100).toFixed(v % 100 === 0 ? 0 : 1)} m` : `${Math.round(v)} cm`
   return `成株 ${text}`
 }
+
+/** 木本才会随年龄长大。草本、多肉一个季度就长到全尺寸，年龄不说明大小。 */
+const WOODY_HABITS = new Set(['乔木', '灌木', '藤本'])
+
+/**
+ * 苗龄 → 相对成株的比例。
+ *
+ * 用饱和曲线而不是线性：木本头几年长得快、后面趋缓。
+ * 线性的话「养了 20 年」会算出 3 倍于成株的荒谬结果。
+ */
+export function ageFactor(ageYears: number | null | undefined, habit: string | null | undefined): number {
+  const age = readNumber(ageYears)
+  if (age === null || age < 0) return 1
+  if (!WOODY_HABITS.has((habit ?? '').trim())) return 1
+  return 0.3 + 0.7 * (1 - Math.exp(-age / 4))
+}
+
+export interface EffectiveHeightInput {
+  /** 植株的「现状高度」：你自己量的，最准 */
+  actualHeight?: unknown
+  /** 物种的「成株高度」 */
+  matureHeight?: unknown
+  /** 植株的「苗龄」 */
+  ageYears?: unknown
+  /** 物种的「株型」，决定年龄算不算数 */
+  habit?: string | null
+}
+
+export interface EffectiveHeight {
+  /** 用来算显示高度的厘米数；null 表示完全没依据 */
+  cm: number | null
+  /** 这个数字是怎么来的 */
+  basis: 'measured' | 'estimated' | 'mature' | 'unknown'
+}
+
+export const HEIGHT_BASIS_LABELS: Record<EffectiveHeight['basis'], string> = {
+  measured: '你量的现状高度',
+  estimated: '按成株高度 × 苗龄推算',
+  mature: '按物种的成株高度',
+  unknown: '没有高度数据'
+}
+
+/**
+ * 一株植物在花园里该按多大画。
+ *
+ * 优先级：**实测 > 推算 > 物种上限**。
+ * 「成株高度」是这个品种能长多大，不是这株现在多大 ——
+ * 一株刚买的乔木苗和一株养了十年的，不该画成一样大。
+ */
+export function effectiveHeight(input: EffectiveHeightInput): EffectiveHeight {
+  const actual = readNumber(input.actualHeight)
+  if (actual !== null && actual > 0) return { cm: actual, basis: 'measured' }
+
+  const mature = readNumber(input.matureHeight)
+  if (mature === null || mature <= 0) return { cm: null, basis: 'unknown' }
+
+  const age = readNumber(input.ageYears)
+  if (age !== null && age >= 0 && WOODY_HABITS.has((input.habit ?? '').trim())) {
+    return { cm: mature * ageFactor(age, input.habit), basis: 'estimated' }
+  }
+  return { cm: mature, basis: 'mature' }
+}
+
+/** 高度的中文描述，带上依据。 */
+export function describeEffectiveHeight(input: EffectiveHeightInput): string {
+  const { cm, basis } = effectiveHeight(input)
+  if (cm === null) return '大小无依据'
+  const text = cm >= 100 ? `${(cm / 100).toFixed(1)} m` : `${Math.round(cm)} cm`
+  return `${text}（${HEIGHT_BASIS_LABELS[basis]}）`
+}

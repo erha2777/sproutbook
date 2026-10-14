@@ -190,11 +190,14 @@ const speciesFields: Seed[] = [
     label: '有毒部位',
     groupName: '安全',
     type: 'multiselect',
+    // 无毒的时候问「哪个部位有毒」是自相矛盾
+    visibleWhen: { key: 'toxicity_level', in: ['微毒', '有毒', '剧毒'] },
     options: ['叶', '花', '果实', '种子', '根', '茎', '汁液', '全株'],
     isSafety: true
   },
   {
     key: 'toxic_symptoms',
+    visibleWhen: { key: 'toxicity_level', in: ['微毒', '有毒', '剧毒'] },
     label: '中毒症状',
     groupName: '安全',
     type: 'longtext',
@@ -202,6 +205,7 @@ const speciesFields: Seed[] = [
   },
   {
     key: 'first_aid',
+    visibleWhen: { key: 'toxicity_level', in: ['微毒', '有毒', '剧毒'] },
     label: '急救处理',
     groupName: '安全',
     type: 'longtext',
@@ -267,7 +271,33 @@ const plantFields: Seed[] = [
     options: [...CULTIVATION_OPTIONS],
     helpText: '决定花园视图里画成什么底座。留空则水生植物默认水培、其余默认盆栽。'
   },
-  { key: 'pot_size', label: '盆径', groupName: '基础', type: 'text' },
+  {
+    key: 'pot_size_cm',
+    label: '盆径',
+    groupName: '基础',
+    type: 'number',
+    unit: 'cm',
+    // 地栽的没有盆，水培的也没有 —— 无条件问「盆径多少」是噪音
+    visibleWhen: { key: 'cultivation', in: ['盆栽'] },
+    helpText: '量一下盆口直径。决定花园视图里花盆画多大。'
+  },
+  {
+    key: 'actual_height_cm',
+    label: '现状高度',
+    groupName: '基础',
+    type: 'number',
+    unit: 'cm',
+    helpText: '你自己量的：从土面到最高处。填了就以它为准，比推算准得多。'
+  },
+  {
+    key: 'age_years',
+    label: '苗龄',
+    groupName: '基础',
+    type: 'number',
+    unit: '年',
+    helpText:
+      '这株养了几年。没量现状高度时按它推算大小 —— 只对木本（乔木 / 灌木 / 藤本）有用，草本和多肉一季就长满，年龄不说明大小。'
+  },
   { key: 'plant_notes', label: '备注', groupName: '其他', type: 'longtext' }
 ]
 
