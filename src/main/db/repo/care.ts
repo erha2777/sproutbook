@@ -53,6 +53,8 @@ interface CareRuleRow {
   repeat_days: number | null
   rotation_json: string | null
   active_phases: string | null
+  once_per_window: number
+  recipe_id: number | null
   action_type: string
   title: string
   detail: string | null
@@ -71,6 +73,8 @@ function mapRule(row: CareRuleRow): CareRule {
     monthFrom: row.month_from,
     monthTo: row.month_to,
     repeatDays: row.repeat_days,
+    oncePerWindow: row.once_per_window === 1,
+    recipeId: row.recipe_id ?? null,
     rotation: parseRotation(row.rotation_json),
     activePhases: parsePhases(row.active_phases),
     actionType: row.action_type as CareActionType,
@@ -143,11 +147,18 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
   const activePhases = normalizePhases(input.activePhases)
   const phasesJson = activePhases ? JSON.stringify(activePhases) : null
   const repeatDays = input.repeatDays ?? null
+  /*
+   * 两个频率语义互斥：按天重复是「隔几天做一次」，窗口内一次是「这段里做一次」。
+   * 同时打开时按天优先（见 generateTasks 的分支顺序），这里就落成 false，
+   * 免得库里存着一个自相矛盾的组合。
+   */
+  const oncePerWindow = repeatDays === null && input.oncePerWindow === true
 
   if (input.id) {
     db.run(
       `UPDATE care_rules SET species_key=?, hemisphere=?, climate_zone=?, month_from=?, month_to=?,
-         repeat_days=?, rotation_json=?, active_phases=?, action_type=?, title=?, detail=?, priority=?,
+         repeat_days=?, once_per_window=?, recipe_id=?, rotation_json=?, active_phases=?,
+         action_type=?, title=?, detail=?, priority=?,
          source=?, verified=?
        WHERE id=?`,
       serializeSpeciesKeys(input.speciesKeys),
@@ -156,6 +167,8 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
       input.monthFrom,
       input.monthTo,
       repeatDays,
+      oncePerWindow ? 1 : 0,
+      input.recipeId ?? null,
       rotationJson,
       phasesJson,
       input.actionType,
@@ -173,14 +186,17 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
 
   const r = db.run(
     `INSERT INTO care_rules (species_key, hemisphere, climate_zone, month_from, month_to,
-       repeat_days, rotation_json, active_phases, action_type, title, detail, priority, source, verified)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       repeat_days, once_per_window, recipe_id, rotation_json, active_phases,
+       action_type, title, detail, priority, source, verified)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     serializeSpeciesKeys(input.speciesKeys),
     input.hemisphere,
     input.climateZone,
     input.monthFrom,
     input.monthTo,
     repeatDays,
+    oncePerWindow ? 1 : 0,
+    input.recipeId ?? null,
     rotationJson,
     phasesJson,
     input.actionType,

@@ -815,7 +815,9 @@ export function runSmoke(outFile: string): number {
         createdAt: '',
         repeatDays: null,
         rotation: null,
-        activePhases: null
+        activePhases: null,
+        oncePerWindow: false,
+        recipeId: null
       }
       const testRules = [
         { ...ruleBase, id: 1, speciesKeys: ['*'], monthFrom: 3, monthTo: 4, actionType: 'fertilize' as const, title: '通用追肥', detail: null },
@@ -973,7 +975,7 @@ export function runSmoke(outFile: string): number {
         monthTo: 8,
         repeatDays: null,
         rotation: null,
-        activePhases: null,
+        activePhases: null, oncePerWindow: false, recipeId: null,
         actionType: 'water',
         title: '自检浇水规则',
         detail: '两天一次',
@@ -1217,7 +1219,7 @@ export function runSmoke(outFile: string): number {
           monthTo: 10,
           repeatDays: null,
           rotation: null,
-          activePhases: null,
+          activePhases: null, oncePerWindow: false, recipeId: null,
           actionType: 'fertilize',
           title: '自检多物种规则',
           detail: null,
@@ -1256,6 +1258,8 @@ export function runSmoke(outFile: string): number {
         monthFrom: 3,
         monthTo: 6,
         repeatDays: null,
+        oncePerWindow: false,
+        recipeId: null,
         rotation: null,
         activePhases,
         actionType: 'fertilize' as const,
@@ -1290,6 +1294,123 @@ export function runSmoke(outFile: string): number {
       check('花期自动不生效（花苞显色后停肥）', generateTasks([growthOnly], null, 2026, { phase: 'blooming' }).length === 0)
       check('缓苗期自动不生效', generateTasks([growthOnly], null, 2026, { phase: 'recovering' }).length === 0)
 
+      // ---- 窗口内只做一次 ----
+      //
+      // 「10~11 月」原样填会生成两条，但底肥一季只埋一次。
+      // 用户当时只能把区间收窄到单月绕过 —— 那不是表达，是绕过。
+      {
+        const onceBase = {
+          hemisphere: 'N' as const,
+          climateZone: null,
+          priority: 2,
+          source: 'seed' as const,
+          verified: true,
+          createdAt: '',
+          repeatDays: null,
+          rotation: null,
+          activePhases: null,
+          oncePerWindow: false,
+          recipeId: null
+        }
+        const once = { ...onceBase, id: 40, speciesKeys: ['*'], monthFrom: 10, monthTo: 11, actionType: 'fertilize' as const, title: '底肥', detail: null }
+        const monthly = generateTasks([once], null, 2026)
+        check('不加频率时 10~11 月生成两条（原行为）', monthly.length === 2, String(monthly.length))
+
+        const single = generateTasks([{ ...once, oncePerWindow: true }], null, 2026)
+        check('打开「窗口内一次」后只生成一条', single.length === 1, String(single.length))
+        // 落在窗口开头：底肥早做比晚做好，入冬前要留出扎根时间
+        check('落在窗口开头而不是中间', single[0].dueDate.startsWith('2026-10'), single[0].dueDate)
+        check('最多推迟 6 天，不推到窗口中间', Number(single[0].dueDate.slice(8, 10)) <= 7, single[0].dueDate)
+
+        // 单月区间本来就只产出一条，打开开关不该改变它
+        const oneMonth = { ...once, monthTo: 10 }
+        check('单月区间不受影响', generateTasks([{ ...oneMonth, oncePerWindow: true }], null, 2026).length === 1)
+
+        // 跨年写法会断开成两段窗口，那就是两条 —— 本来也该是两条
+        const wrapping = { ...once, monthFrom: 11, monthTo: 2 }
+        check(
+          '跨年的窗口算两段，各出一条',
+          generateTasks([{ ...wrapping, oncePerWindow: true }], null, 2026).length === 2,
+          String(generateTasks([{ ...wrapping, oncePerWindow: true }], null, 2026).length)
+        )
+
+        // 按天重复优先：两个都打开时不该变成「窗口内一次」
+        const both = generateTasks([{ ...once, oncePerWindow: true, repeatDays: 10 }], null, 2026)
+        check('按天重复优先于窗口内一次', both.length > 2, String(both.length))
+
+        // 不同植株错开，但都还在窗口开头
+        const days = [0, 1, 2, 3, 4].map(
+          (seed) => generateTasks([{ ...once, oncePerWindow: true }], null, 2026, { spreadSeed: seed })[0].dueDate
+        )
+        check('不同植株仍然错开', new Set(days).size > 1, days.join(' '))
+        check('错开后仍都在 10 月上旬', days.every((d) => d.startsWith('2026-10') && Number(d.slice(8, 10)) <= 7), days.join(' '))
+      }
+
+      // ---- 规则绑定配方：存取往返 ----
+      {
+        const recipe = saveRecipe(db, {
+          name: '自检底肥配方',
+          kind: '底肥',
+          note: null,
+          items: [
+            { materialId: null, name: '羊粪', ratioPart: 5, amount: null, unit: null, note: '主体', sortOrder: 0 },
+            { materialId: null, name: '骨粉', ratioPart: 1, amount: null, unit: null, note: '少量', sortOrder: 1 }
+          ]
+        })
+        check('配方可以不依赖材料库（用自由文本）', recipe.recipe?.items.length === 2, String(recipe.recipe?.items.length))
+
+        const saved = saveCareRule(db, {
+          speciesKeys: ['*'],
+          hemisphere: 'N',
+          climateZone: null,
+          monthFrom: 10,
+          monthTo: 11,
+          repeatDays: null,
+          oncePerWindow: true,
+          recipeId: recipe.recipe?.id ?? null,
+          rotation: null,
+          activePhases: null,
+          actionType: 'fertilize',
+          title: '自检底肥规则',
+          detail: null,
+          priority: 2,
+          source: 'manual',
+          verified: true
+        })
+        check('规则能保存配方绑定', saved.recipeId === recipe.recipe?.id, String(saved.recipeId))
+        check('规则能保存「窗口内一次」', saved.oncePerWindow === true)
+
+        // 读回来必须还在（映射层漏字段是这类改动的典型错误）
+        const reloaded = listCareRules(db).find((r) => r.id === saved.id)
+        check('重新读取后绑定仍在', reloaded?.recipeId === recipe.recipe?.id)
+        check('重新读取后频率仍在', reloaded?.oncePerWindow === true)
+
+        // 按天重复与窗口内一次互斥，仓储层要落成 false
+        const conflict = saveCareRule(db, {
+          speciesKeys: ['*'],
+          hemisphere: 'N',
+          climateZone: null,
+          monthFrom: 5,
+          monthTo: null,
+          repeatDays: 7,
+          oncePerWindow: true,
+          recipeId: null,
+          rotation: null,
+          activePhases: null,
+          actionType: 'water',
+          title: '自检互斥',
+          detail: null,
+          priority: 2,
+          source: 'manual',
+          verified: true
+        })
+        check('按天重复与窗口内一次互斥（按天优先）', conflict.oncePerWindow === false && conflict.repeatDays === 7)
+
+        deleteCareRule(db, saved.id)
+        deleteCareRule(db, conflict.id)
+        archiveRecipe(db, recipe.recipe?.id ?? 0)
+      }
+
       // 没标记阶段时，阶段规则一律不生效 —— 宁可少提醒，也不瞎排
       check('未标记阶段时阶段规则不生效', generateTasks([growthOnly], null, 2026, { phase: null }).length === 0)
       check('不传 phase 时同样不生效', generateTasks([growthOnly], null, 2026).length === 0)
@@ -1317,6 +1438,8 @@ export function runSmoke(outFile: string): number {
         monthTo: 6,
         repeatDays: null,
         rotation: null,
+        oncePerWindow: false,
+        recipeId: null,
         activePhases: ['growing', 'budding'],
         actionType: 'fertilize',
         title: '自检阶段规则',
@@ -1340,6 +1463,8 @@ export function runSmoke(outFile: string): number {
         monthTo: 6,
         repeatDays: null,
         rotation: null,
+        oncePerWindow: false,
+        recipeId: null,
         activePhases: [],
         actionType: 'water',
         title: '自检无阶段规则',

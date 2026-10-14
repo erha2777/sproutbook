@@ -403,6 +403,27 @@ export function generateTasks(
       continue
     }
 
+    /*
+     * ---- 窗口内只做一次 ----
+     *
+     * 「10~11 月」原样填会生成两条任务，但底肥一季只埋一次 ——
+     * 那时只能把区间收窄到单月来绕过，规则本身表达不了「这个窗口里做一次就够」。
+     *
+     * 按 **spans** 而不是月份迭代：连续几个月在 dateSpansFor 里已经合成一段，
+     * 而跨年写法（11,12,1,2）会断开成两段 —— 那本来就该是两个窗口。
+     *
+     * 日期落在窗口**开头**：底肥这类事早做比晚做好，入冬前要留出扎根时间。
+     * 用 spreadDay 错开几天免得所有植物挤在同一天，但最多推 6 天，别推到窗口中间。
+     */
+    if (rule.oncePerWindow) {
+      for (const span of spans) {
+        const month = Number(span.from.slice(5, 7))
+        const offset = Math.min(Math.max(0, spreadDay(year, month, seed) - 1), 6)
+        push(addDays(span.from, offset), rule, rule.title, defaultWindow)
+      }
+      continue
+    }
+
     // ---- 每月一条（原行为）----
     // 注意：这里必须按**月份**迭代而不是 spans —— 3~4 月是连续的两个月，
     // dateSpansFor 会把它们合成一个 span，按 span 走只会产出一条任务。

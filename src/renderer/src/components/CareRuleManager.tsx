@@ -30,6 +30,14 @@ interface Draft {
   monthFrom: string
   monthTo: string
   repeatDays: string
+  /**
+   * 跨月区间里只做一次。
+   * 原来「10~11 月」会生成两条任务，但底肥一季只埋一次 ——
+   * 那时只能把区间收窄到单月绕过，规则本身表达不了「这个窗口里做一次就够」。
+   */
+  oncePerWindow: boolean
+  /** 绑定的配方 id（字符串形式便于 select），空＝没有材料清单 */
+  recipeId: string
   /** 每行一个轮换步骤 */
   rotationText: string
   /** 限定生效的阶段；空＝按月份生效 */
@@ -46,6 +54,8 @@ const BLANK: Draft = {
   monthFrom: '3',
   monthTo: '',
   repeatDays: '',
+  oncePerWindow: false,
+  recipeId: '',
   rotationText: '',
   phases: [],
   actionType: 'fertilize',
@@ -69,6 +79,13 @@ export function CareRuleManager({
   const [saving, setSaving] = useState(false)
   /** 手填的物种名（库里还没有的那些） */
   const [newSpecies, setNewSpecies] = useState('')
+  /**
+   * 可以绑到规则上的配方。
+   *
+   * 目前用户的配方库是空的 —— 这不是错误状态，配方是可选的，
+   * 没配方时规则照旧只靠正文说明。选了配方，任务上就会直接显示材料清单。
+   */
+  const [recipes, setRecipes] = useState<Array<{ id: number; name: string; kind: string }>>([])
   /** 就地展开的表单行：展开后要滚进视野，否则点靠底部的规则时表单在屏幕外 */
   const formRowRef = useRef<HTMLTableRowElement | null>(null)
 
@@ -82,6 +99,13 @@ export function CareRuleManager({
     setLoading(true)
     try {
       setRules(await window.api.care.rules())
+      // 配方列表单独取；取不到也不该让整页报错（用户可能一个配方都没有）
+      try {
+        const list = await window.api.recipes.list()
+        setRecipes(list.map((r) => ({ id: r.id, name: r.name, kind: r.kind })))
+      } catch {
+        setRecipes([])
+      }
     } catch (error) {
       toast.push(`加载规则失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     } finally {
@@ -113,6 +137,8 @@ export function CareRuleManager({
         monthFrom: Number(draft.monthFrom),
         monthTo: draft.monthTo ? Number(draft.monthTo) : null,
         repeatDays: draft.repeatDays.trim() ? Number(draft.repeatDays) : null,
+        oncePerWindow: draft.oncePerWindow,
+        recipeId: draft.recipeId ? Number(draft.recipeId) : null,
         rotation: rotation.length > 0 ? rotation : null,
         activePhases: draft.phases.length > 0 ? draft.phases : null,
         actionType: draft.actionType,
@@ -150,6 +176,8 @@ export function CareRuleManager({
     monthFrom: String(rule.monthFrom),
     monthTo: rule.monthTo === null ? '' : String(rule.monthTo),
     repeatDays: rule.repeatDays === null ? '' : String(rule.repeatDays),
+    oncePerWindow: rule.oncePerWindow,
+    recipeId: rule.recipeId === null ? '' : String(rule.recipeId),
     rotationText: (rule.rotation ?? []).join('\n'),
     phases: rule.activePhases ?? [],
     actionType: rule.actionType,
@@ -359,11 +387,51 @@ export function CareRuleManager({
         )}
 
         <div className="form-grid">
-          <Field label="重复间隔（天）" help="留空＝区间内每月一条。填 7~10 这类值可表达「每 7~10 天一轮」的真实节奏。">
-            <TextInput
-              value={draft.repeatDays}
-              onChange={(v) => setDraft({ ...draft, repeatDays: v })}
-              placeholder="留空＝每月一次"
+          {/*
+            频率用「一次」这个说法而不是「只做一次」：
+            规则本来就分「每月一条」「每 N 天一轮」「这一段里做一次」三种，
+            三者摆在一起才看得懂在选什么。
+          */}
+          <Field
+            label="多久做一次"
+            help="「这段里一次」= 跨月区间只生成一条任务（底肥这类一季只做一次的事）；「每隔 N 天」适合浇水、打药这类节奏。"
+          >
+            <SelectInput
+              value={draft.repeatDays.trim() ? 'every' : draft.oncePerWindow ? 'once' : 'monthly'}
+              onChange={(v) => {
+                if (v === 'every') setDraft({ ...draft, oncePerWindow: false, repeatDays: draft.repeatDays || '7' })
+                else if (v === 'once') setDraft({ ...draft, oncePerWindow: true, repeatDays: '' })
+                else setDraft({ ...draft, oncePerWindow: false, repeatDays: '' })
+              }}
+              options={[
+                { value: 'monthly', label: '区间内每月一次' },
+                { value: 'once', label: '整段里只做一次' },
+                { value: 'every', label: '每隔 N 天' }
+              ]}
+            />
+          </Field>
+          {draft.repeatDays.trim() ? (
+            <Field label="间隔天数" help="7~10 天是大多数追肥的真实节奏。相邻两次不会共用判定窗口。">
+              <TextInput
+                value={draft.repeatDays}
+                onChange={(v) => setDraft({ ...draft, repeatDays: v })}
+                placeholder="7"
+              />
+            </Field>
+          ) : null}
+          <Field
+            label="绑定配方"
+            help={
+              recipes.length === 0
+                ? '配方库还是空的。到「配方」页建一个（比如「月季底肥 = 羊粪 + 骨粉」），这里就能选了。'
+                : '绑上之后，生成的任务会直接列出材料清单，不用再去翻正文。'
+            }
+          >
+            <SelectInput
+              value={draft.recipeId}
+              onChange={(v) => setDraft({ ...draft, recipeId: v })}
+              placeholder="（不绑定）"
+              options={[{ value: '', label: '（不绑定）' }, ...recipes.map((r) => ({ value: String(r.id), label: `${r.name}（${r.kind}）` }))]}
             />
           </Field>
           <Field label="轮换步骤" help="每行一个，生成任务时按顺序循环。留空则不做轮换。">
@@ -468,7 +536,18 @@ export function CareRuleManager({
                         ) : (
                           <>{monthsCovered(rule).join('/')} 月</>
                         )}
-                        {rule.repeatDays ? <div className="muted">每 {rule.repeatDays} 天</div> : null}
+                        {rule.repeatDays ? (
+                          <div className="muted">每 {rule.repeatDays} 天</div>
+                        ) : rule.oncePerWindow ? (
+                          <div className="muted" title="跨月区间只生成一条任务，落在窗口开头">
+                            整段只做一次
+                          </div>
+                        ) : null}
+                        {rule.recipeId ? (
+                          <div className="muted" title="生成的任务会直接列出这份配方">
+                            📋 {recipes.find((r) => r.id === rule.recipeId)?.name ?? `配方 #${rule.recipeId}`}
+                          </div>
+                        ) : null}
                         {phased ? (
                           <div className="muted" title={`规则里写的是 ${monthsCovered(rule).join('/')} 月，但限定生效阶段后不再参与判断`}>
                             不看月份

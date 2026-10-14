@@ -442,6 +442,21 @@ function migratePotSize(db: Db): void {
   db.run("UPDATE field_definitions SET archived_at = datetime('now') WHERE id = ?", oldDef.id)
 }
 
+/**
+ * 养护规则的两项表达能力。
+ *
+ * `once_per_window`：跨月区间里只做一次。原来「10~11 月」会生成两条任务，
+ * 但底肥一季只需要埋一次，用户只能把区间收窄到单月来近似 ——
+ * 那不是表达，是绕过。
+ *
+ * `recipe_id`：规则可以直接引用配方。底肥的「羊粪 + 缓释肥 + 少量骨粉」
+ * 原来只能写成正文，材料比例是散的文字。
+ */
+const V8_RULE_FREQUENCY_AND_RECIPE = /* sql */ `
+ALTER TABLE care_rules ADD COLUMN once_per_window INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE care_rules ADD COLUMN recipe_id INTEGER REFERENCES recipes(id);
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -449,7 +464,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 4, name: 'care_cycle', sql: V4_CARE_CYCLE },
   { version: 5, name: 'phenology', sql: V5_PHASES },
   { version: 6, name: 'multi_species', sql: V6_MULTI_SPECIES },
-  { version: 7, name: 'field_visibility', run: migrateFieldVisibility }
+  { version: 7, name: 'field_visibility', run: migrateFieldVisibility },
+  { version: 8, name: 'rule_frequency_recipe', sql: V8_RULE_FREQUENCY_AND_RECIPE }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */
