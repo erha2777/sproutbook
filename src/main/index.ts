@@ -306,12 +306,74 @@ app.whenReady().then(() => {
     return
   }
 
-  registerIpc()
-  handleImageProtocol()
+  // ---- 界面初始化 ----
+  //
+  // ⚠️ 这一段以前**没有** try/catch。其中任何一步抛错，异常都会逃逸成未处理的
+  // Promise 拒绝，而全局处理器只是打一行日志 —— 进程继续活着、窗口却永远不会创建。
+  // 用户看到的是「双击没反应」，之后每次启动还会因为抢不到单实例锁而闪退，
+  // 而且这种隐身进程会一直占着数据库文件。
+  //
+  // 现在任何失败都会明确记录并弹窗告知，绝不留下隐身进程。
+  try {
+    registerIpc()
+    handleImageProtocol()
 
-  if (!isDev) Menu.setApplicationMenu(null)
+    if (!isDev) Menu.setApplicationMenu(null)
 
-  createWindow()
+    createWindow()
+  } catch (error) {
+    logStartup('界面初始化失败', error)
+    const logPath = startupLogPath()
+    dialog.showErrorBox(
+      '界面初始化失败',
+      [
+        `错误信息：${error instanceof Error ? error.message : String(error)}`,
+        '',
+        logPath ? `启动日志：${logPath}` : '',
+        '',
+        '这通常意味着程序文件不完整或权限异常。',
+        '请重新解压 / 重新安装一份完整的程序目录后再试。'
+      ]
+        .filter((line) => line !== '')
+        .join('\n')
+    )
+    app.exit(1)
+    return
+  }
+
+  /**
+   * 看门狗：界面初始化走完后，若始终没有可见窗口，说明前面某一步悄悄失败了。
+   * 宁可弹窗退出，也绝不留下一个用户看不见的进程。
+   */
+  const windowWatchdog = setTimeout(() => {
+    const windows = BrowserWindow.getAllWindows()
+    const visible = windows.filter((w) => w.isVisible())
+    if (visible.length > 0) return
+
+    logStartup('看门狗：启动 10 秒后仍无可见窗口', { windowCount: windows.length })
+    if (windows.length > 0) {
+      // 窗口存在只是没显示：强制显示它，并记一笔
+      for (const win of windows) {
+        win.show()
+        win.focus()
+      }
+      logStartup('看门狗：已强制显示已存在的窗口')
+      return
+    }
+
+    dialog.showErrorBox(
+      '窗口未能创建',
+      [
+        '应用已启动，但 10 秒后仍然没有任何窗口。',
+        '',
+        `启动日志：${startupLogPath() ?? '(无法写入)'}`,
+        '',
+        '请把启动日志反馈给我们，它会指出卡在哪一步。'
+      ].join('\n')
+    )
+    app.exit(1)
+  }, 10000)
+  app.once('before-quit', () => clearTimeout(windowWatchdog))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
