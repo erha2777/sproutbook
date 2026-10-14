@@ -145,18 +145,12 @@ export interface SproutbookApi {
       existing?: Record<string, unknown>
     }): Promise<AiAutofillResult>
     /**
-     * 识图：把一张已有的图片发给视觉模型，拿回 Top-3 候选。
-     * **只认品种，不写数据** —— 候选交给现有的草稿流程。
-     */
-    identify(payload: { requestId: string; imageId: number; hint?: string }): Promise<AiIdentifyResult>
-    /**
      * 识别一张**本地图片**（主进程弹文件对话框）。
      * 新建物种时相册里还没有图片，必须能从磁盘选。
      * 用户取消选择时 ok 为 false、message 为「没有选择图片。」。
      */
     identifyFile(payload: { requestId: string; hint?: string }): Promise<AiIdentifyResult>
     cancel(requestId: string): Promise<boolean>
-    runs(limit?: number): Promise<AiRunRow[]>
   }
   fields: {
     list(ownerKind: FieldOwner, includeArchived?: boolean): Promise<FieldDefinition[]>
@@ -197,7 +191,6 @@ export interface SproutbookApi {
       limit?: number
       offset?: number
     }): Promise<{ items: PlantListItem[]; total: number }>
-    get(id: number): Promise<PlantListItem | null>
     save(payload: {
       id?: number
       speciesId?: number | null
@@ -219,7 +212,6 @@ export interface SproutbookApi {
     list(owner: { plantId?: number; speciesId?: number }): Promise<ImageRecord[]>
     pick(owner: { plantId?: number; speciesId?: number }): Promise<ImportResponse>
     remove(id: number): Promise<ImageRecord | null>
-    reveal(fileName: string): Promise<boolean>
   }
   materials: {
     list(query?: string): Promise<Material[]>
@@ -231,7 +223,6 @@ export interface SproutbookApi {
   }
   recipes: {
     list(options?: { query?: string; kind?: string; includeArchived?: boolean }): Promise<RecipeListItem[]>
-    get(id: number): Promise<RecipeListItem | null>
     save(input: RecipeInput): Promise<{ recipe: RecipeListItem | null; errors: Record<string, string> }>
     archive(id: number): Promise<boolean>
     restore(id: number): Promise<boolean>
@@ -289,7 +280,6 @@ export interface SproutbookApi {
     plantPhase(plantId: number): Promise<PlantPhaseInfo>
     /** 标记阶段；会写一条养护日志。phase 传 null 表示清除 */
     setPlantPhase(plantId: number, phase: CarePhase | null, note?: string | null): Promise<PlantPhaseInfo>
-    phases(): Promise<CarePhase[]>
 
     logs(plantId?: number, limit?: number): Promise<CareLog[]>
     addLog(input: {

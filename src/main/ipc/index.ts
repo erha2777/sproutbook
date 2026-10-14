@@ -12,7 +12,6 @@ import { app, dialog, ipcMain, nativeImage, shell } from 'electron'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
 import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
-import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { Db } from '../db/connection'
 import { backupsDir, dataDir, dbFilePath, getDb, imagesDir, makeManualBackup } from '../db'
@@ -27,13 +26,11 @@ import {
   updateField
 } from '../db/repo/fields'
 import { archiveSpecies, familyStats, getSpecies, listSpecies, saveSpecies, verifySpeciesFields } from '../db/repo/species'
-import { archivePlant, getPlant, listPlants, plantStats, savePlant } from '../db/repo/plants'
+import { archivePlant, listPlants, plantStats, savePlant } from '../db/repo/plants'
 import {
   addImage,
-  allSettings,
   archiveEnvironment,
   deleteImage,
-  getImage,
   getSetting,
   listEnvironments,
   listImages,
@@ -44,7 +41,6 @@ import type { EnvironmentInput } from '../../core/types'
 import {
   archiveRecipe,
   deleteMaterial,
-  getRecipe,
   listMaterials,
   listRecipes,
   materialUsage,
@@ -77,7 +73,6 @@ import {
   updateCareTask
 } from '../db/repo/care'
 import type { CareTaskPatch, CareTaskQuery } from '../../shared/api'
-import { CARE_PHASE_LABELS } from '../../core/care'
 import type { CareHemisphere, CarePhase, CareRuleInput, CareTaskInput } from '../../core/types'
 import {
   applyImport,
@@ -415,7 +410,6 @@ function registerSpeciesIpc(): void {
 function registerPlantIpc(): void {
   handle('plants:list', (options: Parameters<typeof listPlants>[1]) => listPlants(getDb(), options ?? {}))
 
-  handle('plants:get', (id: number) => getPlant(getDb(), id))
 
   handle('plants:save', (payload: Parameters<typeof savePlant>[1]) => savePlant(getDb(), payload))
 
@@ -560,7 +554,6 @@ function registerImageIpc(): void {
   handle('care:setPlantPhase', (plantId: number, phase: CarePhase | null, note?: string | null) =>
     setPlantPhase(getDb(), plantId, phase, note)
   )
-  handle('care:phases', () => Object.keys(CARE_PHASE_LABELS) as CarePhase[])
 
   handle('care:logs', (plantId?: number, limit?: number) => listCareLogs(getDb(), { plantId, limit }))
   handle('care:log.add', (input: Parameters<typeof addCareLog>[1]) => addCareLog(getDb(), input))
@@ -576,7 +569,6 @@ function registerImageIpc(): void {
   handle('materials:usage', (id: number) => materialUsage(getDb(), id))
 
   handle('recipes:list', (options?: RecipeListOptions) => listRecipes(getDb(), options ?? {}))
-  handle('recipes:get', (id: number) => getRecipe(getDb(), id))
   handle('recipes:save', (input: RecipeInput) => saveRecipe(getDb(), input))
   handle('recipes:archive', (id: number) => archiveRecipe(getDb(), id))
   handle('recipes:restore', (id: number) => restoreRecipe(getDb(), id))
@@ -626,10 +618,6 @@ function registerImageIpc(): void {
     return record
   })
 
-  handle('images:reveal', async (fileName: string) => {
-    await shell.openPath(join(imagesDir(), fileName))
-    return true
-  })
 }
 
 // ---------------------------------------------------------------------------
@@ -711,57 +699,6 @@ function registerAiIpc(): void {
     return `data:image/jpeg;base64,${readFileSync(file).toString('base64')}`
   }
 
-  handle('ai:identify', async (payload: { requestId: string; imageId: number; hint?: string }) => {
-    const db = getDb()
-    const settings = readAiSettings(db)
-    const apiKey = getApiKey()
-
-    const fail = (message: string) => ({ ok: false as const, candidates: [], message, model: null })
-
-    if (!apiKey) return fail('尚未配置 API Key。请到「设置 → AI」填写后再试。')
-
-    /*
-     * 视觉模型留空时**回落到对话模型**。
-     * 用户既然选了 deepseek-flash（它本身就能读图），没道理让他填两遍。
-     */
-    const model = (settings.visionModel ?? '').trim() || settings.chatModel
-    if (!model) return fail('尚未配置模型。请到「设置 → AI」填写对话模型。')
-
-    const image = getImage(db, payload.imageId)
-    if (!image) return fail('这张图片不在库里，可能已经被删除。')
-
-    const file = join(imagesDir(), image.path)
-    if (!existsSync(file)) return fail('图片文件找不到了，可能被移动或删除。')
-
-    const dataUrl = prepareImageDataUrl(file)
-
-    const controller = new AbortController()
-    runningAi.set(payload.requestId, controller)
-    try {
-      const result = await identifyPlant({
-        baseUrl: settings.baseUrl,
-        apiKey,
-        model,
-        imageDataUrl: dataUrl,
-        hint: payload.hint,
-        // 库里已有的名字当线索 —— 把开放问题变成选择题，但它只是线索不是答案
-        knownNames: listSpecies(db, { limit: 200 }).items.map((s) => s.commonName),
-        temperature: settings.temperature,
-        timeoutMs: settings.timeoutMs,
-        maxRetries: settings.maxRetries,
-        signal: controller.signal
-      })
-      return {
-        ok: result.ok,
-        candidates: result.candidates,
-        message: result.error,
-        raw: result.raw,
-        model: result.model
-      }
-    } finally {
-      runningAi.delete(payload.requestId)
-    }
-  })
 
   /*
    * 识别一张**本地图片**（弹文件对话框选）。
@@ -831,18 +768,5 @@ function registerAiIpc(): void {
     return true
   })
 
-  handle('ai:runs', (limit = 50) =>
-    getDb().all(
-      `SELECT id, kind, model, status, error, prompt_tokens, completion_tokens, duration_ms, created_at
-       FROM ai_runs ORDER BY id DESC LIMIT ?`,
-      Math.min(Math.max(limit, 1), 200)
-    )
-  )
 
-  handle('ai:settingsSnapshot', () => {
-    const db = getDb()
-    const s = readAiSettings(db)
-    // 明确不返回密钥
-    return { ...s, apiKey: undefined, allSettings: Object.keys(allSettings(db)) }
-  })
 }
