@@ -6,12 +6,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { SpeciesListItem } from '@shared/api'
 import { currentMonth, imageUrl } from '../lib/util'
-import { Badge, Button, EmptyState, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
+import { LoadFailure, Badge, Button, EmptyState, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 
 export function SpeciesPage({ onEdit, onCreate }: { onEdit: (id: number) => void; onCreate: () => void }): ReactNode {
   const toast = useToast()
   const [items, setItems] = useState<SpeciesListItem[]>([])
   const [families, setFamilies] = useState<Array<{ family: string; count: number }>>([])
+  /** 读取失败的原因。和「确实没有数据」是两回事，不能都显示成空态 */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [family, setFamily] = useState('')
@@ -30,10 +32,13 @@ export function SpeciesPage({ onEdit, onCreate }: { onEdit: (id: number) => void
         }),
         window.api.species.families()
       ])
+      setLoadError(null)
       setItems(list.items)
       setFamilies(fam)
     } catch (error) {
-      toast.push(`加载失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+      const msg = error instanceof Error ? error.message : '未知错误'
+      setLoadError(msg)
+      toast.push(`${msg}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -91,6 +96,8 @@ export function SpeciesPage({ onEdit, onCreate }: { onEdit: (id: number) => void
         <Panel>
           <Spinner label="加载中…" />
         </Panel>
+      ) : loadError ? (
+        <LoadFailure what="物种库" detail={loadError} onRetry={() => void reload()} />
       ) : filtered.length === 0 ? (
         <Panel>
           <EmptyState

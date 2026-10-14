@@ -15,12 +15,14 @@ import type { FieldDefinition, FieldOwner, FieldType, FieldVisibleWhen, Relation
 import { RELATION_TARGETS } from '@core/types'
 import { FIELD_TYPES } from '@core/fieldTypes'
 import type { FieldUsageSummary } from '@shared/api'
-import { Badge, Button, EmptyState, Field, Modal, Notice, Panel, SelectInput, Spinner, TextArea, TextInput, cx, useToast } from '../components/ui'
+import { LoadFailure, Badge, Button, EmptyState, Field, Modal, Notice, Panel, SelectInput, Spinner, TextArea, TextInput, cx, useToast } from '../components/ui'
 
 export function TemplatesPage(): ReactNode {
   const toast = useToast()
   const [owner, setOwner] = useState<FieldOwner>('species')
   const [rows, setRows] = useState<FieldUsageSummary[]>([])
+  /** 读取失败的原因。和「确实没有数据」是两回事，不能都显示成空态 */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showArchived, setShowArchived] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -29,9 +31,12 @@ export function TemplatesPage(): ReactNode {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
+      setLoadError(null)
       setRows(await window.api.fields.usage(owner))
     } catch (error) {
-      toast.push(`加载失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+      const msg = error instanceof Error ? error.message : '未知错误'
+      setLoadError(msg)
+      toast.push(`${msg}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -110,6 +115,8 @@ export function TemplatesPage(): ReactNode {
       <Panel>
         {loading ? (
           <Spinner label="加载中…" />
+        ) : loadError ? (
+          <LoadFailure what="信息模板" detail={loadError} onRetry={() => void reload()} />
         ) : visible.length === 0 ? (
           <EmptyState icon="🧩" title="还没有字段" hint="点击右上角「新增字段」开始定制你的信息模板。" />
         ) : (

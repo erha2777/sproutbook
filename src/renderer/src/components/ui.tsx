@@ -58,6 +58,52 @@ export function EmptyState({ icon = '🌱', title, hint, action }: { icon?: stri
   )
 }
 
+/**
+ * 读取失败时的占位。
+ *
+ * ## 为什么不能沿用 EmptyState
+ *
+ * 「加载失败」和「确实没有数据」在界面上长得一样，但意思完全相反：
+ * 前者是"我不知道你有没有数据"，后者是"你确实没有"。
+ *
+ * 原来四个页面（花园 / 物种库 / 模板 / 配方）失败时都只弹一条 toast，
+ * 然后 `finally { setLoading(false) }`，页面主体照旧显示
+ * **「花园里还没有植物」+ 一个「新增」按钮** —— toast 几秒后消失，
+ * 留下的是那句关于数据的断言。**用户会以为数据丢了，然后重复录入。**
+ *
+ * 所以这里显示的是"读不出来"，并且给一个重试入口，
+ * **绝不给「新增」的主按钮** —— 那等于在鼓励用户往一个可能只是读不到的库里再写一份。
+ */
+export function LoadFailure({
+  what,
+  detail,
+  onRetry
+}: {
+  /** 读不出来的是什么，例如「植株列表」 */
+  what: string
+  detail?: string | null
+  onRetry?: () => void
+}): ReactNode {
+  return (
+    <Panel>
+      <EmptyState
+        icon="⚠"
+        title={`${what}读取失败`}
+        hint={
+          `这不是「没有数据」，而是没读到 —— 你的数据可能还在。` +
+          (detail ? `（${detail}）` : '')
+        }
+        action={
+          onRetry ? (
+            <Button variant="primary" onClick={onRetry}>
+              重试
+            </Button>
+          ) : null
+        }
+      />
+    </Panel>
+  )
+}
 export function Spinner({ label }: { label?: string }): ReactNode {
   return (
     <span className="row tight" style={{ gap: 7 }}>
