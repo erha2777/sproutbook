@@ -492,6 +492,18 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
    */
   const [weather, setWeather] = useState<WeatherWarningResult | null>(null)
   const [weatherBusy, setWeatherBusy] = useState(false)
+  /**
+   * 天气面板收起 / 展开。
+   *
+   * 用户的要求：**翻月时把它收起来，别占地方**。
+   * 天气面板占掉屏幕上很大一块，而翻到别的月份时看的是那个月的任务，
+   * 它留在那儿只是挡路。
+   *
+   * 收起来时只留一行标题（点击标题或按钮都能展开），不丢信息入口。
+   */
+  const [weatherCollapsed, setWeatherCollapsed] = useState(false)
+  /** 用户是否手动展开过。手动操作优先于「翻月自动收起」 */
+  const weatherManualRef = useRef(false)
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [editing, setEditing] = useState<CareTask | 'new' | null>(null)
@@ -511,8 +523,6 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   const [statFilter, setStatFilter] = useState<'overdue' | 'due' | 'done' | 'open' | null>(null)
   /** 从月历空白日点「＋」新增任务时的预设日期 */
   const [draftDate, setDraftDate] = useState<string | undefined>(undefined)
-  /** 任务列表本身，点统计筛选后滚到这里 */
-  const listRef = useRef<HTMLDivElement | null>(null)
 
   const bounds = useMemo(() => monthBounds(year, month), [year, month])
 
@@ -554,6 +564,17 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   useEffect(() => {
     void loadWeather(false)
   }, [loadWeather])
+
+  /**
+   * 翻到别的月份时收起天气面板，回到当月再按用户上次的手动选择。
+   *
+   * 为什么用 ref 记「手动」：否则用户展开后一翻月又被收起来，
+   * 会显得按钮不听话。手动操作永远优先。
+   */
+  useEffect(() => {
+    const isCurrentMonth = year === new Date().getFullYear() && month === new Date().getMonth() + 1
+    setWeatherCollapsed(isCurrentMonth ? !weatherManualRef.current : true)
+  }, [year, month])
 
   /**
    * 把一条天气风险变成任务。
@@ -776,6 +797,17 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
     }
   }, [overview, today])
 
+  /** 统计弹窗要显示的那批任务（全年口径，和徽章数字同源） */
+  const statRows: CareTaskListItem[] = !statFilter
+    ? []
+    : statFilter === 'overdue'
+      ? yearGroups.overdue
+      : statFilter === 'due'
+        ? yearGroups.due
+        : statFilter === 'done'
+          ? yearGroups.completed
+          : yearGroups.open
+
   /**
    * 任务行 / 分组。
    *
@@ -929,13 +961,19 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         <Button
           size="small"
           variant="ghost"
+          disabled={year === now.getFullYear() && month === now.getMonth() + 1}
+          title={
+            year === now.getFullYear() && month === now.getMonth() + 1
+              ? '已经在今天所在的月份了'
+              : '回到今天所在的月份'
+          }
           onClick={() => {
             const d = new Date()
             setYear(d.getFullYear())
             setMonth(d.getMonth() + 1)
           }}
         >
-          回到今天
+          {year === now.getFullYear() && month === now.getMonth() + 1 ? '已是今天' : '回到今天'}
         </Button>
 
         <div style={{ width: 190 }}>
@@ -978,21 +1016,12 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
               key={item.key}
               type="button"
               className={`badge tone-${item.tone} stat-filter${statFilter === item.key ? ' on' : ''}`}
-              title={`只看${item.label}（全年）`}
-              onClick={() => {
-                setStatFilter(statFilter === item.key ? null : item.key)
-                // 筛完滚到列表，否则点了不知道去哪看
-                requestAnimationFrame(() => listRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }))
-              }}
+              title={`查看${item.label}的任务（全年）`}
+              onClick={() => setStatFilter(statFilter === item.key ? null : item.key)}
             >
               {item.label} {item.n}
             </button>
           ))}
-          {statFilter ? (
-            <Button size="small" variant="ghost" onClick={() => setStatFilter(null)}>
-              显示全部
-            </Button>
-          ) : null}
           <span className="spacer" />
           <span className="small muted">
             本月 {monthSummary.total} 项 · 完成 {monthSummary.done} · 待办 {monthSummary.pending}
@@ -1030,24 +1059,46 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
       <Panel>
         <SectionTitle
           right={
-            <span className="small muted">
-              {weatherBusy
-                ? '正在查看…'
-                : weather?.fetchedAt
-                  ? `数据时间 ${new Date(weather.fetchedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
-                  : ''}
-            </span>
+            <div className="row tight" style={{ alignItems: 'center' }}>
+              <span className="small muted">
+                {weatherBusy
+                  ? '正在查看…'
+                  : weather?.fetchedAt
+                    ? `数据时间 ${new Date(weather.fetchedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                    : ''}
+              </span>
+              <Button
+                size="small"
+                variant="ghost"
+                title={weatherCollapsed ? '展开天气面板' : '收起天气面板（翻月时会自动收起）'}
+                onClick={() => {
+                  const next = !weatherCollapsed
+                  weatherManualRef.current = !next
+                  setWeatherCollapsed(next)
+                }}
+              >
+                {weatherCollapsed ? '展开 ▾' : '收起 ▴'}
+              </Button>
+            </div>
           }
         >
-          天气预警
+          {/*
+            天气是**当天实况**，和正在看的月份无关 —— 所以标题里带上日期，
+            翻到 11 月时也不会被误读成「11 月的天气」。
+          */}
+          天气预警 <span className="small muted">（当天 · {today}）</span>
         </SectionTitle>
-        <WeatherPanel
-          result={weather}
-          addedKeys={addedKeys}
-          busy={weatherBusy}
-          onRefresh={() => void loadWeather(true)}
-          onCreateTask={createTaskFromRisk}
-        />
+        {weatherCollapsed ? (
+          <div className="small muted">已收起 —— 点右上角「展开」查看当天天气与风险。</div>
+        ) : (
+          <WeatherPanel
+            result={weather}
+            addedKeys={addedKeys}
+            busy={weatherBusy}
+            onRefresh={() => void loadWeather(true)}
+            onCreateTask={createTaskFromRisk}
+          />
+        )}
       </Panel>
 
       {/*
@@ -1069,71 +1120,39 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
           <Spinner label="加载中…" />
         </Panel>
       ) : tab === 'todo' ? (
-        // 外层这层 div 只为了拿 ref（点统计筛选后滚过来）。Panel 本身不收 ref
-        <div ref={listRef}>
-          <Panel>
-            <SectionTitle
-              right={
-                <span className="small muted">
-                  {statFilter
-                    ? `只看「${STAT_FILTER_TITLES[statFilter]}」· 全年`
-                    : `${plants.length} 株植物`}
-                </span>
+        <Panel>
+          <SectionTitle right={<span className="small muted">{plants.length} 株植物</span>}>
+            {year} 年 {month} 月
+          </SectionTitle>
+          {groups.overdue.length === 0 &&
+          groups.due.length === 0 &&
+          groups.soon.length === 0 &&
+          groups.later.length === 0 &&
+          groups.closed.length === 0 ? (
+            <EmptyState
+              icon="🗓"
+              title="这个月还没有安排"
+              hint={
+                overview && overview.rules > 0
+                  ? '点「生成 / 更新计划」，按规则库自动排出这个月该做的事；也可以自己加一条。'
+                  : '规则库还是空的，先到「规则库」里加几条，或者直接手动加任务。'
               }
-            >
-              {statFilter ? `${year} 年全年` : `${year} 年 ${month} 月`}
-            </SectionTitle>
-            {(() => {
-              /*
-               * 筛选时**显示全年**的任务。
-               *
-               * 因为那四个数字本来就是全年口径：如果筛选只在当月里筛，
-               * 「本年待办 24」点开只有 10 条，数字和列表当场自相矛盾。
-               */
-              const shown = statFilter
-                ? statFilter === 'overdue'
-                  ? [['已过期', yearGroups.overdue, 'safety']] as const
-                  : statFilter === 'due'
-                    ? [['该做了', yearGroups.due, 'warn']] as const
-                    : statFilter === 'done'
-                      ? [['已完成', yearGroups.completed, undefined]] as const
-                      : [['未完成（待办）', yearGroups.open, 'info']] as const
-                : ([
-                    ['已过期', groups.overdue, 'safety'],
-                    ['该做了', groups.due, 'warn'],
-                    ['快到了', groups.soon, undefined],
-                    ['这个月晚些', groups.later, undefined],
-                    ['已完成 / 已跳过', groups.closed, undefined]
-                  ] as const)
-              const total = shown.reduce((n, g) => n + g[1].length, 0)
-              if (total === 0) {
-                return statFilter ? (
-                  <div className="small muted" style={{ padding: '8px 0' }}>
-                    没有「{STAT_FILTER_TITLES[statFilter]}」的任务。
-                  </div>
-                ) : (
-                  <EmptyState
-                    icon="🗓"
-                    title="这个月还没有安排"
-                    hint={
-                      overview && overview.rules > 0
-                        ? '点「生成 / 更新计划」，按规则库自动排出这个月该做的事；也可以自己加一条。'
-                        : '规则库还是空的，先到「规则库」里加几条，或者直接手动加任务。'
-                    }
-                    action={
-                      <Button variant="primary" onClick={() => void generate()}>
-                        生成计划
-                      </Button>
-                    }
-                  />
-                )
+              action={
+                <Button variant="primary" onClick={() => void generate()}>
+                  生成计划
+                </Button>
               }
-              return shown.map(([title, list, tone]) => (
-                <Fragment key={title}>{taskGroup(title, list as CareTaskListItem[], tone)}</Fragment>
-              ))
-            })()}
-          </Panel>
-        </div>
+            />
+          ) : (
+            <>
+              {taskGroup('已过期', groups.overdue, 'safety')}
+              {taskGroup('该做了', groups.due, 'warn')}
+              {taskGroup('快到了', groups.soon)}
+              {taskGroup('这个月晚些', groups.later)}
+              {taskGroup('已完成 / 已跳过', groups.closed)}
+            </>
+          )}
+        </Panel>
       ) : tab === 'calendar' ? (
         <Panel>
           <SectionTitle right={<span className="small muted">点任务可跳到待办列表处理</span>}>
@@ -1223,6 +1242,50 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
       ) : null}
 
       {showRules ? <CareRuleManager speciesNames={speciesNames} onClose={() => setShowRules(false)} /> : null}
+
+      {/*
+        统计弹窗。
+        用户的要求：这四个数字用弹窗看，不要改动主列表。
+
+        内容走的是 **往年全年** 口径（那四个数字本来就是全年的），
+        所以标题里把范围和条数都写出来，免得和下面的当月列表混淆。
+      */}
+      {statFilter ? (
+        <Modal
+          title={`${year} 年 · ${STAT_FILTER_TITLES[statFilter]}`}
+          onClose={() => setStatFilter(null)}
+          headerExtra={<span className="small muted">共 {statRows.length} 项（全年）</span>}
+          footer={
+            <>
+              <span className="spacer" />
+              <Button onClick={() => setStatFilter(null)}>关闭</Button>
+            </>
+          }
+        >
+          {statRows.length === 0 ? (
+            <div className="small muted">没有「{STAT_FILTER_TITLES[statFilter]}」的任务。</div>
+          ) : (
+            statRows.map((t) => (
+              <div key={t.id} className="stat-task">
+                <div className="row tight" style={{ alignItems: 'center' }}>
+                  <span className="task-icon">{CARE_ACTION_ICONS[t.actionType]}</span>
+                  <b>{t.title}</b>
+                  <Badge tone={t.status === 'done' ? 'ok' : t.status === 'skipped' ? 'muted' : 'warn'}>
+                    {t.status === 'done' ? '已完成' : t.status === 'skipped' ? '已跳过' : dueDescription(t, today)}
+                  </Badge>
+                  {t.priority === 1 ? <Badge tone="safety">高优先</Badge> : null}
+                </div>
+                <div className="small muted">
+                  {t.dueDate}
+                  {t.plantName ? ` · ${t.plantName}` : ''}
+                  {` · ${CARE_ACTION_LABELS[t.actionType]}`}
+                </div>
+                {t.completedNote ? <div className="small muted">备注：{t.completedNote}</div> : null}
+              </div>
+            ))
+          )}
+        </Modal>
+      ) : null}
 
       {/* 动作类型图例：让图标不至于全靠猜 */}
       <div className="small muted" style={{ marginTop: 10 }}>

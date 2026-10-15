@@ -607,10 +607,21 @@ img {
 .stat-filter:hover {
   filter: brightness(1.08);
 }
-/* 选中的那个压一圈深色边，一眼看出「正在只看这一项」 */
+/* 选中的那个压一圈深色边，一眼看出「正在看这一项」 */
 .stat-filter.on {
   box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.45);
   font-weight: 700;
+}
+
+/* 统计弹窗里的一条任务。比主列表简，不带操作按钮（那里只负责查看） */
+.stat-task {
+  padding: 6px 8px;
+  border: 2px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+  margin-bottom: 6px;
+}
+.stat-task:last-child {
+  margin-bottom: 0;
 }
 
 .phase-list {
