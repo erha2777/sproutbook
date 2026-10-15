@@ -95,7 +95,17 @@ export async function getForecast(
   const cache = getSetting<Record<string, CacheEntry>>(db, CACHE_KEY, {})
   const hit = cache[key]
   const sameSource = hit?.provider === point.provider
-  if (hit && sameSource) {
+  /*
+   * **老缓存里没有 hours。**
+   *
+   * 逐时是后加的字段，之前写进去的缓存条目没有它。新界面读 place.hours.length
+   * 会直接崩（Cannot read properties of undefined）—— 真崩过一次。
+   *
+   * 所以把「缺 hours」当作过期：重新取一次，顺便把逐时补上。
+   * 但**取不到就退回老数据** —— 至少还有逐日，别让用户什么都看不到。
+   */
+  const staleShape = hit !== undefined && !Array.isArray(hit.hours)
+  if (hit && sameSource && !staleShape) {
     const age = Date.now() - hit.at
     /*
      * force（用户点了「重新获取」）也**至少隔 60 秒**才真的重新请求。
@@ -109,7 +119,10 @@ export async function getForecast(
 
   countRequest(db)
   const fetched = await fetchDaily(config, point)
-  if (!fetched) return null
+  if (!fetched) {
+    // 重取失败：宁可给一份没有逐时的旧预报，也别让用户什么都看不到
+    return hit ? { ...hit, hours: hit.hours ?? [] } : null
+  }
 
   const entry: CacheEntry = {
     key,
