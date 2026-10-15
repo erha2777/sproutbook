@@ -1610,3 +1610,71 @@ img {
   border-style: dashed;
   color: #9a8a6a;
 }
+
+/* ---------------------------------------------------------------------------
+   逐日天气
+   ---------------------------------------------------------------------------
+   温度条跨所有天共用刻度 —— 否则每天一样长，看不出哪天更冷。
+--------------------------------------------------------------------------- */
+
+.weather-days {
+  margin-bottom: 10px;
+}
+
+.weather-day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.weather-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.weather-day-date {
+  width: 42px;
+  color: #6b5a3a;
+  flex: none;
+}
+
+.weather-day-week {
+  width: 30px;
+  color: #9a8a6a;
+  flex: none;
+}
+
+.weather-day-temp {
+  width: 34px;
+  text-align: center;
+  flex: none;
+  font-weight: 700;
+  color: #4a3a1a;
+}
+
+.weather-day-bar {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  min-width: 60px;
+  background: #e8dcc0;
+  border: 1px solid #c8a878;
+  border-radius: 2px;
+}
+
+.weather-day-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #7fa8d0, #d08a5a);
+  border-radius: 1px;
+}
+
+.weather-day-risk {
+  width: 130px;
+  flex: none;
+  text-align: right;
+}
