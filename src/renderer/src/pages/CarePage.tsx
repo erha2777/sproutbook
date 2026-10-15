@@ -8,7 +8,7 @@
  */
 
 import { WeatherIcon } from '../components/WeatherIcon'
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareLog, CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareOverview, CareTaskListItem, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
@@ -46,6 +46,14 @@ import { CareCalendar } from '../components/CareCalendar'
  * 用同一个定义 —— 两处各写一遍迟早会漂移，然后就是「按钮说已加入、
  * 点了却又建一条」这种自相矛盾。
  */
+/** 四个统计筛选的标题。列表面板和空态提示共用，免得两处各写一份。 */
+const STAT_FILTER_TITLES: Record<'overdue' | 'due' | 'done' | 'open', string> = {
+  overdue: '已过期',
+  due: '该做了',
+  done: '已完成',
+  open: '未完成'
+}
+
 function weatherTaskKey(plantId: number, date: string, title: string): string {
   return `${plantId}|${date}|${title}`
 }
@@ -492,8 +500,19 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   const [noteText, setNoteText] = useState('')
   /** 从月历点进来的任务：滚动并高亮一下，否则用户不知道跳到了哪里 */
   const [highlight, setHighlight] = useState<number | null>(null)
+  /** 任务行 DOM，用来把高亮的那条滚进视野 */
+  const taskRefs = useRef(new Map<number, HTMLDivElement>())
+  /**
+   * 统计数字的筛选。
+   *
+   * 这四个数字原来只是 Badge —— 点不动，用户没法从「逾期 0」走到对应的列表。
+   * 现在点一下就地筛出那批任务。
+   */
+  const [statFilter, setStatFilter] = useState<'overdue' | 'due' | 'done' | 'open' | null>(null)
   /** 从月历空白日点「＋」新增任务时的预设日期 */
   const [draftDate, setDraftDate] = useState<string | undefined>(undefined)
+  /** 任务列表本身，点统计筛选后滚到这里 */
+  const listRef = useRef<HTMLDivElement | null>(null)
 
   const bounds = useMemo(() => monthBounds(year, month), [year, month])
 
@@ -710,16 +729,52 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
     const pending = tasks.filter((t) => !isDone(t) && !overdueSet.has(t.id))
     const byUrgency = (u: CareUrgency): CareTaskListItem[] =>
       pending.filter((t) => urgencyOf(t, today) === u).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    const due = byUrgency('due')
+    const soon = byUrgency('soon')
+    const later = byUrgency('later')
     return {
       overdue,
-      due: byUrgency('due'),
-      soon: byUrgency('soon'),
-      later: byUrgency('later'),
+      due,
+      soon,
+      later,
+      /** 全部未完成（含逾期）—— 「本年待办 N」点进去看的就是这一批 */
+      open: [...overdue, ...due, ...soon, ...later],
       closed: tasks.filter(isDone)
     }
   }, [tasks, overdue, overdueSet, today])
 
   const monthSummary = summarizeTasks(tasks, today)
+
+  /**
+   * **全年**口径的分组。
+   *
+   * 上面那四个统计数字本来就是全年的（careOverview 查的是 01-01~12-31），
+   * 而 groups 基于当月任务 —— 直接拿 groups 去「查看」全年数字，
+   * 会出现写着 24、点进去只有 10 的情况。
+   *
+   * 所以筛选走这一份：数字和列表同源。
+   */
+  const yearGroups = useMemo(() => {
+    const list = overview?.yearTasks ?? []
+    const open = list.filter((t) => t.status === 'pending')
+    const byUrgency = (u: CareUrgency): CareTaskListItem[] =>
+      open.filter((t) => urgencyOf(t, today) === u).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    return {
+      overdue: byUrgency('overdue'),
+      due: byUrgency('due'),
+      /*
+       * 「本年已完成」要**只数 status='done'**，不能连 skipped 一起算。
+       *
+       * summarizeTasks 里 done 和 skipped 是分开的两个计数，
+       * 而任务列表按「已完成 / 已跳过」合并分组 —— 照抄那个习惯，
+       * 徽章上的数字就会比原来多出「已跳过」那几个，
+       * 用户看到「已完成 10」而库里只有 7 条 done，会以为数据错了。
+       * 口径以统计为准，列表标题也跟着分开写。
+       */
+      completed: list.filter((t) => t.status === 'done'),
+      open
+    }
+  }, [overview, today])
 
   /**
    * 任务行 / 分组。
@@ -735,7 +790,13 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
     const urgency = urgencyOf(task, today)
     const closed = task.status !== 'pending'
     return (
-      <div className={"task-row" + (highlight === task.id ? " highlighted" : "")}>
+      <div
+        className={"task-row" + (highlight === task.id ? " highlighted" : "")}
+        ref={(el) => {
+          if (el) taskRefs.current.set(task.id, el)
+          else taskRefs.current.delete(task.id)
+        }}
+      >
         <span className="task-icon">{CARE_ACTION_ICONS[task.actionType]}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="row tight" style={{ alignItems: 'center' }}>
@@ -822,6 +883,22 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
     )
   }
 
+  /**
+   * 把高亮的那条任务滚进视野。
+   *
+   * 原来只加了 `highlighted` 类名，**从来没滚动过** —— 那行如果在视口外，
+   * 点完月历里的任务什么都不会发生，看起来像没生效。
+   */
+  useEffect(() => {
+    if (highlight === null) return
+    const el = taskRefs.current.get(highlight)
+    if (!el) return
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    // 高亮留一会儿再褪掉，让人来得及看见是哪一条
+    const timer = setTimeout(() => setHighlight(null), 2600)
+    return () => clearTimeout(timer)
+  }, [highlight])
+
   const taskGroup = (title: string, list: CareTaskListItem[], tone?: string): ReactNode => {
     if (list.length === 0) return null
     return (
@@ -882,10 +959,40 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
 
       <Panel>
         <div className="row" style={{ marginBottom: 4 }}>
-          <Badge tone="safety">逾期 {overview?.overdue ?? 0}</Badge>
-          <Badge tone="warn">该做 {overview?.due ?? 0}</Badge>
-          <Badge tone="ok">本年已完成 {overview?.done ?? 0}</Badge>
-          <Badge tone="muted">本年待办 {overview?.pending ?? 0}</Badge>
+          {/*
+            这四个原来是纯 Badge —— 点不动，用户没法从「逾期 0」走到对应列表。
+            现在点一下就筛出那批任务（**全年口径**，和数字同源）。
+
+            数字改用 yearGroups 而不是 overview：两者一致，但 yearGroups 是
+            从实际列表算出来的，筛选结果和显示数字永远对得上。
+          */}
+          {(
+            [
+              { key: 'overdue', label: '逾期', n: yearGroups.overdue.length, tone: 'safety' },
+              { key: 'due', label: '该做', n: yearGroups.due.length, tone: 'warn' },
+              { key: 'done', label: '本年已完成', n: yearGroups.completed.length, tone: 'ok' },
+              { key: 'open', label: '本年待办', n: yearGroups.open.length, tone: 'muted' }
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`badge tone-${item.tone} stat-filter${statFilter === item.key ? ' on' : ''}`}
+              title={`只看${item.label}（全年）`}
+              onClick={() => {
+                setStatFilter(statFilter === item.key ? null : item.key)
+                // 筛完滚到列表，否则点了不知道去哪看
+                requestAnimationFrame(() => listRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }))
+              }}
+            >
+              {item.label} {item.n}
+            </button>
+          ))}
+          {statFilter ? (
+            <Button size="small" variant="ghost" onClick={() => setStatFilter(null)}>
+              显示全部
+            </Button>
+          ) : null}
           <span className="spacer" />
           <span className="small muted">
             本月 {monthSummary.total} 项 · 完成 {monthSummary.done} · 待办 {monthSummary.pending}
@@ -962,39 +1069,71 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
           <Spinner label="加载中…" />
         </Panel>
       ) : tab === 'todo' ? (
-        <Panel>
-          <SectionTitle right={<span className="small muted">{plants.length} 株植物</span>}>
-            {year} 年 {month} 月
-          </SectionTitle>
-          {groups.overdue.length === 0 &&
-          groups.due.length === 0 &&
-          groups.soon.length === 0 &&
-          groups.later.length === 0 &&
-          groups.closed.length === 0 ? (
-            <EmptyState
-              icon="🗓"
-              title="这个月还没有安排"
-              hint={
-                overview && overview.rules > 0
-                  ? '点「生成 / 更新计划」，按规则库自动排出这个月该做的事；也可以自己加一条。'
-                  : '规则库还是空的，先到「规则库」里加几条，或者直接手动加任务。'
+        // 外层这层 div 只为了拿 ref（点统计筛选后滚过来）。Panel 本身不收 ref
+        <div ref={listRef}>
+          <Panel>
+            <SectionTitle
+              right={
+                <span className="small muted">
+                  {statFilter
+                    ? `只看「${STAT_FILTER_TITLES[statFilter]}」· 全年`
+                    : `${plants.length} 株植物`}
+                </span>
               }
-              action={
-                <Button variant="primary" onClick={() => void generate()}>
-                  生成计划
-                </Button>
+            >
+              {statFilter ? `${year} 年全年` : `${year} 年 ${month} 月`}
+            </SectionTitle>
+            {(() => {
+              /*
+               * 筛选时**显示全年**的任务。
+               *
+               * 因为那四个数字本来就是全年口径：如果筛选只在当月里筛，
+               * 「本年待办 24」点开只有 10 条，数字和列表当场自相矛盾。
+               */
+              const shown = statFilter
+                ? statFilter === 'overdue'
+                  ? [['已过期', yearGroups.overdue, 'safety']] as const
+                  : statFilter === 'due'
+                    ? [['该做了', yearGroups.due, 'warn']] as const
+                    : statFilter === 'done'
+                      ? [['已完成', yearGroups.completed, undefined]] as const
+                      : [['未完成（待办）', yearGroups.open, 'info']] as const
+                : ([
+                    ['已过期', groups.overdue, 'safety'],
+                    ['该做了', groups.due, 'warn'],
+                    ['快到了', groups.soon, undefined],
+                    ['这个月晚些', groups.later, undefined],
+                    ['已完成 / 已跳过', groups.closed, undefined]
+                  ] as const)
+              const total = shown.reduce((n, g) => n + g[1].length, 0)
+              if (total === 0) {
+                return statFilter ? (
+                  <div className="small muted" style={{ padding: '8px 0' }}>
+                    没有「{STAT_FILTER_TITLES[statFilter]}」的任务。
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon="🗓"
+                    title="这个月还没有安排"
+                    hint={
+                      overview && overview.rules > 0
+                        ? '点「生成 / 更新计划」，按规则库自动排出这个月该做的事；也可以自己加一条。'
+                        : '规则库还是空的，先到「规则库」里加几条，或者直接手动加任务。'
+                    }
+                    action={
+                      <Button variant="primary" onClick={() => void generate()}>
+                        生成计划
+                      </Button>
+                    }
+                  />
+                )
               }
-            />
-          ) : (
-            <>
-              {taskGroup('已过期', groups.overdue, 'safety')}
-              {taskGroup('该做了', groups.due, 'warn')}
-              {taskGroup('快到了', groups.soon)}
-              {taskGroup('这个月晚些', groups.later)}
-              {taskGroup('已完成 / 已跳过', groups.closed)}
-            </>
-          )}
-        </Panel>
+              return shown.map(([title, list, tone]) => (
+                <Fragment key={title}>{taskGroup(title, list as CareTaskListItem[], tone)}</Fragment>
+              ))
+            })()}
+          </Panel>
+        </div>
       ) : tab === 'calendar' ? (
         <Panel>
           <SectionTitle right={<span className="small muted">点任务可跳到待办列表处理</span>}>

@@ -594,6 +594,25 @@ img {
 
 /* ---------- 植株阶段 ---------- */
 
+/*
+ * 统计徽章：点一下筛出那批任务。
+ *
+ * 这几个原来只是 Badge —— 看着像能点（四个色块排在工具栏下面），
+ * 实际点了没反应。用户的反馈就是「不能查看」。
+ */
+.stat-filter {
+  cursor: pointer;
+  font-family: inherit;
+}
+.stat-filter:hover {
+  filter: brightness(1.08);
+}
+/* 选中的那个压一圈深色边，一眼看出「正在只看这一项」 */
+.stat-filter.on {
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.45);
+  font-weight: 700;
+}
+
 .phase-list {
   display: flex;
   flex-direction: column;

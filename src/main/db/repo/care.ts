@@ -784,5 +784,5 @@ export function careOverview(db: Db, year: number, today: string = todayIso()): 
       `${year}-%`
     ) ?? 0
   )
-  return { ...s, rules: careRuleCount(db), plantsWithoutTasks }
+  return { ...s, rules: careRuleCount(db), plantsWithoutTasks, yearTasks: tasks }
 }
