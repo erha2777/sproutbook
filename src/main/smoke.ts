@@ -54,7 +54,7 @@ import {
   sizeScaleFor
 } from '../core/growth'
 import type { GrowthStage } from '../core/growth'
-import { assessWeatherRisks, dedupeByKindAndDay, effectiveColdThreshold, severityOf, suggestTask, summarizeRisks, unjudgeable } from '../core/weather'
+import { WEATHER_KIND_ICONS, WEATHER_KIND_LABELS, qweatherIconToKind, wmoToKind, assessWeatherRisks, dedupeByKindAndDay, effectiveColdThreshold, severityOf, suggestTask, summarizeRisks, unjudgeable } from '../core/weather'
 import type { DailyTemp, WeatherRiskInput } from '../core/weather'
 import {
   CULTIVATION_BASE,
@@ -831,6 +831,45 @@ export async function runSmoke(outFile: string): Promise<number> {
 
     // --- 养护计划 ---
     {
+      // ---- 天气图标映射（含夜间） ----
+      //
+      // 用户截图里今天卡片写着「天气未知」、24 小时横条一串「·」——
+      // 因为和风的**夜间图标 150–153** 没被映射。
+      // 而横条跨了夜里那几个小时，恰恰是用户最关心要不要搬进屋的时候。
+      {
+        // 白天
+        check('和风 100 晴', qweatherIconToKind(100) === 'clear')
+        check('和风 101 多云', qweatherIconToKind(101) === 'cloudy')
+        check('和风 104 阴', qweatherIconToKind(104) === 'overcast')
+        // **夜间**（这条是补的）
+        check('和风 150 晴（夜间）', qweatherIconToKind(150) === 'clear')
+        check('和风 151 多云（夜间）', qweatherIconToKind(151) === 'cloudy')
+        check('和风 153 晴间多云（夜间）', qweatherIconToKind(153) === 'cloudy')
+        // 雨雪雾
+        check('和风 305 小雨', qweatherIconToKind(305) === 'rain')
+        check('和风 350 阵雨（夜间）也算雨', qweatherIconToKind(350) === 'rain')
+        check('和风 400 小雪', qweatherIconToKind(400) === 'snow')
+        check('和风 501 雾', qweatherIconToKind(501) === 'fog')
+        // 未知不能瞎猜
+        check('没有图标号时给 null，不硬猜', qweatherIconToKind(null) === null)
+        check('没见过的号码也给 null', qweatherIconToKind(200) === null, String(qweatherIconToKind(200)))
+
+        // WMO（Open-Meteo）
+        check('WMO 0 晴', wmoToKind(0) === 'clear')
+        check('WMO 3 阴', wmoToKind(3) === 'overcast')
+        check('WMO 55 毛毛雨算雨', wmoToKind(55) === 'rain')
+        check('WMO 95 雷暴', wmoToKind(95) === 'storm')
+        check('WMO 未知号码给 null', wmoToKind(9999) === null)
+
+        // 每个 kind 都要有图标，否则界面会渲染出 undefined
+        check(
+          '每种天气都有图标和中文名',
+          (['clear', 'cloudy', 'overcast', 'rain', 'snow', 'storm', 'fog'] as const).every(
+            (k) => Boolean(WEATHER_KIND_ICONS[k]) && Boolean(WEATHER_KIND_LABELS[k])
+          )
+        )
+      }
+
       // ---- 日期工具（不引依赖，必须自己钉住）----
       check('日期加天数正确', addDays('2026-01-30', 3) === '2026-02-02', addDays('2026-01-30', 3))
       check('日期减天数跨月正确', addDays('2026-03-01', -1) === '2026-02-28', addDays('2026-03-01', -1))

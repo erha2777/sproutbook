@@ -118,7 +118,12 @@ export function wmoToKind(code: number | null | undefined): WeatherKind | null {
   if (code >= 71 && code <= 77) return 'snow'
   if (code >= 80 && code <= 82) return 'rain' // 阵雨
   if (code >= 85 && code <= 86) return 'snow' // 阵雪
-  if (code >= 95) return 'storm'
+  /*
+   * WMO 的雷暴是 95/96/99 —— **必须有上界**。
+   * 写成 `code >= 95` 的话，任何大数字（9999、脏数据）都会变成「雷暴」，
+   * 于是一条坏数据就能在界面上画出一个雷雨图标。自检抓到过这一点。
+   */
+  if (code >= 95 && code <= 99) return 'storm'
   return null
 }
 
@@ -128,8 +133,17 @@ export function qweatherIconToKind(icon: number | null | undefined): WeatherKind
   if (icon === 100) return 'clear'
   if (icon === 101 || icon === 102 || icon === 103) return 'cloudy'
   if (icon === 104) return 'overcast'
-  if (icon >= 300 && icon <= 399) return 'rain' // 各类雨
-  if (icon >= 400 && icon <= 499) return 'snow'
+  /*
+   * **150–153 是同一批天气的夜间版**（150 晴、151 多云、152 少云、153 晴间多云）。
+   *
+   * 漏掉它们的后果很直观：24 小时横条跨了夜里那几个小时，
+   * 于是那几格全是「天气未知」—— 而夜里恰恰是用户最关心要不要搬进屋的时候。
+   * 白天/夜间在**养护判断上没有区别**，所以映射到同一个 kind。
+   */
+  if (icon === 150) return 'clear'
+  if (icon === 151 || icon === 152 || icon === 153) return 'cloudy'
+  if (icon >= 300 && icon <= 399) return 'rain' // 各类雨（含 350/351 夜间阵雨）
+  if (icon >= 400 && icon <= 499) return 'snow' // 各类雪（含 456/457 夜间）
   if (icon >= 500 && icon <= 515) return 'fog' // 雾霾
   if (icon >= 900) return 'clear' // 晴热/寒冷，归到最接近的
   return null
