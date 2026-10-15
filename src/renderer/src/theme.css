@@ -1678,3 +1678,76 @@ img {
   flex: none;
   text-align: right;
 }
+
+/* ---------------------------------------------------------------------------
+   当天 + 24 小时
+   ---------------------------------------------------------------------------
+   先给一个"今天大概什么样"的整体印象，再讲"所以该做什么"。
+   原来是反过来 —— 上来就是一句「超出 1℃」，用户反而不知道天气本身。
+--------------------------------------------------------------------------- */
+
+.weather-today {
+  border: 1px solid #c8a878;
+  background: linear-gradient(180deg, #f3ead2, #eaddbe);
+  border-radius: 2px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.weather-today-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.weather-today-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.weather-today-temp {
+  font-size: 26px;
+  font-weight: 700;
+  color: #4a3a1a;
+  line-height: 1;
+}
+
+.weather-today-kind {
+  font-size: 13px;
+  color: #4a3a1a;
+}
+
+.weather-hours {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #c8a878;
+  overflow-x: auto;
+}
+
+.weather-hour {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 40px;
+  flex: none;
+  font-size: 11px;
+  color: #6b5a3a;
+}
+
+.weather-hour-icon {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.weather-hour-temp {
+  font-weight: 700;
+  color: #4a3a1a;
+}
+
+.weather-hour-pop {
+  color: #7a9ac0;
+  min-height: 13px;
+}

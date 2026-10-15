@@ -462,6 +462,13 @@ export interface WeatherPlace {
   latitude: number
   longitude: number
   days: Array<{ date: string; tempMin: number; tempMax: number }>
+  /**
+   * 未来 24 小时。取不到时是空数组。
+   *
+   * kind 是**中性的天气类型** —— 两个数据源的编码（WMO / 和风图标号）
+   * 已经在主进程那边翻译过了，界面只管按它画图标。
+   */
+  hours: Array<{ time: string; temp: number; kind: string | null; pop: number | null }>
 }
 
 export interface WeatherRiskItem {

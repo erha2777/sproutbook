@@ -11,7 +11,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareLog, CarePhase, CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareOverview, CareTaskListItem, PlantPhaseInfo, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
-import { suggestTask, SEVERITY_LABELS } from '@core/weather'
+import { WEATHER_KIND_ICONS, WEATHER_KIND_LABELS, suggestTask, SEVERITY_LABELS } from '@core/weather'
 import {
   CARE_ACTION_ICONS,
   CARE_ACTION_LABELS,
@@ -103,6 +103,63 @@ function WeatherPanel({
   return (
     <div>
       {result.error ? <div className="small muted">⚠ {result.error}（下面可能是缓存的数据）</div> : null}
+
+      {/*
+        当天 + 未来 24 小时，放在最上面。
+
+        原来的面板上来就是「31℃ 超出 1℃」这种**结论**，用户反而不知道
+        今天什么天气 —— 有人拿和风页面来问「为什么温度不一样」，
+        其实是因为那边大字写的是**此刻**（20°），而这里只有**后天**的最高温。
+
+        **先摆原貌，再讲判断。**
+      */}
+      {result.places.map((place) => {
+        if (place.hours.length === 0) return null
+        /*
+         * 当前这一小时：取第一个不早于现在的；都早于现在就退回第一个。
+         * 不做时区换算 —— 数据源已经按 timezone=auto 给了本地时间。
+         */
+        const nowKey = new Date().toISOString().slice(0, 13)
+        const at = place.hours.findIndex((h) => h.time.slice(0, 13) >= nowKey)
+        const cur = place.hours[at < 0 ? 0 : at]
+        const todayIso = cur.time.slice(0, 10)
+        const today = place.days.find((d) => d.date === todayIso)
+
+        return (
+          <div className="weather-today" key={`today-${place.name}-${place.latitude}`}>
+            <div className="weather-today-main">
+              <span className="weather-today-icon">
+                {cur.kind ? WEATHER_KIND_ICONS[cur.kind as keyof typeof WEATHER_KIND_ICONS] : '·'}
+              </span>
+              <span className="weather-today-temp">{Math.round(cur.temp)}°</span>
+              <div>
+                <div className="weather-today-kind">
+                  {cur.kind ? WEATHER_KIND_LABELS[cur.kind as keyof typeof WEATHER_KIND_LABELS] : '天气未知'}
+                  {cur.pop !== null && cur.pop >= 20 ? `　降水 ${cur.pop}%` : ''}
+                </div>
+                <div className="small muted">
+                  {place.label || place.name}
+                  {today ? `　今天 ${Math.round(today.tempMin)}° ~ ${Math.round(today.tempMax)}°` : ''}
+                </div>
+              </div>
+            </div>
+
+            {/* 未来 24 小时。横排放不下就横向滚动，不折行 */}
+            <div className="weather-hours">
+              {place.hours.slice(0, 24).map((h) => (
+                <div className="weather-hour" key={h.time}>
+                  <span className="weather-hour-time">{h.time.slice(11, 16)}</span>
+                  <span className="weather-hour-icon">
+                    {h.kind ? WEATHER_KIND_ICONS[h.kind as keyof typeof WEATHER_KIND_ICONS] : '·'}
+                  </span>
+                  <span className="weather-hour-temp">{Math.round(h.temp)}°</span>
+                  <span className="weather-hour-pop">{h.pop !== null && h.pop >= 20 ? `${h.pop}%` : ''}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
 
       {/*
         未来几天的天气。
