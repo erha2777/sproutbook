@@ -938,9 +938,14 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         <Button size="small" onClick={() => (month === 12 ? (setMonth(1), setYear(year + 1)) : setMonth(month + 1))}>
           ›
         </Button>
+        {/*
+          「回到今天」用**默认实心样式**，不用 ghost。
+          ghost 是背景、边框全透明 + 弱化文字，放在这片蓝色画布上几乎看不见
+          （用户截图圈出来说「太不显眼」）。它两边都是深色描边的按钮框，
+          这个也该是同一档。
+        */}
         <Button
           size="small"
-          variant="ghost"
           disabled={isCurrentMonth}
           title={isCurrentMonth ? '已经在今天所在的月份了' : '回到今天所在的月份'}
           onClick={() => {
