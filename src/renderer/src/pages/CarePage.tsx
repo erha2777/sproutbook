@@ -492,18 +492,6 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
    */
   const [weather, setWeather] = useState<WeatherWarningResult | null>(null)
   const [weatherBusy, setWeatherBusy] = useState(false)
-  /**
-   * 天气面板收起 / 展开。
-   *
-   * 用户的要求：**翻月时把它收起来，别占地方**。
-   * 天气面板占掉屏幕上很大一块，而翻到别的月份时看的是那个月的任务，
-   * 它留在那儿只是挡路。
-   *
-   * 收起来时只留一行标题（点击标题或按钮都能展开），不丢信息入口。
-   */
-  const [weatherCollapsed, setWeatherCollapsed] = useState(false)
-  /** 用户是否手动展开过。手动操作优先于「翻月自动收起」 */
-  const weatherManualRef = useRef(false)
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [editing, setEditing] = useState<CareTask | 'new' | null>(null)
@@ -523,6 +511,9 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   const [statFilter, setStatFilter] = useState<'overdue' | 'due' | 'done' | 'open' | null>(null)
   /** 从月历空白日点「＋」新增任务时的预设日期 */
   const [draftDate, setDraftDate] = useState<string | undefined>(undefined)
+
+  /** 正在看的是不是今天所在的月份。天气面板只在这时候显示 */
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1
 
   const bounds = useMemo(() => monthBounds(year, month), [year, month])
 
@@ -564,17 +555,6 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   useEffect(() => {
     void loadWeather(false)
   }, [loadWeather])
-
-  /**
-   * 翻到别的月份时收起天气面板，回到当月再按用户上次的手动选择。
-   *
-   * 为什么用 ref 记「手动」：否则用户展开后一翻月又被收起来，
-   * 会显得按钮不听话。手动操作永远优先。
-   */
-  useEffect(() => {
-    const isCurrentMonth = year === new Date().getFullYear() && month === new Date().getMonth() + 1
-    setWeatherCollapsed(isCurrentMonth ? !weatherManualRef.current : true)
-  }, [year, month])
 
   /**
    * 把一条天气风险变成任务。
@@ -961,19 +941,15 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         <Button
           size="small"
           variant="ghost"
-          disabled={year === now.getFullYear() && month === now.getMonth() + 1}
-          title={
-            year === now.getFullYear() && month === now.getMonth() + 1
-              ? '已经在今天所在的月份了'
-              : '回到今天所在的月份'
-          }
+          disabled={isCurrentMonth}
+          title={isCurrentMonth ? '已经在今天所在的月份了' : '回到今天所在的月份'}
           onClick={() => {
             const d = new Date()
             setYear(d.getFullYear())
             setMonth(d.getMonth() + 1)
           }}
         >
-          {year === now.getFullYear() && month === now.getMonth() + 1 ? '已是今天' : '回到今天'}
+          {isCurrentMonth ? '已是今天' : '回到今天'}
         </Button>
 
         <div style={{ width: 190 }}>
@@ -1056,10 +1032,20 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         南阳台的可能已经现蕾，北窗台的还没动。所以放在待办页最上面，
         由你看到什么就标什么；标了之后限定阶段的规则会立刻跟着变。
       */}
-      <Panel>
-        <SectionTitle
-          right={
-            <div className="row tight" style={{ alignItems: 'center' }}>
+      {/*
+        天气预警**只在当月显示**。
+
+        它是「当天该注意什么」，翻到 11 月、12 月时看的是那个月的任务，
+        这块留在那儿只是挡路 —— 而且很容易被误读成「那个月的天气」。
+        所以不提供手动展开/收起：不是当月就不显示，整块让位给任务列表。
+
+        数据仍然是挂载时拉一次，翻月不会重新请求（只有 7 天预报，
+        翻到 11 月也答不出 11 月的天气，重新请求没有意义）。
+      */}
+      {isCurrentMonth ? (
+        <Panel>
+          <SectionTitle
+            right={
               <span className="small muted">
                 {weatherBusy
                   ? '正在查看…'
@@ -1067,30 +1053,10 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
                     ? `数据时间 ${new Date(weather.fetchedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
                     : ''}
               </span>
-              <Button
-                size="small"
-                variant="ghost"
-                title={weatherCollapsed ? '展开天气面板' : '收起天气面板（翻月时会自动收起）'}
-                onClick={() => {
-                  const next = !weatherCollapsed
-                  weatherManualRef.current = !next
-                  setWeatherCollapsed(next)
-                }}
-              >
-                {weatherCollapsed ? '展开 ▾' : '收起 ▴'}
-              </Button>
-            </div>
-          }
-        >
-          {/*
-            天气是**当天实况**，和正在看的月份无关 —— 所以标题里带上日期，
-            翻到 11 月时也不会被误读成「11 月的天气」。
-          */}
-          天气预警 <span className="small muted">（当天 · {today}）</span>
-        </SectionTitle>
-        {weatherCollapsed ? (
-          <div className="small muted">已收起 —— 点右上角「展开」查看当天天气与风险。</div>
-        ) : (
+            }
+          >
+            天气预警 <span className="small muted">（当天 · {today}）</span>
+          </SectionTitle>
           <WeatherPanel
             result={weather}
             addedKeys={addedKeys}
@@ -1098,8 +1064,8 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
             onRefresh={() => void loadWeather(true)}
             onCreateTask={createTaskFromRisk}
           />
-        )}
-      </Panel>
+        </Panel>
+      ) : null}
 
       {/*
         这里原来有一整块「植株阶段」列表：每株一行，显示阶段、已标记多少天、改阶段按钮。
