@@ -205,6 +205,8 @@ function parseQWeatherHours(h?: QWeatherHourly[]): HourlyWeather[] {
       time: x.fxTime.slice(0, 16),
       temp,
       kind: qweatherIconToKind(Number(x.icon)),
+      // 存原始图标号 —— 映射不出来时能看出来源到底给了什么
+      raw: Number.isFinite(Number(x.icon)) ? Number(x.icon) : null,
       pop: Number.isFinite(pop) ? pop : null
     })
   }
@@ -228,6 +230,7 @@ function parseOpenMeteoHours(h?: {
       time: t[i],
       temp,
       kind: wmoToKind(h?.weathercode?.[i]),
+      raw: typeof h?.weathercode?.[i] === 'number' ? h.weathercode[i] : null,
       pop: typeof pop === 'number' ? pop : null
     })
   }
