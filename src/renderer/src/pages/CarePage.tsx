@@ -54,6 +54,18 @@ const STAT_FILTER_TITLES: Record<'overdue' | 'due' | 'done' | 'open', string> = 
   open: '未完成'
 }
 
+/**
+ * 任务状态的标记文案与配色。
+ *
+ * 清理弹窗里**每一条都要带上**：删掉一段范围时用户必须一眼看清
+ * 自己要删的是待办还是做过的记录 —— 后者不可逆。
+ */
+const TASK_STATUS_TAG: Record<'pending' | 'done' | 'skipped', { label: string; tone: 'muted' | 'ok' | 'warn' }> = {
+  pending: { label: '待办', tone: 'muted' },
+  done: { label: '已完成', tone: 'ok' },
+  skipped: { label: '已跳过', tone: 'warn' }
+}
+
 function weatherTaskKey(plantId: number, date: string, title: string): string {
   return `${plantId}|${date}|${title}`
 }
@@ -758,11 +770,18 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
     }
   }
 
-  /** 会被删掉的那批：范围内、且还没做的 */
+  /** 会被删掉的那批：范围内的**全部**状态（待办 / 已完成 / 已跳过都要能删） */
   const purgeTargets = useMemo(() => {
     const prefix = purgeMonth === null ? `${purgeYear}-` : `${purgeYear}-${String(purgeMonth).padStart(2, '0')}-`
-    return purgeTasks.filter((t) => t.status === 'pending' && t.dueDate.startsWith(prefix))
+    return purgeTasks.filter((t) => t.dueDate.startsWith(prefix))
   }, [purgeTasks, purgeYear, purgeMonth])
+
+  /** 按状态分组计数 —— 确认前要把「删掉几条做过的记录」摆到明面上 */
+  const purgeCounts = useMemo(() => {
+    const c = { pending: 0, done: 0, skipped: 0 }
+    for (const t of purgeTargets) c[t.status]++
+    return c
+  }, [purgeTargets])
 
   const runPurge = async (): Promise<void> => {
     if (purgeTargets.length === 0) return
@@ -776,8 +795,12 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
           ? `${purgeYear}-12-31`
           : `${purgeYear}-${String(purgeMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       const r = await window.api.care.purgeTasks({ from, to })
+      // 各状态分开报：删了几条做过的记录是要说清楚的
+      const parts = (['pending', 'done', 'skipped'] as const)
+        .filter((s) => r.byStatus[s] > 0)
+        .map((s) => `${TASK_STATUS_TAG[s].label} ${r.byStatus[s]} 条`)
       toast.push(
-        `已从${scope}删除 ${r.deleted} 条待办${r.kept > 0 ? `，保留 ${r.kept} 条已完成/已跳过的记录` : ''}`,
+        `已从${scope}删除 ${r.deleted} 条任务${parts.length > 0 ? `（${parts.join(' · ')}）` : ''}。养护日志不受影响，仍然保留`,
         'success'
       )
       setPurgeOpen(false)
@@ -1357,7 +1380,9 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         <Modal
           title="清理计划"
           onClose={() => setPurgeOpen(false)}
-          headerExtra={<span className="small muted">只删待办，已完成 / 已跳过的会保留</span>}
+          headerExtra={
+            <span className="small muted">三种状态都能删；养护日志不受影响</span>
+          }
           footer={
             <>
               <span className="spacer" />
@@ -1403,12 +1428,26 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
             <Spinner label="读取中…" />
           ) : purgeTargets.length === 0 ? (
             <div className="small muted">
-              {purgeYear} 年{purgeMonth === null ? '' : ` ${purgeMonth} 月`}没有待办任务，不需要清理。
+              {purgeYear} 年{purgeMonth === null ? '' : ` ${purgeMonth} 月`}没有任务，不需要清理。
             </div>
           ) : (
             <>
-              <div className="small muted" style={{ marginBottom: 6 }}>
-                下面这 {purgeTargets.length} 条会被删除：
+              {/*
+                按状态汇总，再做逐条预览。
+                删掉「已完成」是不可逆的，所以既要总数也要每条的状态标记 ——
+                只给一个总数就按下去，用户不知道自己在删什么。
+              */}
+              <div className="small" style={{ marginBottom: 6 }}>
+                下面这 <b>{purgeTargets.length}</b> 条会被删除：
+                {(['pending', 'done', 'skipped'] as const)
+                  .filter((s) => purgeCounts[s] > 0)
+                  .map((s) => (
+                    <span key={s} style={{ marginLeft: 8 }}>
+                      <Badge tone={TASK_STATUS_TAG[s].tone}>
+                        {TASK_STATUS_TAG[s].label} {purgeCounts[s]}
+                      </Badge>
+                    </span>
+                  ))}
               </div>
               <div style={{ maxHeight: 320, overflow: 'auto' }}>
                 {purgeTargets.slice(0, 200).map((t) => (
@@ -1416,11 +1455,14 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
                     <div className="row tight" style={{ alignItems: 'center' }}>
                       <span className="task-icon">{CARE_ACTION_ICONS[t.actionType]}</span>
                       <b>{t.title}</b>
-                      <Badge tone="muted">{dueDescription(t, today)}</Badge>
+                      {/* 每条都带上状态标记：待办 / 已完成 / 已跳过 */}
+                      <Badge tone={TASK_STATUS_TAG[t.status].tone}>{TASK_STATUS_TAG[t.status].label}</Badge>
+                      {t.priority === 1 ? <Badge tone="safety">高优先</Badge> : null}
                     </div>
                     <div className="small muted">
                       {t.dueDate}
                       {t.plantName ? ` · ${t.plantName}` : ''}
+                      {` · ${CARE_ACTION_LABELS[t.actionType]}`}
                     </div>
                   </div>
                 ))}
@@ -1433,7 +1475,8 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         </Modal>
       ) : null}
 
-      {/* 动作类型图例：让图标不至于全靠猜 */}      <div className="small muted" style={{ marginTop: 10 }}>
+      {/* 动作类型图例：让图标不至于全靠猜 */}
+      <div className="small muted" style={{ marginTop: 10 }}>
         图例：
         {CARE_ACTION_OPTIONS.map((o) => (
           <span key={o.value} style={{ marginLeft: 8 }}>

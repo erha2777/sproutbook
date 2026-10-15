@@ -495,16 +495,18 @@ export function deleteCareTask(db: Db, id: number): boolean {
 }
 
 /**
- * 批量清理一段日期范围内的**待办**任务。
+ * 批量清理一段日期范围内的任务。
  *
  * 生成计划是按年的，误点一下就排出整年。用户不小心生成了明年的计划之后
  * 没有任何出口 —— 只能一条条删，135 条根本删不动。
  *
- * 两条原则：
- *   1. **只删 status='pending'**。已完成 / 已跳过是你做过的记录，
- *      清理「计划」不该抹掉历史，而且删了会和养护日志对不上
- *   2. 日志里的 task_id 要显式解绑（和 deleteCareTask 同样的理由：
- *      日志要能在任务删除后继续存在）
+ * **三种状态都能删**：用户要的就是「把这段范围清空」，
+ * 包括已完成的记录。但**按状态分开计数**返回给界面，
+ * 让它在确认前把「要删掉 7 条已完成的记录」摆在明面上 ——
+ * 那是不可逆的，不能只给一个总数让人按下去。
+ *
+ * 日志本身不动，只解绑 task_id（和 deleteCareTask 同样的理由：
+ * 日志要能在任务删除后继续存在，它是「那天做了什么」的记录）。
  */
 export function purgeCareTasks(
   db: Db,
@@ -514,30 +516,24 @@ export function purgeCareTasks(
     const plantClause = input.plantId === undefined ? '' : ' AND plant_id = ?'
     const args: Array<string | number> = [input.from, input.to]
     if (input.plantId !== undefined) args.push(input.plantId)
+    const where = `due_date >= ? AND due_date <= ?${plantClause}`
 
-    const kept = Number(
-      db.scalar<number>(
-        `SELECT COUNT(*) AS c FROM care_tasks
-         WHERE due_date >= ? AND due_date <= ?${plantClause} AND status != 'pending'`,
-        ...args
-      ) ?? 0
-    )
+    const byStatus: Record<CareTaskStatus, number> = { pending: 0, done: 0, skipped: 0 }
+    for (const row of db.all<{ status: CareTaskStatus; c: number }>(
+      `SELECT status, COUNT(*) AS c FROM care_tasks WHERE ${where} GROUP BY status`,
+      ...args
+    )) {
+      byStatus[row.status] = Number(row.c)
+    }
 
-    const ids = db
-      .all<{ id: number }>(
-        `SELECT id FROM care_tasks
-         WHERE due_date >= ? AND due_date <= ?${plantClause} AND status = 'pending'`,
-        ...args
-      )
-      .map((r) => r.id)
-
-    if (ids.length === 0) return { deleted: 0, kept }
+    const ids = db.all<{ id: number }>(`SELECT id FROM care_tasks WHERE ${where}`, ...args).map((r) => r.id)
+    if (ids.length === 0) return { deleted: 0, byStatus }
 
     const marks = ids.map(() => '?').join(',')
     // 先解绑日志，再删任务 —— 顺序反了会留下指向不存在任务的 task_id
     db.run(`UPDATE care_logs SET task_id = NULL WHERE task_id IN (${marks})`, ...ids)
     const r = db.run(`DELETE FROM care_tasks WHERE id IN (${marks})`, ...ids)
-    return { deleted: Number(r.changes), kept }
+    return { deleted: Number(r.changes), byStatus }
   })
 }
 

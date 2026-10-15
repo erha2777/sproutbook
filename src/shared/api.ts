@@ -326,13 +326,15 @@ export interface CareTaskQuery {
  * 存在的理由：生成计划是**按年**的，误点一下就排出整年 ——
  * 用户不小心生成了明年的计划之后，只能一条一条删，135 条根本删不动。
  *
- * **只删待办（status='pending'）**：已完成/已跳过是你做过的记录，
- * 清理计划不该抹掉它们，而且删了会和养护日志对不上。
+ * 三种状态都能删（用户要求「已完成已跳过的也可以删除」），
+ * 所以要把各状态**分开计数**，界面才能在确认前把「删掉几条待办、
+ * 几条已完成」摆到明面上 —— 删掉做过的记录是不可逆的，
+ * 不能只给一个总数让人按下去。
  */
 export interface CareTaskPurgeResult {
   deleted: number
-  /** 范围内被保留的条数（已完成 / 已跳过） */
-  kept: number
+  /** 按状态分：删掉了几条 */
+  byStatus: Record<CareTaskStatus, number>
 }
 
 export interface CareTaskPatch {
