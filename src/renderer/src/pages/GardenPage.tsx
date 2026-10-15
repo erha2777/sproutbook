@@ -30,6 +30,7 @@ import {
   CARE_PHASE_LABELS,
   CARE_PHASE_OPTIONS,
   dueDescription,
+  phaseAgeDays,
   urgencyOf
 } from '@core/care'
 import type { CarePhase } from '@core/types'
@@ -387,6 +388,8 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
           ? (() => {
               const g = growthOf(selectedPlant)
               const info = phases[selectedPlant.id]
+              // 手动标记的阶段持续了几天（和养护计划页用的是同一个纯函数）
+              const age = phaseAgeDays(info?.changedAt)
               const result = deriveGrowthStage({
                 status: selectedPlant.status,
                 phase: info?.phase ?? null,
@@ -447,10 +450,30 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                         <div className="small" style={{ marginBottom: 4 }}>
                           物候阶段：
                           {info?.phase ? (
-                            <b>
-                              {' '}
-                              {CARE_PHASE_ICONS[info.phase]} {CARE_PHASE_LABELS[info.phase]}
-                            </b>
+                            <>
+                              <b>
+                                {' '}
+                                {CARE_PHASE_ICONS[info.phase]} {CARE_PHASE_LABELS[info.phase]}
+                              </b>
+                              {/*
+                                天数放在这里，它的意义和「生长中」那句不同：
+                                上面那行是**推算**出来的显示状态（依据可以是开花月份、
+                                也可以是你标的阶段），这里是**手动标记**本身，不会自动过期。
+                                缓苗期这类临时状态标完容易忘 —— 天数摆出来才是提醒。
+
+                                天数原来只在「养护计划」页那一块显示，而那块整段都是重复信息：
+                                阶段和天数这里都有。所以天数搬过来，那块撤掉。
+                              */}
+                              {age !== null ? (
+                                <span
+                                  className={`small ${age >= 45 ? 'phase-age stale' : 'muted'}`}
+                                  title={`标记于 ${info?.changedAt?.slice(0, 10) ?? ''}`}
+                                >
+                                  {' '}
+                                  已 {age} 天{age >= 45 ? '，要不要重新看看？' : ''}
+                                </span>
+                              ) : null}
+                            </>
                           ) : (
                             <span className="muted"> 还没标记（标记后，限定该阶段的规则才会生效）</span>
                           )}
