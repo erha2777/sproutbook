@@ -396,7 +396,31 @@ export async function qweatherLookupDetailed(
     return { geo: null, code, error: `和风返回了「${pick.name ?? '?'}」但坐标解析不出来` }
   }
 
-  const level: GeoResult['level'] = (pick.name ?? '') === wanted && (pick.adm2 ?? '') !== '' ? 'district' : 'city'
+  /*
+   * 「解析到了区县还是只到市」。
+   *
+   * ## 原来的判断是错的
+   *
+   * 它拿**查询串**比：`pick.name === wanted`。而和风会把行政后缀规范掉 ——
+   * 用户填「某县县」，它返回的 name 是「某县」，两个串不相等，
+   * 于是这个明明解析到区县的结果被判成 city。
+   *
+   * 界面上就成了自相矛盾的一行：
+   *   预报点：中国 · 某省 · 某市 · 某县（30.00, 120.00）· **只到市**
+   *
+   * ## 改成拿**返回结果自己的层级**比
+   *
+   * 和风的 location 里 adm2 是它所属的地级市：
+   *   name = 某县，adm2 = 某市   -> 名字不是那个市，说明落到了下一级 = 区县
+   *   name = 某市，adm2 = 某市   -> 就是市本身 = 只到市
+   *
+   * 这样和用户填的是「某县」还是「某县县」都无关。
+   */
+  const nm = (pick.name ?? '').trim()
+  const adm2 = (pick.adm2 ?? '').trim()
+  /** 去掉行政后缀再比，免得「某市」和「某市市」被当成两个地方 */
+  const bare = (x: string): string => x.replace(/[县市区旗盟州]$/, '')
+  const level: GeoResult['level'] = adm2 !== '' && bare(nm) !== bare(adm2) ? 'district' : 'city'
   return {
     geo: {
       label: [pick.country, pick.adm1, pick.adm2, pick.name].filter(Boolean).join(' · '),
@@ -463,7 +487,25 @@ export async function lookupLocation(
 ): Promise<GeoResult | null> {
   // 「实际会用哪个源」而不是「用户选了哪个」—— 配了和风但没配齐时实际是 Open-Meteo
   const source: WeatherProviderId = config.provider === 'qweather' && config.qweatherReady ? 'qweather' : 'open-meteo'
-  const key = [source, query.province ?? '', query.city ?? '', query.district ?? ''].join('|')
+  const key = [
+    /*
+     * 键里带一个**解析规则版本**。
+     *
+     * 缓存里存的不是原始响应，是**算过的东西** —— 包括 level
+     *（「解析到区县还是只到市」）。那个判断原来是错的：拿查询串和返回的 name 比，
+     * 而和风会把「某县县」规范成「某县」，于是明明到了区县却标成「只到市」。
+     *
+     * 判断修好了，**但旧缓存里仍然是错的 level**。版本一变旧条目自然失配、
+     * 重新解析 —— 不用等用户手动清缓存。
+     *
+     * 这是今天第三次遇到同一件事：**缓存里存的是算过的值，规则一变就失效。**
+     */
+    'geo-v2',
+    source,
+    query.province ?? '',
+    query.city ?? '',
+    query.district ?? ''
+  ].join('|')
 
   const cache = getSetting<Record<string, GeoResult>>(db, GEOCODE_CACHE_KEY, {})
   const hit = cache[key]

@@ -2126,7 +2126,7 @@ export async function runSmoke(outFile: string): Promise<number> {
           level: 'district',
           provider: 'open-meteo'
         }
-        setSetting(db, GEOCODE_CACHE_KEY, { 'open-meteo|湖南|某市|某县县': fake })
+        setSetting(db, GEOCODE_CACHE_KEY, { 'geo-v2|open-meteo|湖南|某市|某县县': fake })
 
         const cfg = readWeatherConfig(db, null)
         check('自检里默认走 Open-Meteo（否则下面这条会真发请求）', cfg.provider === 'open-meteo', cfg.provider)
@@ -2137,7 +2137,7 @@ export async function runSmoke(outFile: string): Promise<number> {
 
         // 换个区县就该重新解析；这里只断言键确实按区县区分（不去真的请求）
         const cache = getSetting<Record<string, unknown>>(db, GEOCODE_CACHE_KEY, {})
-        check('缓存键含数据源', 'open-meteo|湖南|某市|某县县' in cache, Object.keys(cache).join(','))
+        check('缓存键含数据源', 'geo-v2|open-meteo|湖南|某市|某县县' in cache, Object.keys(cache).join(','))
         check(
           '缓存键按省市区分开',
           !('open-meteo|湖南|某市|平江县' in cache) && !('open-meteo|湖北|武汉|某县县' in cache)
