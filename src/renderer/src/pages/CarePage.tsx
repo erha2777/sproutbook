@@ -509,6 +509,21 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
    * 现在点一下就地筛出那批任务。
    */
   const [statFilter, setStatFilter] = useState<'overdue' | 'due' | 'done' | 'open' | null>(null)
+  /**
+   * 清理计划。
+   *
+   * 生成计划是**按年**的，误点一下就排出整年 —— 用户不小心生成了下一年之后
+   * 只能一条条删（135 条根本删不动）。所以给一个批量出口。
+   *
+   * 只删待办：已完成 / 已跳过是做过的记录，清理「计划」不该抹掉历史。
+   */
+  const [purgeOpen, setPurgeOpen] = useState(false)
+  const [purgeYear, setPurgeYear] = useState(now.getFullYear())
+  /** null = 整年；1~12 = 只看那个月 */
+  const [purgeMonth, setPurgeMonth] = useState<number | null>(null)
+  const [purgeTasks, setPurgeTasks] = useState<CareTaskListItem[]>([])
+  const [purgeLoading, setPurgeLoading] = useState(false)
+  const [purgeBusy, setPurgeBusy] = useState(false)
   /** 从月历空白日点「＋」新增任务时的预设日期 */
   const [draftDate, setDraftDate] = useState<string | undefined>(undefined)
 
@@ -709,6 +724,68 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
       toast.push(error instanceof Error ? error.message : '操作失败', 'error')
     } finally {
       setBusyId(null)
+    }
+  }
+
+  /**
+   * 打开「清理计划」：把那一年的任务全取回来，之后筛选都在本地做（数据量很小）。
+   */
+  const openPurge = async (): Promise<void> => {
+    setPurgeOpen(true)
+    setPurgeMonth(null)
+    setPurgeLoading(true)
+    try {
+      const ov = await window.api.care.overview(purgeYear)
+      setPurgeTasks(ov.yearTasks)
+    } catch (error) {
+      toast.push(`读取 ${purgeYear} 年任务失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+      setPurgeTasks([])
+    } finally {
+      setPurgeLoading(false)
+    }
+  }
+
+  const switchPurgeYear = async (nextYear: number): Promise<void> => {
+    setPurgeYear(nextYear)
+    setPurgeLoading(true)
+    try {
+      const ov = await window.api.care.overview(nextYear)
+      setPurgeTasks(ov.yearTasks)
+    } catch {
+      setPurgeTasks([])
+    } finally {
+      setPurgeLoading(false)
+    }
+  }
+
+  /** 会被删掉的那批：范围内、且还没做的 */
+  const purgeTargets = useMemo(() => {
+    const prefix = purgeMonth === null ? `${purgeYear}-` : `${purgeYear}-${String(purgeMonth).padStart(2, '0')}-`
+    return purgeTasks.filter((t) => t.status === 'pending' && t.dueDate.startsWith(prefix))
+  }, [purgeTasks, purgeYear, purgeMonth])
+
+  const runPurge = async (): Promise<void> => {
+    if (purgeTargets.length === 0) return
+    const scope = purgeMonth === null ? `${purgeYear} 年全年` : `${purgeYear} 年 ${purgeMonth} 月`
+    setPurgeBusy(true)
+    try {
+      const from = purgeMonth === null ? `${purgeYear}-01-01` : `${purgeYear}-${String(purgeMonth).padStart(2, '0')}-01`
+      const lastDay = new Date(purgeYear, purgeMonth ?? 12, 0).getDate()
+      const to =
+        purgeMonth === null
+          ? `${purgeYear}-12-31`
+          : `${purgeYear}-${String(purgeMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      const r = await window.api.care.purgeTasks({ from, to })
+      toast.push(
+        `已从${scope}删除 ${r.deleted} 条待办${r.kept > 0 ? `，保留 ${r.kept} 条已完成/已跳过的记录` : ''}`,
+        'success'
+      )
+      setPurgeOpen(false)
+      await reload()
+    } catch (error) {
+      toast.push(`清理失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    } finally {
+      setPurgeBusy(false)
     }
   }
 
@@ -971,6 +1048,10 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         <Button size="small" onClick={() => void generate()}>
           生成 / 更新计划
         </Button>
+        {/* 误生成整年计划时的出口 —— 135 条没法一条条删 */}
+        <Button size="small" onClick={() => void openPurge()}>
+          清理计划
+        </Button>
         <Button variant="primary" onClick={() => setEditing('new')}>
           ＋ 新增任务
         </Button>
@@ -987,22 +1068,30 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
           */}
           {(
             [
-              { key: 'overdue', label: '逾期', n: yearGroups.overdue.length, tone: 'safety' },
-              { key: 'due', label: '该做', n: yearGroups.due.length, tone: 'warn' },
-              { key: 'done', label: '本年已完成', n: yearGroups.completed.length, tone: 'ok' },
-              { key: 'open', label: '本年待办', n: yearGroups.open.length, tone: 'muted' }
+              { key: 'overdue', label: '逾期', n: yearGroups.overdue.length, tone: 'safety', on: '#8a3a30' },
+              { key: 'due', label: '该做', n: yearGroups.due.length, tone: 'warn', on: '#9a6410' },
+              { key: 'done', label: '本年已完成', n: yearGroups.completed.length, tone: 'ok', on: '#3f7a2a' },
+              { key: 'open', label: '本年待办', n: yearGroups.open.length, tone: 'muted', on: '#6b5a3a' }
             ] as const
-          ).map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className={`badge tone-${item.tone} stat-filter${statFilter === item.key ? ' on' : ''}`}
-              title={`查看${item.label}的任务（全年）`}
-              onClick={() => setStatFilter(statFilter === item.key ? null : item.key)}
-            >
-              {item.label} {item.n}
-            </button>
-          ))}
+          ).map((item) => {
+            const on = statFilter === item.key
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className={`pixel-badge ${item.tone} stat-filter${on ? ' on' : ''}`}
+                /*
+                 * 选中态的底色用**内联样式**：.pixel-badge.safety 之类的 tone 规则
+                 * 优先级比 .stat-filter.on 高，写在 CSS 里会被压掉。
+                 */
+                style={on ? { background: item.on, color: '#fff', borderColor: '#fff' } : undefined}
+                title={`查看${item.label}的任务（全年）`}
+                onClick={() => setStatFilter(on ? null : item.key)}
+              >
+                {item.label} {item.n}
+              </button>
+            )
+          })}
           <span className="spacer" />
           <span className="small muted">
             本月 {monthSummary.total} 项 · 完成 {monthSummary.done} · 待办 {monthSummary.pending}
@@ -1258,8 +1347,93 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
         </Modal>
       ) : null}
 
-      {/* 动作类型图例：让图标不至于全靠猜 */}
-      <div className="small muted" style={{ marginTop: 10 }}>
+      {/*
+        清理计划。
+
+        生成是按年的：误点一下「生成 / 更新计划」就排出整年，
+        而删除只能一条一条来。用户误建了 2027 年（135 条）之后没有任何出口。
+      */}
+      {purgeOpen ? (
+        <Modal
+          title="清理计划"
+          onClose={() => setPurgeOpen(false)}
+          headerExtra={<span className="small muted">只删待办，已完成 / 已跳过的会保留</span>}
+          footer={
+            <>
+              <span className="spacer" />
+              <Button onClick={() => setPurgeOpen(false)}>取消</Button>
+              <Button variant="danger" disabled={purgeBusy || purgeTargets.length === 0} onClick={() => void runPurge()}>
+                {purgeBusy ? '正在删除…' : `删除这 ${purgeTargets.length} 条`}
+              </Button>
+            </>
+          }
+        >
+          <div className="row tight" style={{ marginBottom: 10, flexWrap: 'wrap' }}>
+            <span className="small">范围：</span>
+            <div style={{ width: 120 }}>
+              <SelectInput
+                value={String(purgeYear)}
+                onChange={(v) => void switchPurgeYear(Number(v))}
+                options={[year - 1, year, year + 1, year + 2].map((y) => ({
+                  value: String(y),
+                  label: `${y} 年`
+                }))}
+              />
+            </div>
+            <Button
+              size="small"
+              variant={purgeMonth === null ? 'primary' : undefined}
+              onClick={() => setPurgeMonth(null)}
+            >
+              全年
+            </Button>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+              <Button
+                key={m}
+                size="small"
+                variant={purgeMonth === m ? 'primary' : undefined}
+                onClick={() => setPurgeMonth(m)}
+              >
+                {m} 月
+              </Button>
+            ))}
+          </div>
+
+          {purgeLoading ? (
+            <Spinner label="读取中…" />
+          ) : purgeTargets.length === 0 ? (
+            <div className="small muted">
+              {purgeYear} 年{purgeMonth === null ? '' : ` ${purgeMonth} 月`}没有待办任务，不需要清理。
+            </div>
+          ) : (
+            <>
+              <div className="small muted" style={{ marginBottom: 6 }}>
+                下面这 {purgeTargets.length} 条会被删除：
+              </div>
+              <div style={{ maxHeight: 320, overflow: 'auto' }}>
+                {purgeTargets.slice(0, 200).map((t) => (
+                  <div key={t.id} className="stat-task">
+                    <div className="row tight" style={{ alignItems: 'center' }}>
+                      <span className="task-icon">{CARE_ACTION_ICONS[t.actionType]}</span>
+                      <b>{t.title}</b>
+                      <Badge tone="muted">{dueDescription(t, today)}</Badge>
+                    </div>
+                    <div className="small muted">
+                      {t.dueDate}
+                      {t.plantName ? ` · ${t.plantName}` : ''}
+                    </div>
+                  </div>
+                ))}
+                {purgeTargets.length > 200 ? (
+                  <div className="small muted">……以及另外 {purgeTargets.length - 200} 条</div>
+                ) : null}
+              </div>
+            </>
+          )}
+        </Modal>
+      ) : null}
+
+      {/* 动作类型图例：让图标不至于全靠猜 */}      <div className="small muted" style={{ marginTop: 10 }}>
         图例：
         {CARE_ACTION_OPTIONS.map((o) => (
           <span key={o.value} style={{ marginLeft: 8 }}>

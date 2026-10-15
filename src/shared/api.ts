@@ -270,6 +270,11 @@ export interface SproutbookApi {
     /** 撤销完成 / 跳过，并删掉对应日志 */
     reopenTask(id: number): Promise<CareTask | null>
     removeTask(id: number): Promise<boolean>
+    /**
+     * 批量清理某段日期范围内的**待办**任务（按年或按月）。
+     * 误生成整年计划时的唯一出口 —— 135 条没法一条条删。
+     */
+    purgeTasks(input: { from: string; to: string; plantId?: number }): Promise<CareTaskPurgeResult>
 
     /** 生成是幂等的：签名相同的任务原样保留，已完成的一律不动 */
     generate(plantId: number, year: number): Promise<CareGenerateResult>
@@ -313,6 +318,21 @@ export interface CareTaskQuery {
   status?: CareTaskStatus | 'open'
   actionType?: CareActionType
   limit?: number
+}
+
+/**
+ * 批量清理计划任务。
+ *
+ * 存在的理由：生成计划是**按年**的，误点一下就排出整年 ——
+ * 用户不小心生成了明年的计划之后，只能一条一条删，135 条根本删不动。
+ *
+ * **只删待办（status='pending'）**：已完成/已跳过是你做过的记录，
+ * 清理计划不该抹掉它们，而且删了会和养护日志对不上。
+ */
+export interface CareTaskPurgeResult {
+  deleted: number
+  /** 范围内被保留的条数（已完成 / 已跳过） */
+  kept: number
 }
 
 export interface CareTaskPatch {

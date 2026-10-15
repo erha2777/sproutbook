@@ -60,6 +60,7 @@ import {
   deleteCareLog,
   deleteCareRule,
   deleteCareTask,
+  purgeCareTasks,
   generateTasksForAll,
   generateTasksForPlant,
   getPlantPhase,
@@ -544,6 +545,10 @@ function registerImageIpc(): void {
   handle('care:task.skip', (id: number, reason?: string | null) => skipCareTask(getDb(), id, reason))
   handle('care:task.reopen', (id: number) => reopenCareTask(getDb(), id))
   handle('care:task.delete', (id: number) => deleteCareTask(getDb(), id))
+  // 批量清理：误生成整年计划时的出口，只删待办
+  handle('care:tasks.purge', (input: { from: string; to: string; plantId?: number }) =>
+    purgeCareTasks(getDb(), input)
+  )
 
   handle('care:generate', (plantId: number, year: number) => generateTasksForPlant(getDb(), plantId, year))
   handle('care:generateAll', (year: number) => generateTasksForAll(getDb(), year))

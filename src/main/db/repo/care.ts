@@ -23,6 +23,7 @@ import type {
   CareOverview,
   CareTaskListItem,
   CareTaskPatch,
+  CareTaskPurgeResult,
   CareTaskQuery
 } from '../../../shared/api'
 import {
@@ -490,6 +491,53 @@ export function deleteCareTask(db: Db, id: number): boolean {
      * 影响 0 行说明这条任务已经不在了，如实返回 false。
      */
     return Number(r.changes) > 0
+  })
+}
+
+/**
+ * 批量清理一段日期范围内的**待办**任务。
+ *
+ * 生成计划是按年的，误点一下就排出整年。用户不小心生成了明年的计划之后
+ * 没有任何出口 —— 只能一条条删，135 条根本删不动。
+ *
+ * 两条原则：
+ *   1. **只删 status='pending'**。已完成 / 已跳过是你做过的记录，
+ *      清理「计划」不该抹掉历史，而且删了会和养护日志对不上
+ *   2. 日志里的 task_id 要显式解绑（和 deleteCareTask 同样的理由：
+ *      日志要能在任务删除后继续存在）
+ */
+export function purgeCareTasks(
+  db: Db,
+  input: { from: string; to: string; plantId?: number }
+): CareTaskPurgeResult {
+  return db.transaction(() => {
+    const plantClause = input.plantId === undefined ? '' : ' AND plant_id = ?'
+    const args: Array<string | number> = [input.from, input.to]
+    if (input.plantId !== undefined) args.push(input.plantId)
+
+    const kept = Number(
+      db.scalar<number>(
+        `SELECT COUNT(*) AS c FROM care_tasks
+         WHERE due_date >= ? AND due_date <= ?${plantClause} AND status != 'pending'`,
+        ...args
+      ) ?? 0
+    )
+
+    const ids = db
+      .all<{ id: number }>(
+        `SELECT id FROM care_tasks
+         WHERE due_date >= ? AND due_date <= ?${plantClause} AND status = 'pending'`,
+        ...args
+      )
+      .map((r) => r.id)
+
+    if (ids.length === 0) return { deleted: 0, kept }
+
+    const marks = ids.map(() => '?').join(',')
+    // 先解绑日志，再删任务 —— 顺序反了会留下指向不存在任务的 task_id
+    db.run(`UPDATE care_logs SET task_id = NULL WHERE task_id IN (${marks})`, ...ids)
+    const r = db.run(`DELETE FROM care_tasks WHERE id IN (${marks})`, ...ids)
+    return { deleted: Number(r.changes), kept }
   })
 }
 
