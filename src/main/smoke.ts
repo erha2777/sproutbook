@@ -77,6 +77,7 @@ import {
   mixColor,
   normalizeHabit
 } from '../core/sprite'
+import { WEATHER_ICON_KINDS, WEATHER_ICON_SIZE, buildWeatherIcon } from '../core/weatherIcon'
 import { defaultFieldDefinitions } from '../core/defaultTemplate'
 import {
   addDays,
@@ -2835,6 +2836,143 @@ export async function runSmoke(outFile: string): Promise<number> {
         // 加了字段不能破坏模板的既有约束
         const keys = defs.map((d) => d.key)
         check('模板字段没有重名', new Set(keys).size === keys.length)
+      }
+
+      // ---- 天气图标：曾经一个字节的自检都没有 ----
+      //
+      // 用户的反馈是「缩到 16px 就分不出是雨是雪」，所以这里量的是**形状**，
+      // 不是「跑起来没报错」—— 「调用成功」和「画对了」是两件事。
+      {
+        /** 某个字符的像素占的列范围；没有就返回 null。 */
+        const columnsOf = (grid: string[], keys: string): { min: number; max: number; n: number } | null => {
+          const cols: number[] = []
+          let n = 0
+          for (const row of grid) {
+            for (let x = 0; x < row.length; x++) {
+              if (keys.includes(row[x])) {
+                cols.push(x)
+                n += 1
+              }
+            }
+          }
+          if (cols.length === 0) return null
+          return { min: Math.min(...cols), max: Math.max(...cols), n }
+        }
+        /** 每个字符的像素总数。 */
+        const countsOf = (grid: string[]): Record<string, number> => {
+          const n: Record<string, number> = {}
+          for (const row of grid) for (const ch of row) if (ch !== '.') n[ch] = (n[ch] ?? 0) + 1
+          return n
+        }
+        /** 用到的行范围。 */
+        const rowsUsed = (grid: string[]): number[] => {
+          const rows: number[] = []
+          grid.forEach((row, y) => {
+            if (row.replace(/\./g, '').length > 0) rows.push(y)
+          })
+          return rows
+        }
+        const built: Record<string, string[]> = {}
+        let allBuilt = true
+        for (const kind of WEATHER_ICON_KINDS) {
+          const art = buildWeatherIcon(kind)
+          if (!art || art.grid.length !== WEATHER_ICON_SIZE || art.grid.some((r) => r.length !== WEATHER_ICON_SIZE)) {
+            allBuilt = false
+          } else {
+            built[kind] = art.grid
+          }
+        }
+        check('七种天气图标都能画出来且尺寸一致', allBuilt, Object.keys(built).join(','))
+
+        /*
+         * 最关键的一条：**两两不同**。以前雨 / 雪 / 雷共用同一朵云，
+         * 只在云下差三个像素，这条断言就是冲着那个来的。
+         */
+        const shapes = WEATHER_ICON_KINDS.map((k) => built[k]?.join('|') ?? '')
+        check('任意两个图标都不是同一张图', new Set(shapes).size === shapes.length)
+
+        /*
+         * 云的下面那部分（第 7 行起）。
+         * 「云下什么都没有」= 只有阴天，所以下雨下雪打雷那三种必须在这一段里各不相同。
+         */
+        const belowCloud = (k: string): string => (built[k] ?? []).slice(7).join('|')
+        const precipKinds = ['rain', 'snow', 'storm'] as const
+        check(
+          '雨 / 雪 / 雷在云下方各不相同（不是同一朵云换个颜色）',
+          new Set(precipKinds.map(belowCloud)).size === precipKinds.length
+        )
+
+        for (const kind of WEATHER_ICON_KINDS) {
+          const grid = built[kind]
+          if (!grid) continue
+          const rows = rowsUsed(grid)
+          /*
+           * 内容必须**画到下半部分**。
+           *
+           * 不是要求顶到最后一格 —— 16 格的图标上下各留一两格是正常的呼吸空间。
+           * 要钉住的是**内容全挤在上半张**那种情况：
+           * 以前雨的雨丝到第 13 行就断了、第 15 行整行空着，
+           * 看着像上半张有东西、下半张什么都没有。
+           */
+          check(`${kind} 的内容画到了下半部分`, rows.length > 0 && Math.max(...rows) >= WEATHER_ICON_SIZE - 3, `最低到第 ${rows.length > 0 ? Math.max(...rows) : -1} 行`)
+        }
+
+        check('不认识的天气返回 null（不硬画一个问号）', buildWeatherIcon('龙卷风') === null && buildWeatherIcon(null) === null)
+
+        // 太阳：晴天必须是全画面最亮的那个东西，尺寸也要够
+        {
+          const sun = columnsOf(built.clear ?? [], 'sS')
+          check('晴天有太阳', sun !== null)
+          check('晴天太阳够大（占一半宽度以上）', sun !== null && sun.max - sun.min + 1 >= WEATHER_ICON_SIZE / 2, sun ? `${sun.max - sun.min + 1} 列` : '无')
+          check('晴天没有云', columnsOf(built.clear ?? [], 'cCgG') === null)
+        }
+
+        // 闪电：必须连续 + 够粗，否则缩到 16px 会断成几颗黄点
+        {
+          const bolt = columnsOf(built.storm ?? [], 'yY')
+          check('雷有闪电', bolt !== null)
+          check('闪电够粗（不是一根细线）', bolt !== null && bolt.max - bolt.min + 1 >= 3, bolt ? `${bolt.max - bolt.min + 1} 列` : '无')
+
+          const boltRows = rowsUsed((built.storm ?? []).map((row) => row.replace(/[^yY]/g, '.')))
+          let contiguous = boltRows.length > 0
+          for (let i = 1; i < boltRows.length; i++) {
+            if (boltRows[i] !== boltRows[i - 1] + 1) contiguous = false
+          }
+          check('闪电每一行都接得上（没有断成几颗点）', contiguous, boltRows.join(','))
+
+          const stormPixels = countsOf(built.storm ?? [])
+          check('闪电像素量够显眼（>= 15）', (stormPixels.y ?? 0) + (stormPixels.Y ?? 0) >= 15, `${(stormPixels.y ?? 0) + (stormPixels.Y ?? 0)} 个`)
+        }
+
+        // 雾：横线形状，不能长成一朵云
+        {
+          const fog = built.fog ?? []
+          // 两层灰都算上：只数一层会把另一半雾当成不存在
+          const n = (countsOf(fog).f ?? 0) + (countsOf(fog).F ?? 0)
+          check('雾是横线形状（不是云）', columnsOf(fog, 'cCgGuUkK') === null && n >= 25, `${n} 个雾像素`)
+        }
+
+        /*
+         * 云的颜色必须**拉开层次**：雨最深、雪最浅。
+         * 只比「三个颜色不一样」不够 —— 原来那三张图的云用的是同一个色，
+         * 所以这里量的是实际色差。
+         */
+        {
+          const brightness = (hex: string): number => parseInt(hex.slice(1, 3), 16)
+          const rainCloud = brightness(buildWeatherIcon('rain')?.palette.u ?? '#000000')
+          const snowCloud = brightness(buildWeatherIcon('snow')?.palette.k ?? '#000000')
+          const overcastCloud = brightness(buildWeatherIcon('overcast')?.palette.g ?? '#000000')
+          check('雪的云比雨的云浅（不是同一朵灰云）', snowCloud - rainCloud >= 20, `${rainCloud} vs ${snowCloud}`)
+          check('阴天的云在两者之间', rainCloud < overcastCloud && overcastCloud < snowCloud, `${rainCloud} < ${overcastCloud} < ${snowCloud}`)
+        }
+
+        // 用到每个图标里的颜色都必须真的在调色板里，否则 SVG 会画出黑色方块
+        for (const kind of WEATHER_ICON_KINDS) {
+          const art = buildWeatherIcon(kind)
+          if (!art) continue
+          const used = Object.keys(countsOf(art.grid))
+          check(`${kind} 用到的颜色都在调色板里`, used.every((ch) => /^#[0-9a-f]{6}$/.test(art.palette[ch] ?? '')), used.join(''))
+        }
       }
     }
 

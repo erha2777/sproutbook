@@ -1738,8 +1738,11 @@ img {
 }
 
 .weather-hour-icon {
-  font-size: 15px;
-  line-height: 1.2;
+  /*
+   * 这里原来写 15px 是给 emoji 用的行高，换成 SVG 后它只管撑高 ——
+   * 图标本身是 20px（CarePage 里写死），行高留 1 会把它压扁。
+   */
+  line-height: 1.3;
 }
 
 .weather-hour-temp {
