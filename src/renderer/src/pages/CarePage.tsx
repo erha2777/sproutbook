@@ -54,6 +54,19 @@ function weatherTaskKey(plantId: number, date: string, title: string): string {
   return `${plantId}|${date}|${title}`
 }
 
+/**
+ * 'YYYY-MM-DD' → 周四。
+ *
+ * 用 Date.UTC 解析：new Date('2026-10-15') 会按 UTC 解释，
+ * 在东八区取出 getDay() 会差一天 —— 星期几错一天比不显示更糟。
+ */
+function weekdayLabel(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return ''
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  return ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getUTCDay()] ?? ''
+}
+
 function WeatherPanel({
   result,
   addedKeys,
@@ -90,6 +103,74 @@ function WeatherPanel({
   return (
     <div>
       {result.error ? <div className="small muted">⚠ {result.error}（下面可能是缓存的数据）</div> : null}
+
+      {/*
+        未来几天的天气。
+
+        **这些数据一直都在。** fetchDaily 取回 7 天的 date/tempMin/tempMax，
+        却只拿去做风险判断，画面上一个字都不露 —— 于是用户看到的只有
+        「超出 1℃」这种结论，反而不知道这几天到底什么天气。
+
+        有人拿和风页面来问「为什么温度不一样」：其实一模一样，
+        只是那边大字写的是**此刻**（20°），而这里只有一个**后天**的最高温（31℃）。
+        两个不同的东西放在一起比，当然像对不上。
+
+        所以先把原貌摆出来，再讲判断。
+      */}
+      {result.places.length > 0 ? (
+        <div className="weather-days">
+          {result.places.map((place) => {
+            /*
+             * 温度条的刻度要**跨所有天共用**，否则每天的条一样长，
+             * 看不出哪天更冷 —— 那就白画了。
+             */
+            const all = place.days.flatMap((d) => [d.tempMin, d.tempMax])
+            const lo = Math.min(...all)
+            const hi = Math.max(...all)
+            const span = hi - lo || 1
+            const pct = (v: number): number => ((v - lo) / span) * 100
+
+            return (
+              <div key={`${place.name}-${place.latitude}`} style={{ marginBottom: 8 }}>
+                <div className="small muted" style={{ marginBottom: 3 }}>
+                  {place.label || place.name}
+                  {place.provider === 'qweather' ? ' · 和风天气' : ' · Open-Meteo'}
+                </div>
+                <div className="weather-day-list">
+                  {place.days.map((d) => {
+                    // 这一天的风险（可能不止一株）
+                    const hits = result.risks.filter((r) => r.date === d.date)
+                    return (
+                      <div className="weather-day" key={d.date}>
+                        <span className="weather-day-date">{d.date.slice(5)}</span>
+                        <span className="weather-day-week">{weekdayLabel(d.date)}</span>
+                        <span className="weather-day-temp">{Math.round(d.tempMin)}°</span>
+                        <span className="weather-day-bar">
+                          <span
+                            className="weather-day-fill"
+                            style={{
+                              left: `${pct(d.tempMin)}%`,
+                              width: `${Math.max(pct(d.tempMax) - pct(d.tempMin), 2)}%`
+                            }}
+                          />
+                        </span>
+                        <span className="weather-day-temp">{Math.round(d.tempMax)}°</span>
+                        <span className="weather-day-risk">
+                          {hits.length > 0 ? (
+                            <span className={`weather-badge sev-${hits[0].severity}`}>
+                              {hits[0].kind === 'frost' ? '❄' : '☀'} {hits.map((h) => h.plantName).join('、')}
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
 
       {nothing ? (
         <div className="small muted">
