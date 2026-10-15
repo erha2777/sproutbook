@@ -186,7 +186,8 @@ function WeatherPanel({
                 <div className="weather-hour" key={h.time}>
                   <span className="weather-hour-time">{h.time.slice(11, 16)}</span>
                   <span className="weather-hour-icon">
-                    <WeatherIcon kind={h.kind} size={16} />
+                    {/* 20 而不是 16 —— 格宽本来就有 40px，16 时雨雪的差别被压没了 */}
+                    <WeatherIcon kind={h.kind} size={20} />
                   </span>
                   <span className="weather-hour-temp">{Math.round(h.temp)}°</span>
                   <span className="weather-hour-pop">{h.pop !== null && h.pop >= 20 ? `${h.pop}%` : ''}</span>
