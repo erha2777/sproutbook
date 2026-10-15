@@ -79,6 +79,41 @@ if (wantPack) {
     process.exit(1)
   }
   step('打包', [join(root, 'scripts', 'tool.mjs'), 'electron-builder', '--win', '--publish', 'never'])
+
+  /*
+   * **打包之后必须验产物。**
+   *
+   * electron-builder 会因为文件锁**悄悄少拷文件**，然后照样退出 0。
+   * 用户拿到的是一个启动就崩的程序：
+   *
+   *   ERROR:base\i18n\icu_util.cc:232] Invalid file descriptor to ICU data received.
+   *   退出码 -2147483645 (0x80000003)
+   *
+   * 而这条命令当时报的是「✓ 全部通过」—— **又一次假绿**。
+   * 缺的是 Electron 自己的运行时（ICU 数据、pak、DLL），不是我们的代码，
+   * 所以任何代码层面的检查都发现不了它。
+   */
+  const critical = [
+    'icudtl.dat',
+    'resources.pak',
+    'chrome_100_percent.pak',
+    'chrome_200_percent.pak',
+    'v8_context_snapshot.bin',
+    'ffmpeg.dll',
+    'libEGL.dll',
+    'libGLESv2.dll',
+    'resources/app.asar'
+  ]
+  const unpacked = join(root, 'release', 'win-unpacked')
+  const missing = critical.filter((f) => !existsSync(join(unpacked, f)))
+  if (missing.length > 0) {
+    console.error(`\n✗ 打包产物不完整，缺 ${missing.length} 个关键文件：`)
+    for (const f of missing) console.error('    ' + f)
+    console.error('  这样的包**启动就会崩**（Invalid file descriptor to ICU data）。')
+    console.error('  多半是上一次的 Electron 进程还占着文件。关掉应用，重跑这条命令。')
+    process.exit(1)
+  }
+  process.stdout.write(`\n▸ 产物检查：${critical.length} 个关键文件都在\n`)
 }
 
 process.stdout.write('\n✓ 全部通过\n')
