@@ -812,6 +812,29 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
     }
   }
 
+  /**
+   * 删除一条养护日志。
+   *
+   * 日志删了就没了（不像任务还能重新生成），所以**要确认**。
+   * 完成后自动写入的日志同样可删 —— 误操作留下的记录也在这里清。
+   */
+  const removeLog = async (log: CareLog): Promise<void> => {
+    const what = log.content ? `「${log.content}」` : `这条${log.logDate}的记录`
+    if (!window.confirm(`确定删除养护日志 ${what} 吗？删除后无法恢复。`)) return
+    try {
+      const ok = await window.api.care.removeLog(log.id)
+      if (!ok) {
+        // 影响 0 行 = 这条已经不在了，如实说，不报「已删除」
+        toast.push('这条日志已经不在了，可能已在别处删过', 'error')
+      } else {
+        toast.push('已删除', 'success')
+      }
+      await reload()
+    } catch (error) {
+      toast.push(`删除失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    }
+  }
+
   const removeTask = async (task: CareTaskListItem): Promise<void> => {
     if (!window.confirm(`确定删除任务「${task.title}」吗？`)) return
     try {
@@ -1297,6 +1320,16 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
                         {plant ? <span className="small muted">{plant.label}</span> : null}
                       </div>
                       {log.content ? <div className="small">{log.content}</div> : null}
+                    </div>
+                    {/*
+                      删除按钮：不用 ghost —— ghost 无背景无边框，
+                      在浅米色的日志行上「删除」两个字太淡了，看不见。
+                      外面包一层是为了让它垂直居中（.log-item 是 align-items:flex-start）
+                    */}
+                    <div style={{ alignSelf: 'center' }}>
+                      <Button size="small" title="删除这条日志（不可恢复）" onClick={() => void removeLog(log)}>
+                        删除
+                      </Button>
                     </div>
                   </div>
                 )
