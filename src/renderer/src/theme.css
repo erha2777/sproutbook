@@ -189,9 +189,13 @@ img {
 }
 
 .pixel-btn:disabled {
-  opacity: 0.5;
+  /*
+   * 0.5 配灰度滤镜太淡了 —— 像「已是今天」这种**禁用态本身就是答案**的按钮，
+   * 用户需要看清上面写的是什么。放宽一点，但仍然一眼能看出不可点。
+   */
+  opacity: 0.62;
   cursor: not-allowed;
-  filter: grayscale(0.5);
+  filter: grayscale(0.4);
 }
 
 .pixel-btn.primary {
