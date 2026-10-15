@@ -39,6 +39,36 @@ export const CARE_ACTION_OPTIONS = (Object.keys(CARE_ACTION_LABELS) as CareActio
   label: `${CARE_ACTION_ICONS[value]} ${CARE_ACTION_LABELS[value]}`
 }))
 
+/**
+ * 养护日志的 kind → 中文标签。
+ *
+ * 为什么要单独一张表：`CareLog.kind` 是 `string`，比 `CareActionType` **宽** ——
+ * 后端 `addCareLog` 在没给 kind 时写的是 `'note'`，而 `'note'` 根本不在
+ * `CARE_ACTION_LABELS` 里。原来的代码是
+ * `CARE_ACTION_LABELS[kind] ?? kind`，于是**把英文键名 note 直接显示给了用户**
+ * （用户截图里那两个字就是这么来的）。
+ *
+ * 另一条兜底：认不出的 kind 显示「记录」而不是把原始值亮出来 ——
+ * 那对用户没有任何意义。
+ */
+const LOG_KIND_ICONS: Record<string, string> = {
+  ...CARE_ACTION_ICONS,
+  note: '📝',
+  phase: '🌿'
+}
+
+export const CARE_LOG_KIND_LABELS: Record<string, string> = {
+  ...CARE_ACTION_LABELS,
+  note: '记录',
+  phase: '阶段标记'
+}
+
+/** 日志 kind → 「📝 记录」。认不出的一律落到「记录」。 */
+export function logKindLabel(kind: string): string {
+  const icon = LOG_KIND_ICONS[kind] ?? '📝'
+  return `${icon} ${CARE_LOG_KIND_LABELS[kind] ?? '记录'}`
+}
+
 /** 通用规则的 key：所有植物都适用。 */
 export const UNIVERSAL_SPECIES_KEY = '*'
 

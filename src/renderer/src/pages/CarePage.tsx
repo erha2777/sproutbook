@@ -19,6 +19,7 @@ import {
   CARE_ACTION_OPTIONS,
   CARE_URGENCY_LABELS,
   dueDescription,
+  logKindLabel,
   summarizeTasks,
   todayIso,
   urgencyOf
@@ -490,6 +491,8 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
   /** 手动记一笔：选了哪株、写了什么 */
   const [logPlantId, setLogPlantId] = useState('')
   const [logDraft, setLogDraft] = useState('')
+  /** 手动记一笔时的类型。原来固定落成 'note'，用户没得选 —— 也就带不上标签 */
+  const [logKind, setLogKind] = useState('note')
   const [plants, setPlants] = useState<PlantOption[]>([])
   const [speciesNames, setSpeciesNames] = useState<string[]>([])
   /** 任务上要显示绑定的配方，所以把配方与材料一起取回来（都是几十条量级） */
@@ -604,7 +607,7 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
       return
     }
     try {
-      await window.api.care.addLog({ plantId, content })
+      await window.api.care.addLog({ plantId, content, kind: logKind })
       setLogDraft('')
       setLogs(await window.api.care.logs(logPlantId ? plantId : undefined, 100))
       toast.push('已记一笔', 'success')
@@ -612,6 +615,29 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
       toast.push(`记录失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }
   }
+
+  /**
+   * 切换植株时重新拉日志。
+   *
+   * 原来只有 `addManualLog` 里调 `setLogs` —— 也就是说**下拉框换了植株，
+   * 列表纹丝不动**，用户看到的就是「切换没用」。
+   * 加载逻辑收到这里，记完一笔也会自动跟着走。
+   */
+  useEffect(() => {
+    let alive = true
+    void window.api.care
+      .logs(logPlantId ? Number(logPlantId) : undefined, 100)
+      .then((rows) => {
+        if (alive) setLogs(rows)
+      })
+      .catch(() => {
+        // 日志取不到不该让整页报错，空列表 + 上面的加载失败提示已经够了
+        if (alive) setLogs([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [logPlantId])
 
   const createTaskFromRisk = async (risk: WeatherRiskItem): Promise<void> => {
     /*
@@ -1292,6 +1318,18 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
                 options={plants.map((pl) => ({ value: String(pl.id), label: pl.label }))}
               />
             </div>
+            <div style={{ width: 140 }}>
+              {/* 类型可选：手动记的也能带上「浇水 / 施肥 / 观察记录」这类标签 */}
+              <SelectInput
+                value={logKind}
+                onChange={setLogKind}
+                options={[
+                  ...CARE_ACTION_OPTIONS.map((o) => ({ value: String(o.value), label: o.label })),
+                  // 'note' 不是动作类型（CareActionType 里没有它），但它确实是日志的 kind
+                  { value: 'note', label: '📝 记录' }
+                ]}
+              />
+            </div>
             <div style={{ flex: 1 }}>
               <TextInput
                 value={logDraft}
@@ -1314,9 +1352,12 @@ export function CarePage({ onCareChanged }: { onCareChanged?: () => void }): Rea
                     <div className="log-date">{log.logDate}</div>
                     <div style={{ flex: 1 }}>
                       <div>
-                        <Badge tone="info">
-                          {log.kind === 'phase' ? '🌿 阶段' : (CARE_ACTION_LABELS[log.kind as 'water'] ?? log.kind)}
-                        </Badge>
+                        {/*
+                          走 logKindLabel 而不是 CARE_ACTION_LABELS[kind] ?? kind ——
+                          后者在遇到 'note'（后端没给 kind 时的默认值）时
+                          **会把英文键名直接显示出来**，用户截图里的 note 就是这么来的。
+                        */}
+                        <Badge tone="info">{logKindLabel(log.kind)}</Badge>
                         {plant ? <span className="small muted">{plant.label}</span> : null}
                       </div>
                       {log.content ? <div className="small">{log.content}</div> : null}
