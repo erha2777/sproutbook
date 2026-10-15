@@ -114,16 +114,17 @@ function WeatherPanel({
         **先摆原貌，再讲判断。**
       */}
       {result.places.map((place) => {
-        if (place.hours.length === 0) return null
+        const hours = place.hours ?? []
+        if (hours.length === 0) return null
         /*
          * 当前这一小时：取第一个不早于现在的；都早于现在就退回第一个。
          * 不做时区换算 —— 数据源已经按 timezone=auto 给了本地时间。
          */
         const nowKey = new Date().toISOString().slice(0, 13)
-        const at = place.hours.findIndex((h) => h.time.slice(0, 13) >= nowKey)
-        const cur = place.hours[at < 0 ? 0 : at]
+        const at = hours.findIndex((h) => h.time.slice(0, 13) >= nowKey)
+        const cur = hours[at < 0 ? 0 : at]
         const todayIso = cur.time.slice(0, 10)
-        const today = place.days.find((d) => d.date === todayIso)
+        const today = (place.days ?? []).find((d) => d.date === todayIso)
 
         return (
           <div className="weather-today" key={`today-${place.name}-${place.latitude}`}>
@@ -146,7 +147,7 @@ function WeatherPanel({
 
             {/* 未来 24 小时。横排放不下就横向滚动，不折行 */}
             <div className="weather-hours">
-              {place.hours.slice(0, 24).map((h) => (
+              {hours.slice(0, 24).map((h) => (
                 <div className="weather-hour" key={h.time}>
                   <span className="weather-hour-time">{h.time.slice(11, 16)}</span>
                   <span className="weather-hour-icon">
@@ -181,7 +182,7 @@ function WeatherPanel({
              * 温度条的刻度要**跨所有天共用**，否则每天的条一样长，
              * 看不出哪天更冷 —— 那就白画了。
              */
-            const all = place.days.flatMap((d) => [d.tempMin, d.tempMax])
+            const all = (place.days ?? []).flatMap((d) => [d.tempMin, d.tempMax])
             const lo = Math.min(...all)
             const hi = Math.max(...all)
             const span = hi - lo || 1
@@ -194,7 +195,7 @@ function WeatherPanel({
                   {place.provider === 'qweather' ? ' · 和风天气' : ' · Open-Meteo'}
                 </div>
                 <div className="weather-day-list">
-                  {place.days.map((d) => {
+                  {(place.days ?? []).map((d) => {
                     // 这一天的风险（可能不止一株）
                     const hits = result.risks.filter((r) => r.date === d.date)
                     return (
