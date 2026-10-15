@@ -18,7 +18,8 @@
 
 import type { Db } from '../db/connection'
 import { getSetting, setSetting } from '../db/repo/misc'
-import type { DailyTemp } from '../../core/weather'
+import { wmoToKind, qweatherIconToKind } from '../../core/weather'
+import type { DailyTemp, HourlyWeather } from '../../core/weather'
 
 export type WeatherProviderId = 'open-meteo' | 'qweather'
 
@@ -189,6 +190,48 @@ async function fetchJsonDetailed<T>(url: string): Promise<FetchOutcome<T>> {
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** 和风的逐时数组 → HourlyWeather[]。 */
+function parseQWeatherHours(h?: QWeatherHourly[]): HourlyWeather[] {
+  const out: HourlyWeather[] = []
+  for (const x of h ?? []) {
+    const temp = Number(x.temp)
+    // 缺项跳过，不用 0 顶替 —— 那会凭空造出一小时的 0℃
+    if (!x.fxTime || !Number.isFinite(temp)) continue
+    const pop = Number(x.pop)
+    out.push({
+      // 和风给的是 '2026-10-15T14:00+08:00'，截到分钟就够显示
+      time: x.fxTime.slice(0, 16),
+      temp,
+      kind: qweatherIconToKind(Number(x.icon)),
+      pop: Number.isFinite(pop) ? pop : null
+    })
+  }
+  return out
+}
+
+/** Open-Meteo 的逐时数组 → HourlyWeather[]。缺项跳过，不用 0 顶替。 */
+function parseOpenMeteoHours(h?: {
+  time?: string[]
+  temperature_2m?: number[]
+  weathercode?: number[]
+  precipitation_probability?: number[]
+}): HourlyWeather[] {
+  const t = h?.time ?? []
+  const out: HourlyWeather[] = []
+  for (let i = 0; i < t.length; i++) {
+    const temp = h?.temperature_2m?.[i]
+    if (!t[i] || typeof temp !== 'number') continue
+    const pop = h?.precipitation_probability?.[i]
+    out.push({
+      time: t[i],
+      temp,
+      kind: wmoToKind(h?.weathercode?.[i]),
+      pop: typeof pop === 'number' ? pop : null
+    })
+  }
+  return out
 }
 
 async function fetchJson<T>(url: string): Promise<T | null> {
@@ -437,6 +480,14 @@ export async function lookupLocation(
 // 取预报
 // ---------------------------------------------------------------------------
 
+interface QWeatherHourly {
+  fxTime?: string
+  temp?: string
+  icon?: string
+  text?: string
+  pop?: string
+}
+
 interface QWeatherDaily {
   fxDate?: string
   tempMax?: string
@@ -461,8 +512,28 @@ interface QWeatherDaily {
  *
  * **配置里选了什么，和这次实际用了什么，是两件事。**
  */
+/**
+ * 逐时天气。
+ *
+ * ## 为什么要它
+ *
+ * 「今天要不要浇水 / 要不要搬进屋」看的是**接下来这几小时**，
+ * 不是后天的日最高温。原来只取逐日的 min/max，于是面板上只有一个
+ * 悬在半空的「超出 1℃」，用户根本不知道今天什么天气。
+ *
+ * ## 两个源的字段不一样，这里统一
+ *
+ *   Open-Meteo  weathercode（WMO 编码）+ precipitation_probability
+ *   和风        icon（它自己的图标号）+ text（中文描述）+ pop
+ *
+ * WMO 编码和和风的图标号是**两套**，所以这里只存一个中性的
+ * `kind`，由 core 层映射成图标 —— 免得界面里到处判断是哪个源。
+ */
+
 export interface DailyFetch {
   days: DailyTemp[]
+  /** 未来 24 小时（含当前所在的这一小时）。取不到时是空数组 */
+  hours: HourlyWeather[]
   /** 这次**实际**用的数据源，不是配置里的那个 */
   provider: WeatherProviderId
   /** 和风被跳过的原因。实际用了和风时为 null */
@@ -523,7 +594,22 @@ export async function fetchDaily(
         if (!d.fxDate || !Number.isFinite(min) || !Number.isFinite(max)) continue
         out.push({ date: d.fxDate, tempMin: min, tempMax: max })
       }
-      if (out.length > 0) return { days: out, provider: 'qweather', fallbackReason: null }
+      if (out.length > 0) {
+        /*
+         * 逐时是**另一个端点**，比逐日多一次请求。
+         * 取不到就退化成空数组 —— 逐日是主功能，逐时是锦上添花，
+         * 不能因为它失败就让整个预报没了。
+         */
+        const h = await fetchJson<{ code?: string; hourly?: QWeatherHourly[] }>(
+          `https://${config.qweatherHost}/v7/weather/24h?location=${encodeURIComponent(geo.locationId)}&key=${encodeURIComponent(config.qweatherKey ?? '')}`
+        )
+        return {
+          days: out,
+          hours: h?.code === '200' ? parseQWeatherHours(h.hourly) : [],
+          provider: 'qweather',
+          fallbackReason: null
+        }
+      }
     }
     /*
      * 和风失败了就往下走 Open-Meteo，别让用户这次什么都看不到。
@@ -536,9 +622,16 @@ export async function fetchDaily(
 
   const data = await fetchJson<{
     daily?: { time?: string[]; temperature_2m_min?: number[]; temperature_2m_max?: number[] }
+    hourly?: { time?: string[]; temperature_2m?: number[]; weathercode?: number[]; precipitation_probability?: number[] }
   }>(
     `https://api.open-meteo.com/v1/forecast?latitude=${geo.latitude}&longitude=${geo.longitude}` +
-      `&daily=temperature_2m_min,temperature_2m_max&forecast_days=${days}&timezone=auto`
+      `&daily=temperature_2m_min,temperature_2m_max&forecast_days=${days}` +
+      /*
+       * 逐时和逐日放在**同一个请求**里 —— 只是多带两个参数，
+       * 不额外消耗调用次数。额度是按请求算的。
+       */
+      `&hourly=temperature_2m,weathercode,precipitation_probability` +
+      `&timezone=auto`
   )
   const time = data?.daily?.time ?? []
   const mins = data?.daily?.temperature_2m_min ?? []
@@ -550,5 +643,7 @@ export async function fetchDaily(
     if (typeof tempMin !== 'number' || typeof tempMax !== 'number') continue
     out.push({ date: time[i], tempMin, tempMax })
   }
-  return out.length > 0 ? { days: out, provider: 'open-meteo', fallbackReason } : null
+  return out.length > 0
+    ? { days: out, hours: parseOpenMeteoHours(data?.hourly), provider: 'open-meteo', fallbackReason }
+    : null
 }

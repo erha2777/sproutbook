@@ -13,6 +13,28 @@
 export type WeatherRiskKind = 'frost' | 'heat'
 
 /** 预报里的一天。只留判断需要的两个温度。 */
+/** 中性的天气类型。两个数据源各自的编码在边界上翻译成它。 */
+export type WeatherKind = 'clear' | 'cloudy' | 'overcast' | 'rain' | 'snow' | 'storm' | 'fog'
+
+/**
+ * 逐时天气。
+ *
+ * 「今天要不要浇水 / 要不要搬进屋」看的是**接下来这几小时**，
+ * 不是后天的日最高温。
+ *
+ * WMO 编码（Open-Meteo）和和风图标号是**两套**体系，所以这里只存
+ * 中性的 kind，由 wmoToKind / qweatherIconToKind 在边界上翻译 ——
+ * 界面就不必到处判断「这条是哪个源给的」。
+ */
+export interface HourlyWeather {
+  /** ISO 本地时间，例如 2026-10-15T14:00 */
+  time: string
+  temp: number
+  kind: WeatherKind | null
+  /** 降水概率 0~100。源没给就是 null */
+  pop: number | null
+}
+
 export interface DailyTemp {
   /** YYYY-MM-DD */
   date: string
@@ -74,6 +96,65 @@ export const FROST_PROTECTED_BONUS = 5
 
 /** 能加温的位置同理，但加温通常只在极端天气开，所以给得少一些。 */
 export const CAN_HEAT_BONUS = 3
+
+/**
+ * WMO 天气编码 → 中性的天气类型。
+ *
+ * Open-Meteo 返回的是 WMO 编码（0=晴、3=阴、61=小雨、95=雷暴…），
+ * 和风返回的是它自己的图标号 —— 两套完全不同的体系。
+ *
+ * **在这里翻译成一套中性的**，界面就只管按 kind 画图标，
+ * 不用到处判断「这条数据是哪个源给的」。这正是上一轮
+ * providerLabel 谎报的同一个教训：**来源的差异要在边界上收口**。
+ */
+export function wmoToKind(code: number | null | undefined): WeatherKind | null {
+  if (code === null || code === undefined || !Number.isFinite(code)) return null
+  if (code === 0) return 'clear'
+  if (code <= 2) return 'cloudy'
+  if (code === 3) return 'overcast'
+  if (code === 45 || code === 48) return 'fog'
+  if (code >= 51 && code <= 57) return 'rain' // 毛毛雨/冻雨
+  if (code >= 61 && code <= 67) return 'rain' // 雨
+  if (code >= 71 && code <= 77) return 'snow'
+  if (code >= 80 && code <= 82) return 'rain' // 阵雨
+  if (code >= 85 && code <= 86) return 'snow' // 阵雪
+  if (code >= 95) return 'storm'
+  return null
+}
+
+/** 和风的图标号 → 中性的天气类型。分档依据和风图标表的区段。 */
+export function qweatherIconToKind(icon: number | null | undefined): WeatherKind | null {
+  if (icon === null || icon === undefined || !Number.isFinite(icon)) return null
+  if (icon === 100) return 'clear'
+  if (icon === 101 || icon === 102 || icon === 103) return 'cloudy'
+  if (icon === 104) return 'overcast'
+  if (icon >= 300 && icon <= 399) return 'rain' // 各类雨
+  if (icon >= 400 && icon <= 499) return 'snow'
+  if (icon >= 500 && icon <= 515) return 'fog' // 雾霾
+  if (icon >= 900) return 'clear' // 晴热/寒冷，归到最接近的
+  return null
+}
+
+/** 界面用的图标。放 core 是为了让自检能覆盖它（界面层测不到）。 */
+export const WEATHER_KIND_ICONS: Record<WeatherKind, string> = {
+  clear: '☀',
+  cloudy: '⛅',
+  overcast: '☁',
+  rain: '🌧',
+  snow: '🌨',
+  storm: '⛈',
+  fog: '🌫'
+}
+
+export const WEATHER_KIND_LABELS: Record<WeatherKind, string> = {
+  clear: '晴',
+  cloudy: '多云',
+  overcast: '阴',
+  rain: '雨',
+  snow: '雪',
+  storm: '雷雨',
+  fog: '雾'
+}
 
 export function severityOf(margin: number): RiskSeverity {
   if (margin <= 2) return 'watch'
