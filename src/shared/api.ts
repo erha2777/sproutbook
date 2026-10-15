@@ -468,8 +468,17 @@ export interface WeatherPlace {
    * kind 是**中性的天气类型** —— 两个数据源的编码（WMO / 和风图标号）
    * 已经在主进程那边翻译过了，界面只管按它画图标。
    */
-  hours: Array<{ time: string; temp: number; kind: string | null; pop: number | null }>
+  hours: Array<{ time: string; temp: number; kind: WeatherKind | null; pop: number | null }>
 }
+
+/**
+ * 中性的天气类型。
+ *
+ * **用联合而不是 string** —— 界面和 core 里的 adviseToday 都要它，
+ * 写成 string 的话每次跨边界都得 cast 一次，而 cast 会把拼写错误放过去
+ *（`'rain'` 写成 `'rian'` 编译器不会吭声）。
+ */
+export type WeatherKind = 'clear' | 'cloudy' | 'overcast' | 'rain' | 'snow' | 'storm' | 'fog'
 
 export interface WeatherRiskItem {
   kind: 'frost' | 'heat'
