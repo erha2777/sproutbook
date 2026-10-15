@@ -33,6 +33,14 @@ export interface HourlyWeather {
   kind: WeatherKind | null
   /** 降水概率 0~100。源没给就是 null */
   pop: number | null
+  /**
+   * 数据源给的**原始**天气码（WMO 编码或和风图标号）。
+   *
+   * 存下来是为了**能查**。今天有一次界面显示「天气未知」，
+   * 而我手里只有映射后的 kind=null，**根本不知道源给的是什么号**，
+   * 只能猜 —— 猜错了两次。存下原值就不用猜了。
+   */
+  raw?: number | null
 }
 
 export interface DailyTemp {

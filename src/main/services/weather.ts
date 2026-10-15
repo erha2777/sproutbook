@@ -43,6 +43,23 @@ import type { DailyTemp, HourlyWeather, WeatherRisk, WeatherRiskInput } from '..
 /** 强制刷新（用户点「重新获取」）的最小间隔。防止连点烧掉免费额度。 */
 const FORCE_COOLDOWN_MS = 60 * 1000
 
+/**
+ * **解析逻辑的版本号。**
+ *
+ * 缓存里存的是「原始响应 → 我们要的形状」**算过之后**的结果，不是原始数据。
+ * 所以只要翻译规则变了（比如给和风的夜间图标 150–153 补上映射），
+ * 缓存里那些旧结果就是**用旧规则算出来的**，继续用就会显示成「天气未知」。
+ *
+ * 改翻译规则时把它加一，旧缓存自然被判为过期。
+ *
+ * 这件事今天咬了两次：
+ *   1. 加 hours 字段 —— 老缓存没有它，界面 undefined.length 直接崩
+ *   2. 补夜间图标 —— 老缓存里那几个小时仍然是旧规则算出的 null
+ * **第二次没有崩，所以更隐蔽**：界面只是显示「天气未知」，
+ * 用户会以为功能没做，而不是以为缓存旧了。
+ */
+const PARSE_VERSION = 2
+
 /** 缓存多久。预报一天更新几次就够，没必要每次开页面都请求。 */
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000
 
@@ -58,6 +75,8 @@ export interface GeoPoint {
 export interface ForecastResult {
   point: GeoPoint
   days: DailyTemp[]
+  /** 解析逻辑的版本。对不上就当过期重取 */
+  parseVersion?: number
   /** 未来 24 小时 */
   hours: HourlyWeather[]
   /**
@@ -101,10 +120,12 @@ export async function getForecast(
    * 逐时是后加的字段，之前写进去的缓存条目没有它。新界面读 place.hours.length
    * 会直接崩（Cannot read properties of undefined）—— 真崩过一次。
    *
-   * 所以把「缺 hours」当作过期：重新取一次，顺便把逐时补上。
+   * 所以把「缺 hours」和「解析版本对不上」都当作过期：重新取一次。
+   * 缓存里存的是算过的值，翻译规则一变它们就失效了。
    * 但**取不到就退回老数据** —— 至少还有逐日，别让用户什么都看不到。
    */
-  const staleShape = hit !== undefined && !Array.isArray(hit.hours)
+  const staleShape =
+    hit !== undefined && (!Array.isArray(hit.hours) || hit.parseVersion !== PARSE_VERSION)
   if (hit && sameSource && !staleShape) {
     const age = Date.now() - hit.at
     /*
@@ -130,6 +151,7 @@ export async function getForecast(
     point: { latitude: point.latitude, longitude: point.longitude, label: point.label },
     days: fetched.days,
     hours: fetched.hours,
+    parseVersion: PARSE_VERSION,
     // 记的是**这次实际用的源**，不是配置里的那个 —— 换源时要如实说出来
     provider: fetched.provider,
     fallbackReason: fetched.fallbackReason,
