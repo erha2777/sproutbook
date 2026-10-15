@@ -162,6 +162,8 @@ export interface WeatherWarningResult {
     latitude: number
     longitude: number
     days: DailyTemp[]
+    /** 未来 24 小时。取不到时是空数组，界面据此决定要不要画那条横条 */
+    hours: HourlyWeather[]
     /** 精确到区县还是只到市 —— 界面上要如实说 */
     level: 'city' | 'district'
     provider: string
@@ -306,6 +308,8 @@ export async function assessPlantsWeather(
         latitude: point.latitude,
         longitude: point.longitude,
         days: forecast.days,
+        // 逐时。取不到时是空数组，界面据此决定要不要画那条横条
+        hours: forecast.hours,
         // 精度要摆在明面上：区县级和市级是两回事
         level: point.level,
         /*
@@ -381,6 +385,7 @@ export async function assessPlantsWeather(
       latitude: p.latitude,
       longitude: p.longitude,
       days: p.days,
+      hours: p.hours,
       level: p.level,
       provider: p.provider
     })),
