@@ -599,21 +599,36 @@ img {
 /* ---------- 植株阶段 ---------- */
 
 /*
- * 统计徽章：点一下筛出那批任务。
+ * 统计徽章：点一下打开那批任务的弹窗。
  *
  * 这几个原来只是 Badge —— 看着像能点（四个色块排在工具栏下面），
  * 实际点了没反应。用户的反馈就是「不能查看」。
+ *
+ * 样式**复用 .pixel-badge**（像素描边徽章 + 按 tone 分色），只加可点击的部分。
+ * 第一版我写错了类名（写成 `badge` + `tone-xxx`，而组件生成的是
+ * `pixel-badge` + `safety/ok/warn/muted`），结果四个按钮退回**浏览器默认样式**
+ * —— 白底灰框，用户一眼就看出来了。
  */
 .stat-filter {
-  cursor: pointer;
   font-family: inherit;
+  cursor: pointer;
+  transition: none;
+  /* 比只读徽章大一圈：它是要点的 */
+  font-size: 13px;
+  padding: 4px 11px;
 }
 .stat-filter:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.06);
 }
-/* 选中的那个压一圈深色边，一眼看出「正在看这一项」 */
+/*
+ * 「正在看这一项」的标识。
+ *
+ * 底色不在这里定 —— .pixel-badge.safety 之类的 tone 规则优先级更高，
+ * 在这里写 background 会被压掉。选中态的底色由组件用**内联样式**给
+ * （内联天然压过所有选择器），这里只负责形状上的区别。
+ */
 .stat-filter.on {
-  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
   font-weight: 700;
 }
 

@@ -113,6 +113,7 @@ const api: SproutbookApi = {
     skipTask: (id, reason) => call('care:task.skip', id, reason ?? null),
     reopenTask: (id) => call('care:task.reopen', id),
     removeTask: (id) => call('care:task.delete', id),
+    purgeTasks: (input) => call('care:tasks.purge', input),
 
     generate: (plantId, year) => call('care:generate', plantId, year),
     generateAll: (year) => call('care:generateAll', year),
