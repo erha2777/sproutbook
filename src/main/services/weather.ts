@@ -37,7 +37,7 @@ import {
   summarizeRisks,
   unjudgeable
 } from '../../core/weather'
-import type { DailyTemp, WeatherRisk, WeatherRiskInput } from '../../core/weather'
+import type { DailyTemp, HourlyWeather, WeatherRisk, WeatherRiskInput } from '../../core/weather'
 
 
 /** 强制刷新（用户点「重新获取」）的最小间隔。防止连点烧掉免费额度。 */
@@ -58,6 +58,8 @@ export interface GeoPoint {
 export interface ForecastResult {
   point: GeoPoint
   days: DailyTemp[]
+  /** 未来 24 小时 */
+  hours: HourlyWeather[]
   /**
    * 这份预报**实际**是谁给的。
    *
@@ -114,6 +116,7 @@ export async function getForecast(
     at: Date.now(),
     point: { latitude: point.latitude, longitude: point.longitude, label: point.label },
     days: fetched.days,
+    hours: fetched.hours,
     // 记的是**这次实际用的源**，不是配置里的那个 —— 换源时要如实说出来
     provider: fetched.provider,
     fallbackReason: fetched.fallbackReason,
