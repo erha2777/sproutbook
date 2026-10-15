@@ -149,6 +149,98 @@ export function qweatherIconToKind(icon: number | null | undefined): WeatherKind
   return null
 }
 
+// ---------------------------------------------------------------------------
+// 当天建议
+// ---------------------------------------------------------------------------
+
+export interface TodayAdvice {
+  /** 一句话结论，例如「今天有雨」 */
+  title: string
+  /** 该做什么。**只讲当天做得了的事** */
+  detail: string
+  tone: 'info' | 'warn'
+}
+
+/**
+ * 根据**当天**的天气给一条建议。
+ *
+ * ## 为什么和风险提示是两回事
+ *
+ * 风险提示算的是「这一株能不能扛住」—— 它天然指向未来某一天
+ *（「10-17 最高 31℃ 超出 1℃」）。而**今天该做什么**是另一件事：
+ * 今天有雨要不要收盆、今天大太阳要不要避开正午浇水。
+ *
+ * 前者是判断，后者是行动。原来的面板只有前者，于是用户看到一句
+ * 关于后天的结论，却不知道今天该干嘛。
+ *
+ * ## 只在天氣确实值得说的时候才说
+ *
+ * 什么都正常时返回 null —— **硬凑一句「今天天气不错」只是在占地方**。
+ * 这条规矩和识图那边一样：说不知道比编一句好。
+ */
+export function adviseToday(hours: HourlyWeather[], today: DailyTemp | null): TodayAdvice | null {
+  if (hours.length === 0 && !today) return null
+
+  // 今天有降水的小时数，以及最大降水概率
+  const wet = hours.filter((h) => h.kind === 'rain' || h.kind === 'storm' || h.kind === 'snow')
+  const maxPop = hours.reduce((m, h) => Math.max(m, h.pop ?? 0), 0)
+  const hasSnow = hours.some((h) => h.kind === 'snow')
+  const hasStorm = hours.some((h) => h.kind === 'storm')
+
+  if (hasSnow) {
+    return {
+      title: '今天有雪',
+      detail: '露养的先搬进屋或罩上；雪停后把盆面积雪扫掉，别让它化在盆里反复冻。',
+      tone: 'warn'
+    }
+  }
+  if (hasStorm) {
+    return {
+      title: '今天有雷雨',
+      detail: '把盆搬到避风处，别放在窗台边缘；雷雨前后别施肥，根吸不动。',
+      tone: 'warn'
+    }
+  }
+  if (wet.length >= 3 || maxPop >= 70) {
+    return {
+      title: '今天有雨',
+      detail: '露养的不必再浇；检查盆底别积水，托盘里的水倒掉。室内盆栽按原计划。',
+      tone: 'info'
+    }
+  }
+
+  // 温度极值。用 today（逐日）优先，没有就退回逐时
+  const tMax = today?.tempMax ?? hours.reduce((m, h) => Math.max(m, h.temp), -Infinity)
+  const tMin = today?.tempMin ?? hours.reduce((m, h) => Math.min(m, h.temp), Infinity)
+
+  if (Number.isFinite(tMax) && tMax >= 32) {
+    return {
+      title: `今天最高 ${Math.round(tMax)}°，偏热`,
+      detail: '避开正午浇水，改清晨或傍晚；正午别往叶面喷水，会烫伤。',
+      tone: 'warn'
+    }
+  }
+  if (Number.isFinite(tMin) && tMin <= 5) {
+    return {
+      title: `今天最低 ${Math.round(tMin)}°，偏冷`,
+      detail: '夜里把怕冷的搬进屋；降温前当天浇透一次水（湿土比干土保温）。',
+      tone: 'warn'
+    }
+  }
+
+  // 有雾：通风差，闷根风险
+  if (hours.some((h) => h.kind === 'fog')) {
+    return {
+      title: '今天有雾',
+      detail: '通风差，浇完水记得开窗；封闭阳台别浇透，容易闷根。',
+      tone: 'info'
+    }
+  }
+
+  // 什么都不特别 —— **不硬凑一句话**
+  return null
+}
+
 /** 界面用的图标。放 core 是为了让自检能覆盖它（界面层测不到）。 */
 export const WEATHER_KIND_ICONS: Record<WeatherKind, string> = {
   clear: '☀',

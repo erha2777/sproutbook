@@ -54,7 +54,7 @@ import {
   sizeScaleFor
 } from '../core/growth'
 import type { GrowthStage } from '../core/growth'
-import { WEATHER_KIND_ICONS, WEATHER_KIND_LABELS, qweatherIconToKind, wmoToKind, assessWeatherRisks, dedupeByKindAndDay, effectiveColdThreshold, severityOf, suggestTask, summarizeRisks, unjudgeable } from '../core/weather'
+import { adviseToday, WEATHER_KIND_ICONS, WEATHER_KIND_LABELS, qweatherIconToKind, wmoToKind, assessWeatherRisks, dedupeByKindAndDay, effectiveColdThreshold, severityOf, suggestTask, summarizeRisks, unjudgeable } from '../core/weather'
 import type { DailyTemp, WeatherRiskInput } from '../core/weather'
 import {
   CULTIVATION_BASE,
@@ -868,6 +868,39 @@ export async function runSmoke(outFile: string): Promise<number> {
             (k) => Boolean(WEATHER_KIND_ICONS[k]) && Boolean(WEATHER_KIND_LABELS[k])
           )
         )
+      }
+
+      // ---- 当天建议 ----
+      //
+      // 用户说「这个提示需要根据当天的天气」。风险提示算的是
+      // 「这株能不能扛住」（天然指向未来某一天），而**今天该做什么**是另一件事。
+      // 纯函数，脱机可测。
+      {
+        const h = (kind: string, pop: number | null, temp = 20): never =>
+          ({ time: '2026-10-15T14:00', temp, kind, pop }) as never
+        const day = (tempMin: number, tempMax: number): never => ({ date: '2026-10-15', tempMin, tempMax }) as never
+
+        const snow = adviseToday([h('snow', 80)], day(-2, 2))
+        check('下雪时给防雪建议', String(snow?.title).includes('雪'), String(snow?.title))
+        const storm = adviseToday([h('storm', 90)], day(20, 28))
+        check('雷雨时给避风建议', String(storm?.title).includes('雷雨'), String(storm?.title))
+        const rain = adviseToday([h('rain', 80), h('rain', 70), h('rain', 60)], day(18, 23))
+        check('连续有雨时提醒别浇', String(rain?.detail).includes('不必再浇'), String(rain?.detail))
+        const hot = adviseToday([h('clear', 0)], day(26, 34))
+        check('高温时提醒避开正午', String(hot?.title).includes('热'), String(hot?.title))
+        const cold = adviseToday([h('clear', 0)], day(3, 12))
+        check('低温时提醒搬进屋', String(cold?.title).includes('冷'), String(cold?.title))
+        const fog = adviseToday([h('fog', 10)], day(15, 20))
+        check('有雾时提醒通风', String(fog?.title).includes('雾'), String(fog?.title))
+
+        /*
+         * **什么都不特别时不硬凑一句话。**
+         * 硬凑一句「今天天气不错」只是在占地方 ——
+         * 这条规矩和识图那边一样：说不知道比编一句好。
+         */
+        const calm = adviseToday([h('cloudy', 5)], day(16, 24))
+        check('天气平稳时返回 null，不硬凑', calm === null, JSON.stringify(calm))
+        check('完全没有数据时也返回 null', adviseToday([], null) === null)
       }
 
       // ---- 日期工具（不引依赖，必须自己钉住）----
