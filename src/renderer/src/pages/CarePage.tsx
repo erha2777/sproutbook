@@ -7,11 +7,12 @@
  * 月份只用来筛选「这个月原本要做什么」。
  */
 
+import { WeatherIcon } from '../components/WeatherIcon'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareLog, CarePhase, CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareOverview, CareTaskListItem, PlantPhaseInfo, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
-import { adviseToday, WEATHER_KIND_ICONS, WEATHER_KIND_LABELS, suggestTask, SEVERITY_LABELS } from '@core/weather'
+import { adviseToday, WEATHER_KIND_LABELS, suggestTask, SEVERITY_LABELS } from '@core/weather'
 import {
   CARE_ACTION_ICONS,
   CARE_ACTION_LABELS,
@@ -154,7 +155,7 @@ function WeatherPanel({
           <div className="weather-today" key={`today-${place.name}-${place.latitude}`}>
             <div className="weather-today-main">
               <span className="weather-today-icon">
-                {cur.kind ? WEATHER_KIND_ICONS[cur.kind as keyof typeof WEATHER_KIND_ICONS] : '·'}
+                <WeatherIcon kind={cur.kind} size={34} />
               </span>
               <span className="weather-today-temp">{Math.round(cur.temp)}°</span>
               <div>
@@ -185,7 +186,7 @@ function WeatherPanel({
                 <div className="weather-hour" key={h.time}>
                   <span className="weather-hour-time">{h.time.slice(11, 16)}</span>
                   <span className="weather-hour-icon">
-                    {h.kind ? WEATHER_KIND_ICONS[h.kind as keyof typeof WEATHER_KIND_ICONS] : '·'}
+                    <WeatherIcon kind={h.kind} size={16} />
                   </span>
                   <span className="weather-hour-temp">{Math.round(h.temp)}°</span>
                   <span className="weather-hour-pop">{h.pop !== null && h.pop >= 20 ? `${h.pop}%` : ''}</span>
