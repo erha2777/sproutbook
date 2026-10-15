@@ -11,7 +11,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareLog, CarePhase, CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareOverview, CareTaskListItem, PlantPhaseInfo, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
-import { WEATHER_KIND_ICONS, WEATHER_KIND_LABELS, suggestTask, SEVERITY_LABELS } from '@core/weather'
+import { adviseToday, WEATHER_KIND_ICONS, WEATHER_KIND_LABELS, suggestTask, SEVERITY_LABELS } from '@core/weather'
 import {
   CARE_ACTION_ICONS,
   CARE_ACTION_LABELS,
@@ -81,6 +81,15 @@ function WeatherPanel({
   onRefresh: () => void
   onCreateTask: (risk: WeatherRiskItem) => void | Promise<void>
 }): ReactNode {
+  /*
+   * **hook 必须放在早退之前。**
+   *
+   * 下面几行是 `if (busy && !result) return ...` —— 在那之后再 useState
+   * 就是「条件 hook」，React 会直接报错。我第一版打算把它放在
+   * `const risks = ...` 旁边，那是个会崩的位置。
+   */
+  const [showFuture, setShowFuture] = useState(false)
+
   if (busy && !result) return <div className="small muted">正在查看天气…</div>
   if (!result) return <div className="small muted">暂时拿不到天气数据。</div>
 
@@ -98,7 +107,22 @@ function WeatherPanel({
   }
 
   const risks = result.risks
-  const nothing = risks.length === 0
+
+  /*
+   * **风险按当天 / 未来分组。**
+   *
+   * 面板聚焦当天，所以这里只留今天的提醒；未来几天的收进「未来天气」弹窗 ——
+   * 但**不藏起来**：按钮上会标明还有几条，否则用户会以为没有别的提醒了。
+   */
+  const todayIso = result.places[0]?.hours[0]?.time.slice(0, 10) ?? null
+  const todayRisks = todayIso ? risks.filter((r) => r.date === todayIso) : risks
+  const futureRisks = todayIso ? risks.filter((r) => r.date !== todayIso) : []
+
+  /**
+   * 当天建议。**只看今天，和温度阈值无关** ——
+   * 那是风险提示的事（「这株能不能扛住」），这条讲的是「今天该做什么」。
+   */
+  const advice = adviseToday(result.places[0]?.hours ?? [], result.places[0]?.days?.[0] ?? null)
 
   return (
     <div>
@@ -142,6 +166,16 @@ function WeatherPanel({
                   {place.label || place.name}
                   {today ? `　今天 ${Math.round(today.tempMin)}° ~ ${Math.round(today.tempMax)}°` : ''}
                 </div>
+                {/*
+                  当天建议。**这是行动，不是判断** ——
+                  风险提示算的是「这株能不能扛住」，天然指向未来某一天；
+                  而「今天要不要收盆、要不要避开正午浇水」是关于今天的。
+                */}
+                {advice ? (
+                  <div className={`weather-advice tone-${advice.tone}`}>
+                    <b>{advice.title}</b> —— {advice.detail}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -174,9 +208,52 @@ function WeatherPanel({
         两个不同的东西放在一起比，当然像对不上。
 
         所以先把原貌摆出来，再讲判断。
+
+        **未来天气挪进弹窗** —— 面板聚焦当天。
+        但按钮上标明还有几条提醒：**不能把未来的信息藏起来让人以为没有了。**
       */}
-      {result.places.length > 0 ? (
-        <div className="weather-days">
+      <div className="row tight" style={{ marginTop: 6 }}>
+        <Button size="small" onClick={() => setShowFuture(true)}>
+          未来天气{futureRisks.length > 0 ? `（另有 ${futureRisks.length} 条提醒）` : ''}
+        </Button>
+      </div>
+
+      {showFuture ? (
+        <Modal title="未来天气" onClose={() => setShowFuture(false)}>
+          <div className="content-inner">
+            {futureRisks.length > 0 ? (
+              <div className="weather-risks" style={{ marginBottom: 10 }}>
+                {futureRisks.map((r) => (
+                  <div key={`${r.kind}-${r.plantId}-${r.date}`} className={`weather-risk sev-${r.severity}`}>
+                    <div className="weather-risk-head">
+                      <span className={`weather-badge sev-${r.severity}`}>
+                        {r.kind === 'frost' ? '❄' : '☀'} {SEVERITY_LABELS[r.severity]}
+                      </span>
+                      <b>{r.plantName}</b>
+                      <span className="muted small">{r.date}</span>
+                      <span style={{ flex: 1 }} />
+                      {addedKeys.has(
+                        weatherTaskKey(r.plantId, r.date, `${r.kind === 'frost' ? '防冻' : '防暑'}：${r.plantName}`)
+                      ) ? (
+                        <span className="small muted">✓ 已在养护计划里</span>
+                      ) : (
+                        <Button size="small" onClick={() => void onCreateTask(r)}>
+                          加进养护计划
+                        </Button>
+                      )}
+                    </div>
+                    <div className="small">{r.message}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="small muted" style={{ marginBottom: 10 }}>
+                未来几天没有超出任何植株承受范围的天气。
+              </div>
+            )}
+
+            {result.places.length > 0 ? (
+              <div className="weather-days">
           {result.places.map((place) => {
             /*
              * 温度条的刻度要**跨所有天共用**，否则每天的条一样长，
@@ -228,16 +305,19 @@ function WeatherPanel({
             )
           })}
         </div>
+            ) : null}
+          </div>
+        </Modal>
       ) : null}
 
-      {nothing ? (
+      {todayRisks.length === 0 && futureRisks.length === 0 ? (
         <div className="small muted">
           未来几天{result.places.length > 0 ? `（${result.places.map((p) => p.label || p.name).join('、')}）` : ''}
           没有超出任何植株的承受范围。
         </div>
       ) : (
         <div className="weather-risks">
-          {risks.map((r) => {
+          {todayRisks.map((r) => {
             const added = addedKeys.has(
               weatherTaskKey(r.plantId, r.date, `${r.kind === 'frost' ? '防冻' : '防暑'}：${r.plantName}`)
             )
