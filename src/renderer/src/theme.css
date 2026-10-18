@@ -1071,11 +1071,8 @@ img {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  /*
-   * 窗口顶部有 28px 的透明拖拽带（fixed、盖在内容上方）。
-   * tab 是按钮，落在拖拽带里就点不动了，所以整体往下让开。
-   */
-  padding-top: 26px;
+  /* 顶部让位交给 .main（那里留了 38px），这里不再重复 */
+  padding-top: 0;
 }
 .care-tabs {
   display: flex;
@@ -1087,7 +1084,8 @@ img {
 .care-hub > .content {
   flex: 1;
   min-height: 0;
-  padding: 0;
+  /* 和其他页面一致：左右/下留边（顶部由 .content-inner 补） */
+  padding: 0 14px 14px;
 }
 .care-tab {
   padding: 7px 16px;
@@ -1280,31 +1278,11 @@ img {
 }
 .page-shell > .main {
   flex: 1;
-  min-height: 0;
   /*
-   * 顶部不留内边距：滚动区自己整体下移 28px（见 .content），
-   * 这样内容永远不会滑到窗口顶部那条透明拖拽带下面。
+   * 顶部留 38px：窗口顶部有 28px 的透明拖拽带（fixed、盖在内容上），
+   * 内容整体往下让开，工具条钉住时也不会落进拖拽带里点不动。
    */
-  padding: 0 14px 14px;
-}
-
-/*
- * 页面顶部工具条：滚动时钉在顶部。
- * 因为 .content 从 y=28 才开始，钉住的位置不会落到拖拽带里，
- * 按钮和输入框都点得到。
- */
-.sticky-head {
-  position: sticky;
-  top: 0;
-  z-index: 4;
-}
-/* 负边距 + 内边距：铺满整宽，内容仍对齐 */
-.content > .content-inner > .sticky-head {
-  margin: 0 -14px;
-  padding-left: 14px;
-  padding-right: 14px;
-  border-left-width: 0;
-  border-right-width: 0;
+  padding: 38px 14px 14px;
 }
 
 .main {
@@ -1331,14 +1309,26 @@ img {
 .content {
   flex: 1;
   min-height: 0;
-  /*
-   * 滚动交给里面的 .content-inner：
-   * 这样工具条（.sticky-head）钉住时，滚动内容会被内层容器裁掉，
-   * 不会从窗口顶部那 28px 拖拽带里漏出来。
-   */
-  overflow: hidden;
-  padding: 14px;
-  margin-top: 28px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* 不给上内边距：滚动区起点就是裁剪边缘，内容不会从工具条上方漏出 */
+  padding: 0 14px 14px;
+}
+
+/*
+ * 页面顶部工具条：滚动时钉住。
+ * .content 从 y=38 开始，滚动内容被它裁掉，不会从顶部漏出来。
+ */
+.sticky-head {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+/* 铺满整宽，内容仍对齐 */
+.content > .content-inner > .sticky-head {
+  margin: 0 -14px;
+  padding-left: 14px;
+  padding-right: 14px;
 }
 
 .content-inner {
@@ -1347,15 +1337,9 @@ img {
   gap: 14px;
 }
 
-/*
- * 只有**页面级**的 .content-inner 才当滚动容器（直接挂在 .content 下）。
- * 弹窗里的 .content-inner 不能滚，否则弹窗内部会出现第二根滚动条。
- */
+/* 页面级内容补回被 .content 去掉的上内边距（随内容一起滚走） */
 .content > .content-inner {
-  height: 100%;
-  /* 纵向滚；横向永远不需要（全宽工具条用了负边距） */
-  overflow-y: auto;
-  overflow-x: hidden;
+  padding-top: 14px;
 }
 
 /*
