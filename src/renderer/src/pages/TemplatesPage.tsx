@@ -202,6 +202,32 @@ export function TemplatesPage(): ReactNode {
                   </tr>
                 )
               })}
+              {/*
+                图片不是「字段」：它存在独立的 images 表里，文件放本机用户目录，
+                两个编辑器的底部都有图片区（植株还能选封面）。
+                但用户在信息模板页找不到它，会以为「没有图片」——
+                所以这里补一行系统内置项，把「在哪管」说清楚。
+              */}
+              <tr style={{ background: 'rgba(0, 0, 0, 0.03)' }}>
+                <td className="small muted">—</td>
+                <td>
+                  <div className="row tight">
+                    <b>图片</b>
+                    <Badge tone="muted">系统内置</Badge>
+                  </div>
+                  <div className="small muted mono">images</div>
+                  <div className="small muted">
+                    {owner === 'plant'
+                      ? '不占字段位：植株编辑器的底部有「图片」区，可以加多张、点一张设为封面。'
+                      : '不占字段位：物种编辑器的底部有「图片」区，可以放花、叶、整株的参考照。'}
+                    照片存文件，数据库只记文件名。
+                  </div>
+                </td>
+                <td className="small">图片</td>
+                <td className="small">—</td>
+                <td className="small muted">—</td>
+                <td className="small muted">在编辑器里管理</td>
+              </tr>
             </tbody>
           </table>
         )}
