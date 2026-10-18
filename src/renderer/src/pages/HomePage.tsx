@@ -54,7 +54,7 @@ export function HomePage({
           return x - Math.floor(x)
         }
         const variant = ['a', 'b', 'c', 'd'][index % 4]
-        const zoom = 1.26 + rand(1) * 0.14
+        const zoom = 1.12 + rand(1) * 0.08
         const duration = 34 + rand(2) * 12 // 34~46s 巡一遍
         const delay = -rand(3) * 20
         return {

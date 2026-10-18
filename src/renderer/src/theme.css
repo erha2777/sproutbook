@@ -3106,8 +3106,8 @@ html.tex-cloud .cloud {
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
-  /* 压暗一点，保证木牌和按钮的可读性 */
-  background: rgba(8, 26, 48, 0.18);
+  /* 只压一点点，别把画面洗灰 */
+  background: rgba(8, 26, 48, 0.1);
 }
 
 /*
@@ -3119,7 +3119,9 @@ html.tex-cloud .cloud {
   inset: 0;
   background-size: cover;
   background-position: center;
-  image-rendering: pixelated;
+  /* 高分辨率截图是「缩小」显示，pixelated 只会加重锯齿；用平滑缩放更清楚 */
+  image-rendering: auto;
+  background-repeat: no-repeat;
   opacity: 0;
   transition: opacity 1.6s ease;
   animation-timing-function: ease-in-out;
@@ -3127,11 +3129,10 @@ html.tex-cloud .cloud {
   animation-direction: alternate;
   animation-fill-mode: both;
   will-change: transform;
-  filter: saturate(0.92) brightness(0.92);
 }
 .map-layer.on {
-  /* 压太狠会看不清截图本身，0.82 兼顾可读性 */
-  opacity: 0.82;
+  /* 截图本身要清楚：完全不透明，靠下面那层很淡的暗角保证可读性 */
+  opacity: 1;
 }
 
 @keyframes map-pan-a {
