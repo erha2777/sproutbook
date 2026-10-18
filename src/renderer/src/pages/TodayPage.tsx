@@ -326,6 +326,33 @@ export function TodayPage({
         </Panel>
       ) : (
         <>
+          {/*
+            天气预警放最上面（用户明确要求）：先看天，再决定今天做什么 ——
+            「今天要不要收盆、要不要避开正午浇水」本来也是行动的前提。
+          */}
+          <Panel>
+            <SectionTitle
+              right={
+                <span className="small muted">
+                  {weatherBusy
+                    ? '正在查看…'
+                    : weather?.fetchedAt
+                      ? `数据时间 ${new Date(weather.fetchedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                      : ''}
+                </span>
+              }
+            >
+              天气预警 <span className="small muted">（当天）</span>
+            </SectionTitle>
+            <WeatherPanel
+              result={weather}
+              addedKeys={addedKeys}
+              busy={weatherBusy}
+              onRefresh={() => void loadWeather(true)}
+              onCreateTask={createTaskFromRisk}
+            />
+          </Panel>
+
           <Panel>
             <SectionTitle
               right={
@@ -373,29 +400,6 @@ export function TodayPage({
                 ) : null}
               </>
             )}
-          </Panel>
-
-          <Panel>
-            <SectionTitle
-              right={
-                <span className="small muted">
-                  {weatherBusy
-                    ? '正在查看…'
-                    : weather?.fetchedAt
-                      ? `数据时间 ${new Date(weather.fetchedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
-                      : ''}
-                </span>
-              }
-            >
-              天气预警 <span className="small muted">（当天）</span>
-            </SectionTitle>
-            <WeatherPanel
-              result={weather}
-              addedKeys={addedKeys}
-              busy={weatherBusy}
-              onRefresh={() => void loadWeather(true)}
-              onCreateTask={createTaskFromRisk}
-            />
           </Panel>
 
           {doneToday.length > 0 ? (
