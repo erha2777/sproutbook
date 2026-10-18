@@ -46,9 +46,17 @@ jobs:
         run: pnpm build
 
       - name: 打包并发布到 Release
-        # electron-builder.yml 里 publish 为 null，这里显式指定GitHub 发布目标。
+        # electron-builder.yml 里 publish 为 null，这里显式指定 GitHub 发布目标。
         # CI 中 actions/checkout 已配置好 git remote，因此能解析出仓库地址。
-        run: pnpm exec electron-builder ${{ matrix.args }} --publish always -c.publish.provider=github
+        #
+        # ⚠️ 必须写**长选项** `--config.publish.provider=github`。
+        # 短选项 `-c.publish.provider=github` 在 Windows 上会被 electron-builder
+        # 当成「配置文件路径」，报：
+        #   ENOENT: no such file or directory, open '...\.publish.provider=github'
+        # 于是 Windows job 每次都在打包步骤 2 秒内退出 1（Linux/macOS 正常，
+        # 因为只有 Windows 的 argv 会走到那条解析分支）。这个问题在本地
+        # Windows 上 100% 复现，换成长选项后 `loaded configuration` 正常。
+        run: pnpm exec electron-builder ${{ matrix.args }} --publish always --config.publish.provider=github
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # 未配置签名证书时，macOS 不做公证；签名相关告警可忽略

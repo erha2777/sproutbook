@@ -2,6 +2,39 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.8.11] - 2026-10-18
+
+### 修复：Release 工作流的 Windows job 每次都失败（CI 配置问题，与应用无关）
+
+用户连着收到 GitHub Actions 的失败邮件：Release 里 ubuntu / macOS 成功，
+**windows-latest 每次都在「打包并发布到 Release」步骤 2 秒内退出 1**。
+
+#### 日志证据
+
+从 Actions API 拉到的 Windows job 日志：
+
+```
+##[group]Run pnpm exec electron-builder --win --publish always -c.publish.provider=github
+  • electron-builder  version=26.15.3 os=10.0.26100
+  ⨯ ENOENT: no such file or directory, open 'D:\a\...\sproutbook\.publish.provider=github'
+    at readConfig (...app-builder-lib/src/util/config/load.ts:19:16)
+```
+
+**`-c.publish.provider=github` 被当成了一个配置文件路径**，而不是「把
+`publish.provider` 覆盖成 `github`」。于是 Windows 上每次都在加载配置时
+就失败，连 `loaded configuration` 都没打印出来。
+
+Linux/macOS 上同样的写法却能正常解析（它们的日志里有
+`loaded configuration`），所以这个坑只有 Windows 会踩。
+
+#### 复现与修法
+
+- 本地 Windows 上用同样的参数跑 electron-builder，100% 复现同一条 ENOENT；
+  换成长选项 `--config.publish.provider=github` 后 `loaded configuration` 正常。
+- `release.yml` 里三处一并改成**长选项**，并写了注释说明为什么不能用短选项。
+
+应用代码没有任何变化，只是一个 CI 参数写法。
+
 ## [1.8.10] - 2026-10-18
 
 ### 时间窗改成「到期日 → 规则结束日」，不再 ±N
