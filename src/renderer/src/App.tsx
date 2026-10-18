@@ -1,6 +1,7 @@
 import { Component, useCallback, useEffect, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, Sign, ToastProvider, cx, useToast } from './components/ui'
+import { TitleBar } from './components/TitleBar'
 import { GardenPage } from './pages/GardenPage'
 import { SpeciesPage } from './pages/SpeciesPage'
 import { SpeciesEditor } from './pages/SpeciesEditor'
@@ -193,7 +194,10 @@ function Shell(): ReactNode {
   const activeNav: Route['name'] = route.name === 'species-edit' ? 'species' : route.name
 
   return (
-    <div className="app-shell">
+    <div className="app-frame">
+      {/* 无边框窗口的自制标题栏：拖动 + 最小化 / 最大化 / 关闭 */}
+      <TitleBar />
+      <div className="app-shell">
       <aside className="sidebar">
         <Panel className="nav">
           <div style={{ textAlign: 'center', padding: '4px 0 8px' }}>
@@ -330,6 +334,7 @@ function Shell(): ReactNode {
           </PageErrorBoundary>
         </div>
       </main>
+      </div>
     </div>
   )
 }

@@ -23,6 +23,11 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
 }
 
 const api: SproutbookApi = {
+  win: {
+    minimize: () => call('window:minimize'),
+    toggleMaximize: () => call('window:toggleMaximize'),
+    close: () => call('window:close')
+  },
   app: {
     info: () => call('app:info'),
     paths: () => call('app:paths'),

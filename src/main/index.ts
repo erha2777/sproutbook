@@ -239,6 +239,12 @@ function createWindow(): void {
     backgroundColor: '#2a1c10',
     title: 'Sproutbook',
     autoHideMenuBar: true,
+    /*
+     * 无边框 + 自制标题栏（渲染层 TitleBar）。
+     * 原生标题栏是系统灰白样式，和像素风不搭；macOS 用 hiddenInset 保留
+     * 红绿灯按钮，Windows / Linux 完全自己画。
+     */
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : { frame: false }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

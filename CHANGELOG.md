@@ -2,6 +2,25 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.16.0] - 2026-10-18
+
+### 去掉系统默认标题栏，换成像素风自制标题栏
+
+用户截图指着窗口标题栏（`Sproutbook · 植物养护管理` + 系统的最小化/最大化/关闭）
+说：「这个默认的不要」。
+
+- 主进程改为**无边框窗口**（Windows / Linux `frame: false`；
+  macOS 用 `titleBarStyle: 'hiddenInset'` 保留红绿灯）
+- 渲染层新增 `TitleBar`：
+  - 左边 🌱 + Sproutbook，整条可拖动窗口（`-webkit-app-region: drag`）
+  - 双击标题栏 = 最大化 / 还原
+  - 右角三个像素风按钮：最小化 / 最大化 / 关闭（`no-drag`，否则点不到）
+  - 关闭按钮 hover 变红
+- 新增 IPC `window:minimize` / `window:toggleMaximize` / `window:close`，
+  API 是 `window.api.win.*`；`handle` 不转发事件对象，所以取当前聚焦窗口
+- 布局：`.app-frame` 竖向排列 `TitleBar` + 原 `.app-shell`，内容区自适应
+- 实测：点 ▢ 后窗口从 1360×880 变 2560×1392，布局跟着铺满
+
 ## [1.15.2] - 2026-10-18
 
 ### 「无毒」时隐藏其余毒性字段（老库补条件）

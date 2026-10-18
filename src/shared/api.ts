@@ -117,6 +117,12 @@ export interface AiRunRow {
 }
 
 export interface SproutbookApi {
+  /** 无边框窗口：自定义标题栏的按钮（最小化 / 最大化 / 关闭） */
+  win: {
+    minimize(): Promise<boolean>
+    toggleMaximize(): Promise<boolean>
+    close(): Promise<boolean>
+  }
   app: {
     info(): Promise<AppInfo>
     paths(): Promise<AppPaths>

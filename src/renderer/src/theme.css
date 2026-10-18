@@ -942,6 +942,69 @@ img {
   padding: 14px;
 }
 
+/* 无边框窗口：自制标题栏 + 下面撑满的内容 */
+.app-frame {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.app-frame > .app-shell {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  flex-shrink: 0;
+  padding: 0 6px 0 12px;
+  background: var(--wood-panel-dark);
+  border-bottom: 3px solid var(--wood-outline);
+  /* 整条可拖动窗口；按钮区单独 no-drag */
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.titlebar-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+.titlebar-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--ink);
+}
+.titlebar-buttons {
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+.titlebar-btn {
+  width: 36px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  font-size: 12px;
+  color: var(--ink);
+  border: 2px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+  cursor: pointer;
+}
+.titlebar-btn:hover {
+  background: #fff0cf;
+}
+.titlebar-btn.close:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;

@@ -8,7 +8,7 @@
  *  - 所有输入都在主进程重新校验：渲染进程的输入一律视为不可信
  */
 
-import { app, dialog, ipcMain, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
 import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
@@ -240,6 +240,32 @@ function registerAppIpc(): void {
     db: dbFilePath(),
     encryptionAvailable: isEncryptionAvailable()
   }))
+
+  /*
+   * 无边框窗口的按钮。
+   *
+   * `frame: false` 之后原生标题栏没了，最小化/最大化/关闭只能由渲染层
+   * 通过这里调。点按钮必然先激活那个窗口，所以取「当前聚焦窗口」是对的；
+   * `handle` 不转发事件对象，拿不到 sender。
+   */
+  const focusedWindow = (): BrowserWindow | null =>
+    BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+
+  handle('window:minimize', () => {
+    focusedWindow()?.minimize()
+    return true
+  })
+  handle('window:toggleMaximize', () => {
+    const win = focusedWindow()
+    if (!win) return false
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+    return win.isMaximized()
+  })
+  handle('window:close', () => {
+    focusedWindow()?.close()
+    return true
+  })
 }
 
 // ---------------------------------------------------------------------------
