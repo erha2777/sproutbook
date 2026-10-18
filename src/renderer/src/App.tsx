@@ -226,6 +226,34 @@ function Shell(): ReactNode {
     }
   }, [])
 
+  /*
+   * 私有素材（可选）：<userData>/textures 里有图片就套上。
+   * 星露谷 wiki 的图是版权素材，不能随仓库分发 —— 只在本机生效。
+   */
+  useEffect(() => {
+    void (async () => {
+      try {
+        const textures = await window.api.app.textures()
+        const root = document.documentElement
+        const vars: Array<[string, string, string]> = [
+          ['home-bg', '--tex-home-bg', 'tex-home'],
+          ['sign', '--tex-sign', 'tex-sign'],
+          ['button', '--tex-button', 'tex-button'],
+          ['panel', '--tex-panel', 'tex-panel'],
+          ['cloud', '--tex-cloud', 'tex-cloud']
+        ]
+        for (const [slot, cssVar, cls] of vars) {
+          const url = textures[slot]
+          if (!url) continue
+          root.style.setProperty(cssVar, `url("${url}")`)
+          root.classList.add(cls)
+        }
+      } catch {
+        // 素材读不到就用画出来的默认外观
+      }
+    })()
+  }, [])
+
   // 首次进入时做一次环境自检，把明显的问题尽早告诉用户
   useEffect(() => {
     void (async () => {

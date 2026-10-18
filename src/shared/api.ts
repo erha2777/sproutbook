@@ -134,6 +134,8 @@ export interface SproutbookApi {
     quit(): Promise<boolean>
     /** 私有字体：<userData>/fonts 里放了字体就返回 data URL（不打包进仓库） */
     fonts(): Promise<{ custom: string | null }>
+    /** 私有素材：<userData>/textures 下的 home-bg/sign/button/panel/cloud */
+    textures(): Promise<Record<string, string>>
   }
   /**
    * 沙箱兜底。

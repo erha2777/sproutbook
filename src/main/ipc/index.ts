@@ -263,6 +263,42 @@ function registerAppIpc(): void {
     }
   })
 
+  /*
+   * 私有素材：<userData>/textures/ 下的图片按文件名当皮肤用（不进仓库）。
+   *
+   * 支持的槽位（png / jpg / webp）：
+   *   home-bg  首页整屏背景
+   *   sign     首页木牌（含标题的整张图）
+   *   button   首页按钮底图
+   *   panel    所有木色面板的底图
+   *   cloud    云的贴图
+   *
+   * 为什么走运行时：星露谷 wiki 上的图是版权素材，不能随仓库/安装包分发；
+   * 用户自己拿到的图放本地即可替换外观。
+   */
+  handle('app:textures', () => {
+    const dir = join(app.getPath('userData'), 'textures')
+    const slots = ['home-bg', 'sign', 'button', 'panel', 'cloud']
+    const out: Record<string, string> = {}
+    if (!existsSync(dir)) return out
+    const exts = ['png', 'jpg', 'jpeg', 'webp']
+    for (const slot of slots) {
+      for (const ext of exts) {
+        const file = join(dir, `${slot}.${ext}`)
+        if (!existsSync(file)) continue
+        try {
+          if (statSync(file).size > 6 * 1024 * 1024) break
+          const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
+          out[slot] = `data:${mime};base64,${readFileSync(file).toString('base64')}`
+        } catch {
+          // 读不了就跳过这一槽
+        }
+        break
+      }
+    }
+    return out
+  })
+
   /** 首页的「退出」按钮 */
   handle('app:quit', () => {
     app.quit()

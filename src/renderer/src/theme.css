@@ -3043,3 +3043,56 @@ img {
 .home-btn:hover {
   background: #ffe9a8;
 }
+
+
+/* ---------- 私有素材覆盖（<userData>/textures，不进仓库） ---------- */
+
+html.tex-home .home {
+  background-image: var(--tex-home-bg);
+  background-size: cover;
+  background-position: center;
+}
+
+/* 用户给了整张木牌（带字）就把画出来的牌子和标题藏掉 */
+html.tex-sign .home-sign {
+  background-image: var(--tex-sign);
+  background-size: 100% 100%;
+  border: 0;
+  box-shadow: none;
+  animation: none;
+  padding: 0;
+  aspect-ratio: 960 / 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+html.tex-sign .home-sign-inner,
+html.tex-sign .sign-corner {
+  display: none;
+}
+html.tex-sign .home-sign::before,
+html.tex-sign .home-sign::after {
+  display: none;
+}
+
+html.tex-button .home-btn {
+  background-image: var(--tex-button);
+  background-size: 100% 100%;
+  border-color: transparent;
+  box-shadow: none;
+}
+html.tex-button .home-btn b {
+  display: none;
+}
+
+html.tex-panel .pixel-panel {
+  background-image: var(--tex-panel);
+  background-size: 100% 100%;
+}
+
+html.tex-cloud .cloud {
+  background-image: var(--tex-cloud);
+  background-size: 100% 100%;
+  clip-path: none;
+  filter: none;
+}

@@ -510,6 +510,35 @@ pnpm 默认的符号链接布局在 Windows 上会创建 junction，而 Node 的
 
 ---
 
+## 私有素材（可选，不随仓库分发）
+
+界面默认全部是代码画出来的（木牌、面板、按钮、云、草地）。
+如果你本机想换成自己的图片（例如从游戏里截的图），把它们放进应用数据目录即可：
+
+```powershell
+node scripts/install-textures.mjs D:\素材
+# 便携模式 / 指定数据目录：
+node scripts/install-textures.mjs D:\素材 --data-dir=D:\sproutbook-data
+```
+
+| 文件名 | 作用 |
+|---|---|
+| `home-bg.png` | 首页整屏背景 |
+| `sign.png` | 首页木牌（整张图，自带标题字） |
+| `button.png` | 首页四个按钮的底图 |
+| `panel.png` | 所有木色面板的底图 |
+| `cloud.png` | 云的贴图 |
+
+- 放在 `<应用数据目录>/textures/`（Windows 默认 `%APPDATA%\Sproutbook\textures`）
+- 支持 png / jpg / webp，单张 ≤ 6 MB；重启生效
+- **这些图片不会进仓库、也不会进安装包**。商业游戏的素材受版权保护，
+  只建议你自己本机使用，不要分发
+
+> 注意：我（助手）不会把星露谷 wiki 上的图片抓下来打进应用 —— 那是版权素材。
+> 这条通道是给你自己准备的图片用的。
+
+---
+
 ## 私有字体（可选，不随仓库分发）
 
 界面默认用 **Fusion Pixel**（OFL）。如果你本机想换成别的点阵字体（例如 HZK / IPix 系），
