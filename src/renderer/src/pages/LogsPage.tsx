@@ -12,10 +12,23 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { CareLog } from '@core/types'
+import type { CareLog, CareLogImage, ImageRecord } from '@core/types'
 import { CARE_ACTION_OPTIONS, logKindLabel } from '@core/care'
-import { Badge, Button, EmptyState, Panel, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
+import { Badge, Button, EmptyState, Modal, Panel, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
 import type { PlantOption } from '../components/CareTaskDialog'
+
+/**
+ * 照片文件走 `plantimg://` 自定义协议（main 里注册，只读 images 目录）。
+ * 数据库里存的是文件名，所以这里只做 URL 编码。
+ */
+function imageSrc(image: { path: string; thumbPath: string | null }): string {
+  return `plantimg://local/${encodeURIComponent(image.thumbPath ?? image.path)}`
+}
+
+/** 点开看大图时用原图，不用缩略图 */
+function imageFull(image: { path: string; thumbPath: string | null }): string {
+  return `plantimg://local/${encodeURIComponent(image.path)}`
+}
 
 export function LogsPage(): ReactNode {
   const toast = useToast()
@@ -26,6 +39,10 @@ export function LogsPage(): ReactNode {
   const [plantId, setPlantId] = useState('')
   const [kind, setKind] = useState('note')
   const [draft, setDraft] = useState('')
+  /** 已经导入、但还没随这条记录保存的照片 */
+  const [picked, setPicked] = useState<ImageRecord[]>([])
+  /** 预览大图 */
+  const [preview, setPreview] = useState<CareLogImage | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -64,16 +81,48 @@ export function LogsPage(): ReactNode {
     void load(plantId)
   }, [load, plantId])
 
+  /** 选照片：导入到用户数据目录，返回的 id 保存时挂到日志上 */
+  const pickImages = async (): Promise<void> => {
+    try {
+      const res = await window.api.images.pick({})
+      if (res.canceled) return
+      if (res.failures && res.failures.length > 0) {
+        toast.push(`有 ${res.failures.length} 张没能导入：${res.failures[0]}`, 'error')
+      }
+      if (res.imported.length > 0) {
+        setPicked((prev) => [...prev, ...res.imported])
+      }
+    } catch (error) {
+      toast.push(`选照片失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    }
+  }
+
+  /** 还没保存就反悔：把刚导入的文件也删掉，别在 images 里留孤儿 */
+  const dropPicked = async (image: ImageRecord): Promise<void> => {
+    setPicked((prev) => prev.filter((p) => p.id !== image.id))
+    try {
+      await window.api.images.remove(image.id)
+    } catch {
+      // 文件删不掉不影响记录本身
+    }
+  }
+
   const addManualLog = async (): Promise<void> => {
     const id = plantId ? Number(plantId) : null
     const content = draft.trim()
-    if (id === null || !content) {
-      toast.push('先在左边选一株植物，再写一句做了什么', 'error')
+    if (id === null || (!content && picked.length === 0)) {
+      toast.push('先在左边选一株植物，再写一句做了什么（或至少放一张照片）', 'error')
       return
     }
     try {
-      await window.api.care.addLog({ plantId: id, content, kind })
+      await window.api.care.addLog({
+        plantId: id,
+        content,
+        kind,
+        imageIds: picked.map((p) => p.id)
+      })
       setDraft('')
+      setPicked([])
       await load(plantId)
       toast.push('已记一笔', 'success')
     } catch (error) {
@@ -134,10 +183,36 @@ export function LogsPage(): ReactNode {
               placeholder="记一句做了什么，例如「换了盆，土是泥炭 5 : 珍珠岩 3」"
             />
           </div>
-          <Button onClick={() => void addManualLog()} disabled={!plantId || !draft.trim()}>
+          <Button onClick={() => void pickImages()} title="给这条记录配照片">
+            📷 照片
+          </Button>
+          <Button
+            onClick={() => void addManualLog()}
+            disabled={!plantId || (!draft.trim() && picked.length === 0)}
+          >
             记一笔
           </Button>
         </div>
+
+        {/* 还没保存的照片：可以逐张撤掉（撤掉会连文件一起删） */}
+        {picked.length > 0 ? (
+          <div className="log-images" style={{ marginBottom: 8 }}>
+            {picked.map((image) => (
+              <div key={image.id} className="log-image-cell">
+                <img className="log-image" src={imageSrc(image)} alt="" />
+                <button
+                  type="button"
+                  className="log-image-remove"
+                  title="不放进这条记录"
+                  onClick={() => void dropPicked(image)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <span className="small muted">会随这条记录一起保存（{picked.length} 张）</span>
+          </div>
+        ) : null}
 
         {loading ? (
           <Spinner label="加载中…" />
@@ -165,6 +240,21 @@ export function LogsPage(): ReactNode {
                       {plant ? <span className="small muted">{plant.label}</span> : null}
                     </div>
                     {log.content ? <div className="small">{log.content}</div> : null}
+                    {log.images.length > 0 ? (
+                      <div className="log-images">
+                        {log.images.map((image) => (
+                          <button
+                            key={image.id}
+                            type="button"
+                            className="log-image-cell"
+                            title="点开看大图"
+                            onClick={() => setPreview(image)}
+                          >
+                            <img className="log-image" src={imageSrc(image)} alt="" />
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                   {/*
                     删除按钮：不用 ghost —— ghost 无背景无边框，
@@ -182,6 +272,13 @@ export function LogsPage(): ReactNode {
           </div>
         )}
       </Panel>
+
+      {/* 大图预览：缩略图看细节不够，点开看原图 */}
+      {preview ? (
+        <Modal title="照片" onClose={() => setPreview(null)} footer={<Button onClick={() => setPreview(null)}>关闭</Button>}>
+          <img className="log-image-full" src={imageFull(preview)} alt="" />
+        </Modal>
+      ) : null}
     </div>
   )
 }

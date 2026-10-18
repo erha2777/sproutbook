@@ -11,6 +11,7 @@ import type {
   CareActionType,
   CareHemisphere,
   CareLog,
+  CareLogImage,
   CarePlan,
   CareRule,
   CareRuleInput,
@@ -821,22 +822,62 @@ function mapLog(row: CareLogRow): CareLog {
     content: row.content,
     recipeId: row.recipe_id ?? null,
     imageId: row.image_id,
+    images: [],
     createdAt: row.created_at
   }
+}
+
+/** 一条日志的照片（按 sort_order） */
+export function listLogImages(db: Db, logId: number): CareLogImage[] {
+  return db
+    .all<{ id: number; path: string; thumb_path: string | null }>(
+      'SELECT id, path, thumb_path FROM images WHERE log_id = ? ORDER BY sort_order, id',
+      logId
+    )
+    .map((row) => ({ id: row.id, path: row.path, thumbPath: row.thumb_path }))
+}
+
+/** 给一批日志挂上照片（一次查询，避免 N+1） */
+function attachLogImages(db: Db, logs: CareLog[]): CareLog[] {
+  if (logs.length === 0) return logs
+  const ids = logs.map((l) => l.id)
+  const placeholders = ids.map(() => '?').join(',')
+  const rows = db.all<{ log_id: number; id: number; path: string; thumb_path: string | null }>(
+    `SELECT log_id, id, path, thumb_path FROM images
+     WHERE log_id IN (${placeholders}) ORDER BY sort_order, id`,
+    ...ids
+  )
+  const byLog = new Map<number, CareLogImage[]>()
+  for (const row of rows) {
+    const list = byLog.get(row.log_id) ?? []
+    list.push({ id: row.id, path: row.path, thumbPath: row.thumb_path })
+    byLog.set(row.log_id, list)
+  }
+  for (const log of logs) log.images = byLog.get(log.id) ?? []
+  return logs
 }
 
 export function listCareLogs(db: Db, options: { plantId?: number; limit?: number } = {}): CareLog[] {
   const where = options.plantId ? 'WHERE plant_id = ?' : ''
   const params = options.plantId ? [options.plantId] : []
   const limit = Math.min(Math.max(options.limit ?? 200, 1), 1000)
-  return db
+  const logs = db
     .all<CareLogRow>(`SELECT * FROM care_logs ${where} ORDER BY log_date DESC, id DESC LIMIT ${limit}`, ...params)
     .map(mapLog)
+  return attachLogImages(db, logs)
 }
 
 export function addCareLog(
   db: Db,
-  input: { plantId: number; taskId?: number | null; logDate?: string; kind?: string; content?: string | null }
+  input: {
+    plantId: number
+    taskId?: number | null
+    logDate?: string
+    kind?: string
+    content?: string | null
+    /** 先把照片导入 images 表，再把 id 传进来；保存时挂到这条日志上 */
+    imageIds?: number[]
+  }
 ): CareLog {
   const r = db.run(
     'INSERT INTO care_logs (plant_id, task_id, log_date, kind, content) VALUES (?, ?, ?, ?, ?)',
@@ -846,12 +887,34 @@ export function addCareLog(
     input.kind ?? 'note',
     input.content ?? null
   )
-  const created = db.get<CareLogRow>('SELECT * FROM care_logs WHERE id = ?', Number(r.lastInsertRowid))
+  const logId = Number(r.lastInsertRowid)
+  const created = db.get<CareLogRow>('SELECT * FROM care_logs WHERE id = ?', logId)
   if (!created) throw new Error('日志创建失败')
-  return mapLog(created)
+
+  /*
+   * 挂照片：id 来自 images:pick（先导入、后保存）。
+   * 顺手把 plant_id 补上（挑选时还不知道属于哪株），
+   * 这样以后按植株浏览照片也能找到它们。
+   */
+  const ids = (input.imageIds ?? []).filter((id) => Number.isFinite(id))
+  if (ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',')
+    db.run(
+      `UPDATE images SET log_id = ?, plant_id = COALESCE(plant_id, ?) WHERE id IN (${placeholders})`,
+      logId,
+      input.plantId,
+      ...ids
+    )
+  }
+
+  const log = mapLog(created)
+  log.images = listLogImages(db, log.id)
+  return log
 }
 
 export function deleteCareLog(db: Db, id: number): boolean {
+  // 先删照片记录；文件由 IPC 层在拿到文件名后清理（repo 不碰文件系统）
+  db.run('DELETE FROM images WHERE log_id = ?', id)
   const r = db.run('DELETE FROM care_logs WHERE id = ?', id)
   /*
    * 影响 0 行说明那条记录已经不在了 —— 如实返回 false。

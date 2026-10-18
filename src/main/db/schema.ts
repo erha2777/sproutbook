@@ -554,6 +554,11 @@ ALTER TABLE care_rules ADD COLUMN month_from_day INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE care_rules ADD COLUMN month_to_day INTEGER;
 `
 
+const V16_IMAGE_LOG = /* sql */ `
+ALTER TABLE images ADD COLUMN log_id INTEGER;
+CREATE INDEX IF NOT EXISTS idx_images_log ON images(log_id);
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -569,7 +574,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 12, name: 'rule_same_day', sql: V12_RULE_SAME_DAY },
   { version: 13, name: 'same_day_default', sql: V13_SAME_DAY_DEFAULT },
   { version: 14, name: 'rule_anchor_day', sql: V14_RULE_ANCHOR_DAY },
-  { version: 15, name: 'rule_month_days', sql: V15_RULE_MONTH_DAYS }
+  { version: 15, name: 'rule_month_days', sql: V15_RULE_MONTH_DAYS },
+  { version: 16, name: 'image_log', sql: V16_IMAGE_LOG }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

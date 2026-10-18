@@ -429,6 +429,50 @@ img {
   flex-direction: column;
   gap: 4px;
 }
+/* 记录上的照片：缩略图一排，点开看大图 */
+.log-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.log-image-cell {
+  position: relative;
+  padding: 0;
+  border: 2px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+  line-height: 0;
+  cursor: pointer;
+}
+.log-image {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  display: block;
+}
+.log-image-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  line-height: 1;
+  padding: 0;
+  border: 2px solid var(--wood-outline);
+  background: var(--danger);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.log-image-full {
+  max-width: 100%;
+  max-height: 68vh;
+  display: block;
+  margin: 0 auto;
+  border: 2px solid var(--wood-outline);
+  background: #fff;
+}
 .log-item {
   display: flex;
   align-items: flex-start;

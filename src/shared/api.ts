@@ -293,6 +293,8 @@ export interface SproutbookApi {
       logDate?: string
       kind?: string
       content?: string | null
+      /** 先从 images.pick 导入，再把 id 传进来；保存时挂到这条日志上 */
+      imageIds?: number[]
     }): Promise<CareLog>
     removeLog(id: number): Promise<boolean>
   }

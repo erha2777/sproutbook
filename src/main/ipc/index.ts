@@ -58,6 +58,7 @@ import {
   completeCareTask,
   createCareTask,
   deleteCareLog,
+  listLogImages,
   deleteCareRule,
   deleteCareTask,
   purgeCareTasks,
@@ -440,7 +441,7 @@ function registerImageIpc(): void {
 
   handle('images:pick', async (owner: { plantId?: number; speciesId?: number }) => {
     const result = await dialog.showOpenDialog({
-      title: '选择植物图片',
+      title: '选择图片',
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }]
     })
@@ -562,7 +563,16 @@ function registerImageIpc(): void {
 
   handle('care:logs', (plantId?: number, limit?: number) => listCareLogs(getDb(), { plantId, limit }))
   handle('care:log.add', (input: Parameters<typeof addCareLog>[1]) => addCareLog(getDb(), input))
-  handle('care:log.delete', (id: number) => deleteCareLog(getDb(), id))
+  handle('care:log.delete', (id: number) => {
+    /*
+     * 先取文件名再删记录 —— 删完就查不到 path 了。
+     * 文件清理放在 IPC 层：repo 只管数据库。
+     */
+    const files = listLogImages(getDb(), id).flatMap((img) => [img.path, img.thumbPath])
+    const ok = deleteCareLog(getDb(), id)
+    if (ok) removeImageFiles(files)
+    return ok
+  })
 
   // -------------------------------------------------------------------------
   // 材料与配方

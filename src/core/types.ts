@@ -465,7 +465,21 @@ export interface CareLog {
    */
   recipeId: number | null
   imageId: number | null
+  /**
+   * 这条记录带的照片。
+   *
+   * 文件存在 userData/images，数据库只记文件名；界面用 plantimg:// 协议读。
+   * 一条记录可以带多张 —— 换盆前后、虫害特写、开花状态都可能要留。
+   */
+  images: CareLogImage[]
   createdAt: string
+}
+
+/** 养护日志上的一张照片（只带展示需要的字段） */
+export interface CareLogImage {
+  id: number
+  path: string
+  thumbPath: string | null
 }
 
 // ---------------------------------------------------------------------------

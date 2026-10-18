@@ -34,7 +34,7 @@ import { chat } from './services/ai/client'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { archivePlant, listPlants, plantStats, savePlant } from './db/repo/plants'
-import { archiveEnvironment, getEnvironment, getSetting, listCorruptSettings, listEnvironments, saveEnvironment, setSetting } from './db/repo/misc'
+import { addImage, archiveEnvironment, getEnvironment, getSetting, listCorruptSettings, listEnvironments, listImages, saveEnvironment, setSetting } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
@@ -115,6 +115,7 @@ import {
   getCareTask,
   getPlantPhase,
   listCareLogs,
+  listLogImages,
   listCareRules,
   listCareTasks,
   reopenCareTask,
@@ -1480,6 +1481,33 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('可手动加日志', log.id > 0)
       check('日志按日期倒序', listCareLogs(db, { plantId: carePlantId }).length >= 1)
       check('删除日志成功', deleteCareLog(db, log.id) === true)
+
+      /*
+       * 养护记录带照片。
+       *
+       * 照片先进 images 表（文件在 userData/images），保存日志时把 id 挂上去；
+       * 列表要能一次把照片取出来，删日志要连照片记录一起删（文件由 IPC 层清）。
+       */
+      {
+        const shot = addImage(db, { plantId: carePlantId, path: 'smoke-photo-1.png' })
+        const shot2 = addImage(db, { plantId: carePlantId, path: 'smoke-photo-2.png' })
+        const withPhotos = addCareLog(db, {
+          plantId: carePlantId,
+          content: '换盆，带两张照片',
+          imageIds: [shot.id, shot2.id]
+        })
+        check('日志可以带多张照片', withPhotos.images.length === 2, String(withPhotos.images.length))
+        check(
+          '照片按加入顺序返回',
+          withPhotos.images[0].path === 'smoke-photo-1.png' && withPhotos.images[1].path === 'smoke-photo-2.png',
+          withPhotos.images.map((i) => i.path).join(',')
+        )
+        const listed = listCareLogs(db, { plantId: carePlantId }).find((l) => l.id === withPhotos.id)
+        check('列表里也能取到照片', listed?.images.length === 2, String(listed?.images.length))
+        check('照片挂到了植株上', listImages(db, { plantId: carePlantId }).length >= 2)
+        check('删除带照片的日志', deleteCareLog(db, withPhotos.id) === true)
+        check('删日志会一起删掉照片记录', listLogImages(db, withPhotos.id).length === 0)
+      }
 
       // ---- 概览 ----
       const overview = careOverview(db, year, '2026-06-11')
