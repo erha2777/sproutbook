@@ -1115,19 +1115,23 @@ img {
 }
 
 /*
- * 顶部留空：不画底色、不写标题、不放关闭按钮，
- * 只保留最小化与最大化/还原两个小按钮（用户要求）。
- * 整条仍是拖拽区，双击最大化。
+ * 顶部不放任何东西：标题栏是**悬浮**的透明拖拽带（不占布局高度），
+ * 右上角浮两个像素风按钮（最小化 / 最大化），样式照着参考图的方块图标画。
+ * 关闭按钮按用户要求去掉。
  */
 .titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  z-index: 40;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  flex-shrink: 0;
-  padding: 0 8px;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 3px 6px 0 0;
   background: transparent;
-  border-bottom: none;
+  /* 透明但可拖动；按钮区单独 no-drag */
   -webkit-app-region: drag;
   user-select: none;
 }
@@ -1136,19 +1140,42 @@ img {
   gap: 4px;
   -webkit-app-region: no-drag;
 }
+/* 像素方按钮：深棕描边 + 橙色面 + 左上高光 / 右下阴影 */
 .titlebar-btn {
-  width: 30px;
-  height: 22px;
+  width: 26px;
+  height: 24px;
   padding: 0;
-  line-height: 1;
-  font-size: 12px;
-  color: #33404a;
-  border: 2px solid rgba(60, 40, 20, 0.35);
-  background: rgba(250, 232, 200, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e8a24a;
+  border: 3px solid #5b2f0c;
+  box-shadow:
+    inset 3px 3px 0 #ffd08a,
+    inset -3px -3px 0 #a85f1e;
   cursor: pointer;
+  image-rendering: pixelated;
+}
+.titlebar-btn::after {
+  content: '';
+  display: block;
+  width: 11px;
+  height: 3px;
+  background: #4a2608;
+}
+.titlebar-btn.max::after {
+  width: 9px;
+  height: 9px;
+  background: transparent;
+  border: 3px solid #4a2608;
 }
 .titlebar-btn:hover {
-  background: rgba(255, 240, 207, 0.92);
+  background: #f2b662;
+}
+.titlebar-btn:active {
+  box-shadow:
+    inset -3px -3px 0 #ffd08a,
+    inset 3px 3px 0 #a85f1e;
 }
 
 .sidebar {
