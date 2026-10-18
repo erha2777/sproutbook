@@ -667,12 +667,22 @@ export function generateTasksForPlant(
       phase: isCarePhase(plant.phase) ? plant.phase : null
     })
 
-    // 时间窗已经走完的月份不再生成：那些日子计划还不存在，不该记成欠账
+    /*
+     * 过去的日子不再补生成：那些月份的计划还不存在，不该记成欠账。
+     *
+     * 但**当前月要留下来**。锚点日现在默认是 1 号，时间窗 ±15 天 ——
+     * 到了 17 号以后，当月 1 号的任务窗口就已经走完；只用「窗口没过」筛的话，
+     * 月中一重新生成，当月计划会整片消失（用户看到「本月 0 项」）。
+     * 所以两条留一条：窗口还没结束 **或** 就在本月（含以后）。
+     */
     const cutoff = options.today ?? todayIso()
+    const monthStart = `${cutoff.slice(0, 7)}-01`
     const generated =
       options.skipPast === false
         ? allGenerated
-        : allGenerated.filter((t) => addDays(t.dueDate, t.windowDays) >= cutoff)
+        : allGenerated.filter(
+            (t) => addDays(t.dueDate, t.windowDays) >= cutoff || t.dueDate >= monthStart
+          )
 
     const plan = ensurePlan(db, plantId, year, `${plant.nickname} · ${year} 年养护`)
 

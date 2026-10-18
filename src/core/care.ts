@@ -382,6 +382,10 @@ export function generateTasks(
   options: {
     hemisphere?: 'N' | 'S'
     defaultWindowDays?: number
+    /**
+     * @deprecated 日期不再按植株错开（默认每月 1 号，或规则里的「每月几号」）。
+     * 保留这个参数只是为了不改一堆调用点，值会被忽略。
+     */
     spreadSeed?: number
     /** 植株当前阶段。为空＝未标记，一切按月份走（不影响原有用法） */
     phase?: CarePhase | null
@@ -389,7 +393,6 @@ export function generateTasks(
 ): GeneratedTask[] {
   const hemisphere = options.hemisphere ?? 'N'
   const defaultWindow = options.defaultWindowDays ?? 15
-  const seed = options.spreadSeed ?? 0
   const phase = options.phase ?? null
 
   const applicable = rules.filter((r) => {
@@ -442,25 +445,22 @@ export function generateTasks(
 
     const rotation = (rule.rotation ?? []).map((s) => s.trim()).filter(Boolean)
     /*
-     * 锚点种子。
+     * 锚点日。
      *
-     * **默认用规则 id**：同一条规则的所有植株落在同一天，而且每个月是同一个日期
-     * （用户要的是规律 —— 一条规则在月历上散成好几天，看起来就像随手排的）。
-     * 只有规则显式关掉 `sameDay`（false）时才用调用方传进来的植株 id 错开。
-     */
-    const anchorSeed = rule.sameDay !== false && rule.id > 0 ? rule.id : seed
-    /**
-     * 「每月几号」：规则自己指定了就用它，否则按上面的种子算一个固定日。
-     * 同一件事拆成几条规则时（通用底肥 + 按物种配比的底肥组合），
-     * 只有手动填同一个号，它们才会落在同一天。
+     * **默认每月 1 号** —— 用户要的是规律：「月份默认从第一天开始」。
+     * 规则里填了「每月几号」就用填的（1~28，29~31 夹到 28，小月不存在）。
+     *
+     * 不再按植株错开，也不再按规则 id 散开：那两套算法都让同一条规则
+     * 在月历上落到看不懂的日子。想错开的话，给不同规则填不同的号即可 ——
+     * 日期变成你说了算，而不是算法说了算。
      */
     const anchorDay =
       typeof rule.anchorDay === 'number' && Number.isFinite(rule.anchorDay)
         ? Math.min(28, Math.max(1, Math.trunc(rule.anchorDay)))
-        : null
+        : 1
     /** 某个月的锚点日（YYYY-MM-DD） */
     const anchorDate = (month: number): string =>
-      `${year}-${String(month).padStart(2, '0')}-${String(anchorDay ?? spreadDay(year, month, anchorSeed)).padStart(2, '0')}`
+      `${year}-${String(month).padStart(2, '0')}-${String(anchorDay).padStart(2, '0')}`
 
     // ---- 按天重复 ----
     if (rule.repeatDays !== null && rule.repeatDays !== undefined && rule.repeatDays > 0) {
@@ -471,11 +471,8 @@ export function generateTasks(
 
       for (const span of spans) {
         const month = Number(span.from.slice(5, 7))
-        // 起始日：指定了「每月几号」就从那号开始，否则按种子错开
-        let cursor =
-          anchorDay !== null
-            ? anchorDate(month)
-            : addDays(span.from, Math.max(0, spreadDay(year, month, anchorSeed) - 1))
+        // 从锚点日开始按 N 天一轮
+        let cursor = anchorDate(month)
         // 上限保护：即使 repeatDays 被填成 1，也不会无限循环
         for (let guard = 0; guard < 400 && cursor <= span.to; guard++) {
           const label = rotation.length > 0 ? ` · ${rotation[index % rotation.length]}` : ''
@@ -496,17 +493,12 @@ export function generateTasks(
      * 按 **spans** 而不是月份迭代：连续几个月在 dateSpansFor 里已经合成一段，
      * 而跨年写法（11,12,1,2）会断开成两段 —— 那本来就该是两个窗口。
      *
-     * 日期落在窗口**开头**：底肥这类事早做比晚做好，入冬前要留出扎根时间。
-     * 没指定「每月几号」时最多推 6 天，别推到窗口中间。
+     * 日期落在窗口第一个月的锚点日（底肥这类事早做比晚做好）。
      */
     if (rule.oncePerWindow) {
       for (const span of spans) {
         const month = Number(span.from.slice(5, 7))
-        const dueDate =
-          anchorDay !== null
-            ? anchorDate(month)
-            : addDays(span.from, Math.min(Math.max(0, spreadDay(year, month, anchorSeed) - 1), 6))
-        push(dueDate, rule, rule.title, defaultWindow)
+        push(anchorDate(month), rule, rule.title, defaultWindow)
       }
       continue
     }

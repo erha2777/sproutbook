@@ -19,7 +19,7 @@ import {
   isUniversalRule,
   monthsCovered
 } from '@core/care'
-import { Badge, Button, Checkbox, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextArea, TextInput, useToast } from './ui'
+import { Badge, Button, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextArea, TextInput, useToast } from './ui'
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `${i + 1} 月` }))
 
@@ -37,13 +37,11 @@ interface Draft {
    */
   oncePerWindow: boolean
   /**
-   * 同一条规则的所有植株在同一天做（默认开）。
+   * 每月几号（1~28）。空＝1 号。
    *
-   * 用户要的是规律：同一条规则在月历上散成好几天，看起来就像随手排的。
-   * 关掉后恢复「按植株错开」—— 只有想让日常浇水摊开时才需要。
+   * 日期只由这个决定：不再按植株错开，也不再按规则编号散开 ——
+   * 那两套算法都让同一条规则在月历上落到看不懂的日子。
    */
-  sameDay: boolean
-  /** 每月几号（1~28）。空＝自动按规则算 */
   anchorDay: string
   /** 绑定的配方 id（字符串形式便于 select），空＝没有材料清单 */
   recipeId: string
@@ -64,7 +62,6 @@ const BLANK: Draft = {
   monthTo: '',
   repeatDays: '',
   oncePerWindow: false,
-  sameDay: true,
   anchorDay: '',
   recipeId: '',
   rotationText: '',
@@ -154,7 +151,6 @@ export function CareRuleManager({
         monthTo: draft.monthTo ? Number(draft.monthTo) : null,
         repeatDays: draft.repeatDays.trim() ? Number(draft.repeatDays) : null,
         oncePerWindow: draft.oncePerWindow,
-        sameDay: draft.sameDay,
         anchorDay: draft.anchorDay.trim() ? Number(draft.anchorDay) : null,
         recipeId: draft.recipeId ? Number(draft.recipeId) : null,
         rotation: rotation.length > 0 ? rotation : null,
@@ -195,7 +191,6 @@ export function CareRuleManager({
     monthTo: rule.monthTo === null ? '' : String(rule.monthTo),
     repeatDays: rule.repeatDays === null ? '' : String(rule.repeatDays),
     oncePerWindow: rule.oncePerWindow,
-    sameDay: rule.sameDay !== false,
     anchorDay: rule.anchorDay === null || rule.anchorDay === undefined ? '' : String(rule.anchorDay),
     recipeId: rule.recipeId === null ? '' : String(rule.recipeId),
     rotationText: (rule.rotation ?? []).join('\n'),
@@ -439,28 +434,18 @@ export function CareRuleManager({
               />
             </Field>
           ) : null}
-          <Field
-            label="植株之间"
-            help="默认所有植株同一天做 —— 同一条规则在月历上就是同一个日期，好记也好一起动手。取消勾选才会按植株错开（日常浇水想摊开时用）。"
-          >
-            <Checkbox
-              checked={draft.sameDay}
-              onChange={(v) => setDraft({ ...draft, sameDay: v })}
-              label="所有植株同一天做（推荐）"
-            />
-          </Field>
           {/*
-            同一件事被拆成几条规则时（通用底肥 + 各物种的底肥组合），
-            「同日做」只管得住单条规则；要对齐就得指定同一个日期。
+            日期只由这里决定：默认 1 号；同一件事拆成几条规则时，
+            填同一个号才会落在同一天。
           */}
           <Field
             label="每月几号"
-            help="留空＝自动算一个固定日。同一件事写在几条规则里时，给它们填同一个号，才会落在同一天。1~28（29~31 在小月不存在，会按 28 算）。"
+            help="留空＝每月 1 号。同一件事写在几条规则里时（通用底肥 + 各物种的底肥组合），给它们填同一个号就会落在同一天；想错开就给不同规则填不同的号。1~28（29~31 在小月不存在，会按 28 算）。"
           >
             <TextInput
               value={draft.anchorDay}
               onChange={(v) => setDraft({ ...draft, anchorDay: v })}
-              placeholder="自动"
+              placeholder="1"
             />
           </Field>
           <Field
@@ -630,14 +615,9 @@ export function CareRuleManager({
                           <div className="muted" title="规则里指定了每月的哪一天">
                             每月 {rule.anchorDay} 号
                           </div>
-                        ) : null}
-                        {rule.sameDay !== false ? (
-                          <div className="muted" title="同一条规则下所有植株排在同一天">
-                            同日做
-                          </div>
                         ) : (
-                          <div className="muted" title="按植株错开锚点日">
-                            按植株错开
+                          <div className="muted" title="没指定时默认落在每月 1 号">
+                            每月 1 号
                           </div>
                         )}
                         {rule.recipeId ? (
