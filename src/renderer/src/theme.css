@@ -1211,12 +1211,12 @@ img {
 /* 分区页没有导航条：右下角一块木牌「← 后退」回首页（参考图里也是这么一块） */
 .back-btn {
   position: fixed;
-  right: 20px;
-  bottom: 18px;
+  right: 24px;
+  bottom: 20px;
   z-index: 50;
-  padding: 9px 22px;
+  padding: 8px 20px;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 2px;
   color: #a8451a;
@@ -1243,8 +1243,7 @@ img {
 }
 .page-shell > .main {
   flex: 1;
-  /* 给右下角的后退按钮留位置，内容滚到底也不会被它挡住 */
-  padding: 10px 14px 72px;
+  padding: 10px 14px 14px;
 }
 
 .main {
