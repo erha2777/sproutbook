@@ -103,6 +103,8 @@ function Shell(): ReactNode {
   const [route, setRoute] = useState<Route>(routeFromHash)
   /** 界面音效开关：默认开，首页喇叭图标可关 */
   const [soundOn, setSoundOn] = useState(isSfxOn)
+  /** 私有背景图：首页背后缓慢飘动的截图 */
+  const [backdrops, setBackdrops] = useState<string[]>([])
   /**
    * 兼容模式首启提示。
    *
@@ -233,7 +235,8 @@ function Shell(): ReactNode {
   useEffect(() => {
     void (async () => {
       try {
-        const textures = await window.api.app.textures()
+        const { slots, backgrounds } = await window.api.app.textures()
+        if (backgrounds.length > 0) setBackdrops(backgrounds)
         const root = document.documentElement
         const vars: Array<[string, string, string]> = [
           ['home-bg', '--tex-home-bg', 'tex-home'],
@@ -243,7 +246,7 @@ function Shell(): ReactNode {
           ['cloud', '--tex-cloud', 'tex-cloud']
         ]
         for (const [slot, cssVar, cls] of vars) {
-          const url = textures[slot]
+          const url = slots[slot]
           if (!url) continue
           root.style.setProperty(cssVar, `url("${url}")`)
           root.classList.add(cls)
@@ -285,6 +288,7 @@ function Shell(): ReactNode {
           onCare={() => setRoute({ name: 'care', tab: 'today' })}
           onQuit={() => void window.api.app.quit()}
           onSettings={() => setRoute({ name: 'settings' })}
+          backdrops={backdrops}
           soundOn={soundOn}
           onToggleSound={() => {
             const next = !soundOn

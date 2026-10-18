@@ -529,6 +529,12 @@ node scripts/install-textures.mjs D:\素材 --data-dir=D:\sproutbook-data
 | `panel.png` | 所有木色面板的底图 |
 | `cloud.png` | 云的贴图 |
 
+除上面五个固定名字外，**其余图片**会当成首页背景：铺满窗口、镜头缓慢平移巡视
+（最多 8 张，每 26 秒淡入下一张，每张 34~46 秒巡一遍，方向随机）。
+
+开发期也可以直接放在仓库根目录的 `textures/`（已加入 .gitignore，不会被提交）；
+正式安装后请放到 `%APPDATA%\Sproutbook\textures\`，或用上面的安装脚本。
+
 - 放在 `<应用数据目录>/textures/`（Windows 默认 `%APPDATA%\Sproutbook\textures`）
 - 支持 png / jpg / webp，单张 ≤ 6 MB；重启生效
 - **这些图片不会进仓库、也不会进安装包**。商业游戏的素材受版权保护，

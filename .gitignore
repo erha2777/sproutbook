@@ -57,3 +57,8 @@ preview/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# ---- 私有素材（用户自己放的截图/皮肤，可能含第三方版权素材）----
+# 应用会从 <userData>/textures 或开发期的仓库根目录 textures/ 读取，
+# 但绝不应该提交进仓库。
+textures/

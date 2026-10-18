@@ -277,26 +277,70 @@ function registerAppIpc(): void {
    * 用户自己拿到的图放本地即可替换外观。
    */
   handle('app:textures', () => {
-    const dir = join(app.getPath('userData'), 'textures')
+    /*
+     * 两个来源：
+     *   1) <userData>/textures —— 正式安装后用这个（scripts/install-textures.mjs 也往这装）
+     *   2) 开发期的仓库根 textures/ —— 方便调试，打包后不存在
+     * 后者不进仓库（.gitignore 已忽略 textures/）。
+     */
+    const dirs = [join(app.getPath('userData'), 'textures')]
+    if (!app.isPackaged) dirs.push(join(app.getAppPath(), 'textures'))
     const slots = ['home-bg', 'sign', 'button', 'panel', 'cloud']
-    const out: Record<string, string> = {}
-    if (!existsSync(dir)) return out
     const exts = ['png', 'jpg', 'jpeg', 'webp']
-    for (const slot of slots) {
-      for (const ext of exts) {
-        const file = join(dir, `${slot}.${ext}`)
-        if (!existsSync(file)) continue
-        try {
-          if (statSync(file).size > 6 * 1024 * 1024) break
-          const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
-          out[slot] = `data:${mime};base64,${readFileSync(file).toString('base64')}`
-        } catch {
-          // 读不了就跳过这一槽
-        }
-        break
+    const out: Record<string, string> = {}
+    const backgrounds: string[] = []
+    const seen = new Set<string>()
+
+    const mimeOf = (file: string): string => {
+      const ext = file.slice(file.lastIndexOf('.') + 1).toLowerCase()
+      return ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
+    }
+    const readAsUrl = (file: string): string | null => {
+      try {
+        // 单张上限 8MB：背景图通常是截图，别让 base64 把内存顶爆
+        if (statSync(file).size > 8 * 1024 * 1024) return null
+        return `data:${mimeOf(file)};base64,${readFileSync(file).toString('base64')}`
+      } catch {
+        return null
       }
     }
-    return out
+
+    for (const dir of dirs) {
+      if (!existsSync(dir)) continue
+
+      // 固定槽位（先找到的目录优先）
+      for (const slot of slots) {
+        if (out[slot]) continue
+        for (const ext of exts) {
+          const file = join(dir, `${slot}.${ext}`)
+          if (!existsSync(file)) continue
+          const url = readAsUrl(file)
+          if (url) out[slot] = url
+          break
+        }
+      }
+
+      // 其余图片：首页「巡视地图」的背景，文件名随意
+      let names: string[] = []
+      try {
+        names = readdirSync(dir)
+          .filter((n) => exts.some((e) => n.toLowerCase().endsWith(`.${e}`)))
+          .sort()
+      } catch {
+        names = []
+      }
+      for (const name of names) {
+        if (backgrounds.length >= 8) break
+        const base = name.slice(0, name.lastIndexOf('.'))
+        if (slots.includes(base) || seen.has(name)) continue
+        const url = readAsUrl(join(dir, name))
+        if (!url) continue
+        seen.add(name)
+        backgrounds.push(url)
+      }
+    }
+
+    return { slots: out, backgrounds }
   })
 
   /** 首页的「退出」按钮 */

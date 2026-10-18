@@ -3096,3 +3096,73 @@ html.tex-cloud .cloud {
   clip-path: none;
   filter: none;
 }
+
+
+/* ---------- 首页背景：私有截图「巡视地图」 ---------- */
+
+.home-backdrops {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  /* 压暗一点，保证木牌和按钮的可读性 */
+  background: rgba(8, 26, 48, 0.18);
+}
+
+/*
+ * 一层 = 一张截图：铺满窗口，镜头在里面缓慢平移。
+ * 用 background-size: cover + transform 做运镜，比改 background-position 更平滑。
+ */
+.map-layer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  image-rendering: pixelated;
+  opacity: 0;
+  transition: opacity 1.6s ease;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-fill-mode: both;
+  will-change: transform;
+  filter: saturate(0.92) brightness(0.92);
+}
+.map-layer.on {
+  /* 压太狠会看不清截图本身，0.82 兼顾可读性 */
+  opacity: 0.82;
+}
+
+@keyframes map-pan-a {
+  from { transform: scale(var(--map-zoom, 1.2)) translate3d(-6%, -4%, 0); }
+  to { transform: scale(var(--map-zoom, 1.2)) translate3d(6%, 4%, 0); }
+}
+@keyframes map-pan-b {
+  from { transform: scale(var(--map-zoom, 1.2)) translate3d(6%, 4%, 0); }
+  to { transform: scale(var(--map-zoom, 1.2)) translate3d(-6%, -4%, 0); }
+}
+@keyframes map-pan-c {
+  from { transform: scale(var(--map-zoom, 1.2)) translate3d(-6%, 4%, 0); }
+  to { transform: scale(var(--map-zoom, 1.2)) translate3d(6%, -4%, 0); }
+}
+@keyframes map-pan-d {
+  from { transform: scale(var(--map-zoom, 1.2)) translate3d(6%, -4%, 0); }
+  to { transform: scale(var(--map-zoom, 1.2)) translate3d(-6%, 4%, 0); }
+}
+
+/* 内容压在这些背景之上（别把绝对定位的齿轮/版本号改成 relative） */
+.home > *:not(.home-backdrops):not(.home-gear):not(.home-version) {
+  position: relative;
+  z-index: 1;
+}
+.home-gear,
+.home-version {
+  z-index: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-layer {
+    animation: none;
+  }
+}
