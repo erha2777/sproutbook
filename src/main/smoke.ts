@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Db, countPlaceholders } from './db/connection'
 import { formatMonthSet, normalizeMonths } from '../core/fieldTypes'
-import { LATEST_VERSION, MIGRATIONS } from './db/schema'
+import { LATEST_VERSION, MIGRATIONS, migrateSafetyVisibility } from './db/schema'
 import { currentVersion, migrate, rebuildAttrIndex } from './db/migrate'
 import { seedAll, seedFieldDefinitions } from './db/seed'
 import { backupDatabase } from './db/backup'
@@ -3033,6 +3033,53 @@ export async function runSmoke(outFile: string): Promise<number> {
           '含「有毒」才显示、不含「无毒」',
           toxicRule !== null && toxicRule.in.includes('有毒') && !toxicRule.in.includes('无毒')
         )
+
+        check(
+          '安全的四个字段都挂了显示条件',
+          ['toxic_parts', 'toxic_symptoms', 'first_aid', 'pet_safe'].every(
+            (k) => speciesDefs.find((x) => x.key === k)?.visibleWhen?.key === 'toxicity_level'
+          )
+        )
+
+        /*
+         * 老库：模板更新前种下的字段没有 visibleWhen，无毒时也照样显示。
+         * 迁移 v17 只给**缺条件**的补，用户改过的不动。
+         */
+        {
+          db.run(
+            `UPDATE field_definitions SET visible_when_json = NULL
+             WHERE owner_kind = 'species' AND key IN ('toxic_parts', 'pet_safe')`
+          )
+          migrateSafetyVisibility(db)
+          const filled = db.all<{ key: string; visible_when_json: string | null }>(
+            `SELECT key, visible_when_json FROM field_definitions
+             WHERE owner_kind = 'species' AND key IN ('toxic_parts', 'pet_safe')`
+          )
+          check(
+            '老库缺失的毒性显示条件会被补上',
+            filled.every((r) => r.visible_when_json !== null && r.visible_when_json.includes('toxicity_level')),
+            filled.map((r) => `${r.key}:${r.visible_when_json}`).join(' | ')
+          )
+
+          const custom = JSON.stringify({ key: 'custom_key', in: ['x'] })
+          db.run(
+            `UPDATE field_definitions SET visible_when_json = ?
+             WHERE owner_kind = 'species' AND key = 'toxic_symptoms'`,
+            custom
+          )
+          migrateSafetyVisibility(db)
+          const kept = db.get<{ visible_when_json: string | null }>(
+            `SELECT visible_when_json FROM field_definitions WHERE owner_kind = 'species' AND key = 'toxic_symptoms'`
+          )
+          check('用户自己改过的显示条件不会被覆盖', kept?.visible_when_json === custom, kept?.visible_when_json ?? 'null')
+
+          // 还原成模板值，别影响后面的断言
+          db.run(
+            `UPDATE field_definitions SET visible_when_json = ?
+             WHERE owner_kind = 'species' AND key = 'toxic_symptoms'`,
+            JSON.stringify({ key: 'toxicity_level', in: ['微毒', '有毒', '剧毒'] })
+          )
+        }
 
         // 条件引用的 key 必须真实存在，否则字段永远不显示
         const keys = new Set([...plantDefs, ...speciesDefs].map((x) => x.key))

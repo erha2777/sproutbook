@@ -257,6 +257,8 @@ const speciesFields: Seed[] = [
     key: 'pet_safe',
     label: '对宠物安全',
     groupName: '安全',
+    // 无毒时「对宠物是否安全」就没有单独问的意义了
+    visibleWhen: { key: 'toxicity_level', in: ['微毒', '有毒', '剧毒'] },
     type: 'bool',
     isSafety: true
   },

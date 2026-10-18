@@ -575,13 +575,35 @@ export const MIGRATIONS: Migration[] = [
   { version: 13, name: 'same_day_default', sql: V13_SAME_DAY_DEFAULT },
   { version: 14, name: 'rule_anchor_day', sql: V14_RULE_ANCHOR_DAY },
   { version: 15, name: 'rule_month_days', sql: V15_RULE_MONTH_DAYS },
-  { version: 16, name: 'image_log', sql: V16_IMAGE_LOG }
+  { version: 16, name: 'image_log', sql: V16_IMAGE_LOG },
+  { version: 17, name: 'safety_visibility', run: migrateSafetyVisibility }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */
 function migrateFieldVisibility(db: Db): void {
   db.exec(V7_FIELD_VISIBILITY)
   migratePotSize(db)
+}
+
+/**
+ * 老库的毒性字段没有显示条件。
+ *
+ * 模板里早就给「有毒部位 / 中毒症状 / 急救处理 / 对宠物安全」写了
+ * `visibleWhen: toxicity_level ∈ {微毒,有毒,剧毒}`，但种子只在**缺字段时**插入，
+ * 已经存在的老库不会跟着更新 —— 于是毒性的那几个字段在「无毒」时也照样显示
+ * （用户截图就是这种情况）。
+ *
+ * 这里只补**没有条件**的字段；用户自己改过的条件不动。
+ */
+export function migrateSafetyVisibility(db: Db): void {
+  const rule = JSON.stringify({ key: 'toxicity_level', in: ['微毒', '有毒', '剧毒'] })
+  db.run(
+    `UPDATE field_definitions SET visible_when_json = ?
+     WHERE owner_kind = 'species'
+       AND key IN ('toxic_parts', 'toxic_symptoms', 'first_aid', 'pet_safe')
+       AND (visible_when_json IS NULL OR visible_when_json = '')`,
+    rule
+  )
 }
 
 export const LATEST_VERSION = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0)
