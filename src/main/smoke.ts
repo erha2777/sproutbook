@@ -1411,6 +1411,41 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('跳过不写养护日志', listCareLogs(db, { plantId: carePlantId }).length === 0)
       reopenCareTask(db, pendingTask.id)
 
+      /*
+       * 「今天做完的」必须按**完成时间**查，不能按计划日期。
+       *
+       * 用户报的现象：勾完一条任务，切个页面回来就没了。
+       * 因为原来查的是 due_date ± 7 天 —— 一条 10 月 1 日到期、今天才补做的任务，
+       * 计划日期早就不在窗口里，于是「今天做完的」为空。
+       */
+      {
+        const now = new Date()
+        const pad2 = (n: number): string => String(n).padStart(2, '0')
+        const todayStr = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`
+        const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+        const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+
+        const openTasks = listCareTasks(db, { plantId: carePlantId, status: 'open' })
+        const oldTask = openTasks[0]
+        if (oldTask) {
+          completeCareTask(db, oldTask.id, '按完成时间查')
+          const doneToday = listCareTasks(db, { completedFrom: dayStart, completedTo: dayEnd })
+          check(
+            '按完成时间能查到「计划日期很早、今天才做」的任务',
+            doneToday.some((t) => t.id === oldTask.id),
+            `due=${oldTask.dueDate} today=${todayStr}`
+          )
+          const dueWindow = listCareTasks(db, { from: addDays(todayStr, -7), to: addDays(todayStr, 7) })
+          check(
+            '旧的「计划日期 ±7 天」查法确实会漏掉它（这就是那个 bug）',
+            !dueWindow.some((t) => t.id === oldTask.id),
+            `due=${oldTask.dueDate}`
+          )
+          // 收尾：撤销回去，别影响后面的断言
+          reopenCareTask(db, oldTask.id)
+        }
+      }
+
       // ---- 仓储：查询 ----
       check('可按月份区间过滤任务', listCareTasks(db, { plantId: carePlantId, from: '2026-03-01', to: '2026-03-31' }).every((t) => t.dueDate.startsWith('2026-03')))
       check('可按状态过滤', listCareTasks(db, { status: 'open' }).every((t) => t.status === 'pending'))

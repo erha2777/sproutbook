@@ -376,6 +376,14 @@ export function listCareTasks(db: Db, query: CareTaskQuery = {}): CareTaskListIt
     where.push('t.due_date <= ?')
     params.push(query.to)
   }
+  if (query.completedFrom) {
+    where.push('t.completed_at >= ?')
+    params.push(query.completedFrom)
+  }
+  if (query.completedTo) {
+    where.push('t.completed_at < ?')
+    params.push(query.completedTo)
+  }
   if (query.status === 'open') {
     where.push("t.status = 'pending'")
   } else if (query.status) {

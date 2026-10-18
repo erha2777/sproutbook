@@ -310,10 +310,20 @@ export interface CareTaskListItem extends CareTask {
 
 export interface CareTaskQuery {
   plantId?: number
-  /** YYYY-MM-DD，含 */
+  /** YYYY-MM-DD，含（按**计划日期** due_date 筛） */
   from?: string
-  /** YYYY-MM-DD，含 */
+  /** YYYY-MM-DD，含（按**计划日期** due_date 筛） */
   to?: string
+  /**
+   * 按**完成时间**筛（ISO 时间点，含）。
+   *
+   * 和 from/to 不是一个维度：from/to 筛的是 `due_date`（计划日期），
+   * 而「今天做完的」要的是完成时间 —— 一条 10 月 1 日到期、今天才补做的任务，
+   * 用 due_date ± 7 天永远找不到，切换页面后它就从列表里消失了。
+   */
+  completedFrom?: string
+  /** 完成时间上界（不含） */
+  completedTo?: string
   /** 'open' = 只要待办 */
   status?: CareTaskStatus | 'open'
   actionType?: CareActionType

@@ -20,7 +20,7 @@ import type { ReactNode } from 'react'
 import type { CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareTaskListItem, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
 import { suggestTask } from '@core/weather'
-import { addDays, groupTasksByRule, pendingBuckets, todayIso } from '@core/care'
+import { groupTasksByRule, pendingBuckets, todayIso } from '@core/care'
 import { Button, EmptyState, Panel, SectionTitle, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
@@ -42,6 +42,18 @@ function localDateOf(iso: string | null): string | null {
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${mm}-${dd}`
+}
+
+/** 本地某天 00:00 的 ISO 时间点（给 completedFrom 用） */
+function startOfLocalDay(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toISOString()
+}
+
+/** 本地某天次日 00:00 的 ISO 时间点（给 completedTo 用，不含） */
+function endOfLocalDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`)
+  d.setDate(d.getDate() + 1)
+  return d.toISOString()
 }
 
 /** 'YYYY-MM-DD' → 周五。按本地日期解析，不会因时区差一天。 */
@@ -112,14 +124,22 @@ export function TodayPage({
     let alive = true
     void (async () => {
       try {
-        const [open, dueToday, plantList, recipeList, materialList] = await Promise.all([
+        const [open, doneRows, plantList, recipeList, materialList] = await Promise.all([
           window.api.care.tasks({ status: 'open' }),
           /*
-           * 「今天做完的」取 ±7 天窗口再按**完成时间**筛，不是只看今天到期的：
-           * 一条昨天到期的任务今天补做，完成时间仍然是今天，也该出现在这里。
-           * 完成时间存的是 UTC ISO，所以下面用 localDateOf 转成本地日期再比。
+           * 「今天做完的」按**完成时间**查，不是按计划日期。
+           *
+           * 之前用 `from/to = 今天 ±7 天`，而 from/to 筛的是 due_date ——
+           * 一条10 月 1 日到期、今天才补做的任务，计划日期早就不在窗口里，
+           * 于是切换一次页面它就「消失」了（用户报的就是这个）。
+           * 现在直接按 completed_at 取当天的记录，完成时间存的是 UTC ISO，
+           * 所以上下界用本地 00:00 / 次日 00:00 换算成 ISO。
            */
-          window.api.care.tasks({ from: addDays(today, -7), to: addDays(today, 7) }),
+          window.api.care.tasks({
+            completedFrom: startOfLocalDay(today),
+            completedTo: endOfLocalDay(today),
+            limit: 500
+          }),
           window.api.plants.list({ limit: 500 }),
           /*
            * 任务卡片要显示绑定的配方，所以一起取。
@@ -133,10 +153,10 @@ export function TodayPage({
         if (!alive) return
         setOpenTasks(open)
         /*
-         * 「今天做完的」按完成时间筛，不是按计划日期：
-         * 一条昨天的任务今天补做，也应该出现在这里。
+         * 已经按完成时间查过了；这里再按**本地日期**过一遍，
+         * 防的是时区边界（UTC 与本地差几小时）把隔壁那天的记录带进来。
          */
-        setDoneToday(dueToday.filter((t) => t.status !== 'pending' && localDateOf(t.completedAt) === today))
+        setDoneToday(doneRows.filter((t) => t.status !== 'pending' && localDateOf(t.completedAt) === today))
         setPlants(
           plantList.items.map((p) => ({
             id: p.id,
