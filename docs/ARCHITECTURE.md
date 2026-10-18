@@ -25,7 +25,7 @@
 ```mermaid
 flowchart TB
     subgraph R["渲染进程 · React 19"]
-        PAGES["pages/<br/>Garden · Today · Care · Species · Recipes<br/>Settings · Templates · PlantEditor · SpeciesEditor"]
+        PAGES["pages/<br/>Garden · Today · Care · Logs · Species · Recipes<br/>Settings · Templates · PlantEditor · SpeciesEditor"]
         COMP["components/<br/>ui · DynamicForm · CareRuleManager · CareTaskRow<br/>CareCalendar · ImageStrip · TransferPanel · WeatherPanel<br/>AiDraftDialog · PlantSprite · WeatherIcon"]
     end
 
@@ -74,20 +74,23 @@ flowchart TB
 
 路径别名在三份构建配置里一致（`electron.vite.config.ts`）：`@core` → `src/core`，`@shared` → `src/shared`，`@` → `src/renderer/src`。
 
-### 「今日」与「养护计划」的分工（v1.8.2）
+### 「今日」与「养护计划」的分工（v1.8.3）
 
 两块界面面对的是**同一批养护任务**（`care:tasks`），口径统一在 `core/care.ts` 的 `pendingBuckets`：
 
 | 页面 | 口径 | 能做什么 |
 |---|---|---|
 | **今日** | 全部未完成任务里 `urgencyOf` = `overdue` / `due`（跨月、跨年）；侧栏角标就是这个数 | 勾完成 / 跳过 / 撤销；看天气预警 |
-| **养护计划** | 同一份 `pendingBuckets`（逾期 / 该做 / 快到了 / 还早）+ 本月月历 + 本年已完成 + 养护日志 | 只看：查看 / 编辑 / 删除；默认月历 |
+| **养护计划** | 统计徽章用同一份 `pendingBuckets`（+ 本年已完成）；主体是**月历**，点某一天在右侧列出该日全部任务 | 只看：查看 / 编辑 / 删除；默认月历 |
+| **养护日志** | `care:logs`（按日期倒序，可按植株筛） | 手动记一笔 / 删除 |
 
 **生成计划不在养护计划里**：在「我的花园」选中一株，点「生成计划」——
 走 `care:generate(plantId, year)`，只动这一株。`care:generateAll` 仍是通道，
 但界面不再调用（批量生成会顺手动到别人的计划）。
 
 任务行（`components/CareTaskRow.tsx`）和天气面板（`components/WeatherPanel.tsx`）都是**共享组件**，不各自复制一份 —— 这个仓库为「双份实现」付过代价（`suggestTask` 的副本少了一个「前」字，而自检测的是没人用的那份）。任务行用 `mode` 区分两种用法：`act`（今日，带完成/跳过）与 `manage`（养护计划，只有编辑/删除）。
+
+月历（`components/CareCalendar.tsx`）**整格可点**：点日期 = 选中那天，点格子里的任务 = 选中那天并高亮那一条。选中态与「今天」是两套样式（深色外框 vs 绿色内框），必须一眼分得开。
 
 ---
 
@@ -278,8 +281,8 @@ src/
 │   ├── db/            连接、迁移、schema、种子、备份、repo
 │   └── services/      ai / weather / images / secrets / transfer
 └── renderer/
-    ├── src/pages/     9 个页面（Garden · Today · Care · Species · Recipes · Settings · Templates · PlantEditor · SpeciesEditor）
-    └── src/components/ 16 个组件（含 CareTaskRow · WeatherPanel）
+    ├── src/pages/     10 个页面（Garden · Today · Care · Logs · Species · Recipes · Settings · Templates · PlantEditor · SpeciesEditor）
+    └── src/components/ 16 个组件（含 CareTaskRow · WeatherPanel · CareCalendar）
 ```
 
 ---

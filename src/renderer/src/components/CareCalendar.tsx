@@ -1,11 +1,11 @@
 /**
  * 月历网格。
  *
- * 与「待办」列表是两种视角，不是替代关系：
- *  - 列表回答「我现在该做什么」（逾期置顶，跨月份）
- *  - 月历回答「这个月的节奏是怎样的」（哪几天扎堆、哪段空着）
+ * 这一页是「月历 + 当天计划」两层：月历回答「这个月哪几天扎堆、哪段空着」，
+ * 点某一天之后，下面的「当天计划」回答「这天到底要做什么」。
  *
- * 所以同一批任务在两处都要出现，但排序与分组完全不同。
+ * 所以整格都是热区（不只是日期数字），选中态要一眼看得出来 ——
+ * 之前只有空白格子里的一个「＋」能点，等于把「看某天」做成了隐藏功能。
  */
 
 import { useMemo } from 'react'
@@ -33,14 +33,17 @@ export function CareCalendar({
   year,
   month,
   tasks,
+  selectedDate,
   onPickTask,
   onPickDay
 }: {
   year: number
   month: number
   tasks: CareTaskListItem[]
+  /** 当前选中的那一天（YYYY-MM-DD），用来画选中框 */
+  selectedDate?: string | null
   onPickTask: (task: CareTaskListItem) => void
-  /** 点空白日期时回调，用于「这天加一件事」 */
+  /** 点某一天：下面列出当天的全部计划 */
   onPickDay: (date: string) => void
 }): ReactNode {
   const today = todayIso()
@@ -82,22 +85,20 @@ export function CareCalendar({
       </div>
       <div className="cal-body">
         {cells.map((cell, i) => {
-          if (!cell.date) return <div key={`empty-${i}`} className="cal-cell empty" />
-          const list = byDate.get(cell.date) ?? []
-          const isToday = cell.date === today
+          const date = cell.date
+          if (!date) return <div key={`empty-${i}`} className="cal-cell empty" />
+          const list = byDate.get(date) ?? []
+          const isToday = date === today
+          const isSelected = date === selectedDate
           return (
-            <div key={cell.date} className={`cal-cell${isToday ? ' today' : ''}`}>
+            <div
+              key={date}
+              className={`cal-cell${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}`}
+              title={`${date}：${list.length} 项。点一下看当天的计划`}
+              onClick={() => onPickDay(date)}
+            >
               <div className="cal-day">
                 <span>{cell.day}</span>
-                {list.length === 0 ? (
-                  <button
-                    className="cal-add"
-                    title={`在 ${cell.date} 加一件事`}
-                    onClick={() => onPickDay(cell.date as string)}
-                  >
-                    ＋
-                  </button>
-                ) : null}
               </div>
               <div className="cal-tasks">
                 {list.slice(0, 3).map((t) => (
@@ -105,7 +106,11 @@ export function CareCalendar({
                     key={t.id}
                     className={`cal-chip ${toneOf(t.status, urgencyOf(t, today))}`}
                     title={`${t.title}${t.plantName ? ` · ${t.plantName}` : ''}`}
-                    onClick={() => onPickTask(t)}
+                    onClick={(event) => {
+                      // 点任务只选中那天 + 高亮那条，别再冒泡成「点空白处」
+                      event.stopPropagation()
+                      onPickTask(t)
+                    }}
                   >
                     {CARE_ACTION_ICONS[t.actionType]} {t.title}
                   </button>
@@ -123,7 +128,7 @@ export function CareCalendar({
         <span className="cal-dot pending" /> 计划中
         <span className="cal-dot done" /> 已完成
         <span className="cal-dot skipped" /> 已跳过
-        <span style={{ marginLeft: 10 }}>点任务可查看 / 编辑（完成与跳过在「今日」页）</span>
+        <span style={{ marginLeft: 10 }}>点日期看当天计划，点任务可查看 / 编辑</span>
       </div>
     </div>
   )

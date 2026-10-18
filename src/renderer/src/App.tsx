@@ -9,6 +9,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { RecipesPage } from './pages/RecipesPage'
 import { CarePage } from './pages/CarePage'
 import { TodayPage } from './pages/TodayPage'
+import { LogsPage } from './pages/LogsPage'
 import { pendingBuckets, todayIso } from '@core/care'
 
 type Route =
@@ -18,6 +19,7 @@ type Route =
   | { name: 'recipes' }
   | { name: 'today' }
   | { name: 'plans' }
+  | { name: 'logs' }
   | { name: 'templates' }
   | { name: 'settings' }
 
@@ -26,6 +28,7 @@ const NAV: Array<{ key: Route['name']; icon: string; label: string }> = [
   { key: 'species', icon: '📖', label: '物种库' },
   { key: 'today', icon: '🌤️', label: '今日' },
   { key: 'plans', icon: '📅', label: '养护计划' },
+  { key: 'logs', icon: '📓', label: '养护日志' },
   { key: 'recipes', icon: '🧪', label: '配方' },
   { key: 'templates', icon: '🧩', label: '信息模板' },
   { key: 'settings', icon: '⚙️', label: '设置' }
@@ -36,6 +39,7 @@ const HASH_TO_ROUTE: Record<string, Route['name']> = {
   species: 'species',
   today: 'today',
   plans: 'plans',
+  logs: 'logs',
   recipes: 'recipes',
   templates: 'templates',
   settings: 'settings'
@@ -310,6 +314,8 @@ function Shell(): ReactNode {
           {route.name === 'plans' ? (
             <CarePage onCareChanged={refreshCareBadge} onGoGarden={() => setRoute({ name: 'garden' })} />
           ) : null}
+
+          {route.name === 'logs' ? <LogsPage /> : null}
 
           {/*
             今日页：当天待办 + 天气预警。

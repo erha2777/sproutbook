@@ -349,10 +349,14 @@ function createWindow(): void {
             for (const flag of shotClicks) {
               const text = flag.slice('--screenshot-click='.length)
               // 在渲染层里找按钮并点击。用 JSON.stringify 转义，避免文字里的引号破坏脚本
+              /*
+               * `.cal-cell` 也进选择器：月历的整格是可点的（点某天看当天计划），
+               * 它不是 button，不列进来的话「点日期」这条路在自检里根本点不到。
+               */
               const clicked = await mainWindow?.webContents.executeJavaScript(
                 `(() => {
                    const target = ${JSON.stringify(text)};
-                   const nodes = Array.from(document.querySelectorAll('button, .pixel-card, .nav-item'));
+                   const nodes = Array.from(document.querySelectorAll('button, .pixel-card, .nav-item, .cal-cell'));
                    const hit = nodes.find((n) => (n.textContent || '').includes(target));
                    if (!hit) return false;
                    hit.click();

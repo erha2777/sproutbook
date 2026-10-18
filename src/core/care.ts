@@ -235,6 +235,22 @@ export function addDays(iso: string, days: number): string {
   return toIsoDate(date)
 }
 
+/**
+ * 'YYYY-MM-DD' → 周四。
+ *
+ * 用 `new Date(y, m-1, d)` 解析：`new Date('2026-10-15')` 会按 UTC 解释，
+ * 在东八区取出 getDay() 会差一天 —— 星期几错一天比不显示更糟。
+ *
+ * 放 core 而不是各页自己写：天气面板、今日页、月历的当天标题都要用，
+ * 三份实现迟早会有一份忘了时区这回事。
+ */
+export function weekdayLabel(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return ''
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()] ?? ''
+}
+
 /** 两个日期相差的天数（a - b）。 */
 export function daysBetween(a: string, b: string): number {
   const parse = (iso: string): number => {

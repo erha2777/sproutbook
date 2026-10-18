@@ -1,36 +1,36 @@
 /**
  * 养护计划页。
  *
- * 信息组织上做了一个选择：**先按紧急度，再按月份**。
- * 纯粹的月历很好看，但「上个月忘做的事」会被翻页翻掉——
- * 而那恰恰是最需要被提醒的。所以逾期任务永远置顶，
- * 月份只用来筛选「这个月原本要做什么」。
+ * 这一页只做两件事：**看这个月的节奏**，和**看某一天安排了什么**。
  *
- * 1.8.0 起「当天待办」和「天气预警」搬到了独立的「今日」页：
- * 这一页负责**整月与全年**的计划视图，今日页负责**今天**该做什么。
- * 两块数据同源（care:tasks），只是口径不同。
+ * 演变过程（别改回去）：
+ * - 1.8.0 把「当天待办 + 天气预警」拆到「今日」页
+ * - 1.8.2 把执行动作（完成 / 跳过）收口到今日页，这一页只留查看 / 编辑 / 删除
+ * - 1.8.3 撤掉「全部待办」列表：它与月历重复，而且跨月长列表反而看不清
+ *   这个月发生了什么。改成**点月历里的某一天，下面列出当天的全部计划**。
+ *   养护日志也搬出去成了独立页面。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { CareLog, CareTask, Material, RecipeListItem } from '@core/types'
+import type { CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareOverview, CareTaskListItem } from '@shared/api'
 import {
   CARE_ACTION_ICONS,
   CARE_ACTION_LABELS,
   CARE_ACTION_OPTIONS,
   dueDescription,
-  logKindLabel,
   pendingBuckets,
   summarizeTasks,
-  todayIso
+  todayIso,
+  weekdayLabel
 } from '@core/care'
-import { Badge, Button, EmptyState, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
+import { Badge, Button, EmptyState, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
 import { CareRuleManager } from '../components/CareRuleManager'
 import { CareCalendar } from '../components/CareCalendar'
-import { CareTaskRow, TaskGroup } from '../components/CareTaskRow'
+import { CareTaskRow } from '../components/CareTaskRow'
 
 /** 四个统计筛选的标题。列表面板和空态提示共用，免得两处各写一份。 */
 const STAT_FILTER_TITLES: Record<'overdue' | 'due' | 'done' | 'open', string> = {
@@ -72,25 +72,18 @@ export function CarePage({
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [plantFilter, setPlantFilter] = useState('')
-  /**
-   * 默认月历。
-   *
-   * 这一页的职责是「排计划 / 看节奏」：默认把整月的节奏摊开，
-   * 需要处理今天的事去「今日」页。待办列表退到一个 tab 里，
-   * 只做查看 / 编辑 / 删除。
-   */
-  const [tab, setTab] = useState<'todo' | 'calendar' | 'logs'>('calendar')
-  /** 当月任务：只给月历用 */
+  /** 当月任务：月历和「当天计划」都用这一份 */
   const [tasks, setTasks] = useState<CareTaskListItem[]>([])
-  /** 全部未完成任务：列表和统计都用这一份，口径与今日页一致 */
+  /** 全部未完成任务：统计徽章用这一份，口径与今日页一致 */
   const [allOpen, setAllOpen] = useState<CareTaskListItem[]>([])
   const [overview, setOverview] = useState<CareOverview | null>(null)
-  const [logs, setLogs] = useState<CareLog[]>([])
-  /** 手动记一笔：选了哪株、写了什么 */
-  const [logPlantId, setLogPlantId] = useState('')
-  const [logDraft, setLogDraft] = useState('')
-  /** 手动记一笔时的类型。原来固定落成 'note'，用户没得选 —— 也就带不上标签 */
-  const [logKind, setLogKind] = useState('note')
+  /**
+   * 月历里选中了哪一天。
+   *
+   * 默认选中今天 —— 打开就能看到「今天安排了什么」；
+   * 翻到别的月份时清空（那一天不在这个月里，硬留着只会显示错的东西）。
+   */
+  const [day, setDay] = useState<string | null>(today)
   const [plants, setPlants] = useState<PlantOption[]>([])
   const [speciesNames, setSpeciesNames] = useState<string[]>([])
   /** 任务上要显示绑定的配方，所以把配方与材料一起取回来（都是几十条量级） */
@@ -99,15 +92,15 @@ export function CarePage({
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<CareTask | 'new' | null>(null)
   const [showRules, setShowRules] = useState(false)
-  /** 从月历点进来的任务：滚动并高亮一下，否则用户不知道跳到了哪里 */
+  /** 从月历点进来的任务：滚动并高亮一下，否则用户不知道点中了哪一条 */
   const [highlight, setHighlight] = useState<number | null>(null)
   /** 任务行 DOM，用来把高亮的那条滚进视野 */
   const taskRefs = useRef(new Map<number, HTMLDivElement>())
   /**
    * 统计数字的筛选。
    *
-   * 这四个数字原来只是 Badge —— 点不动，用户没法从「逾期 0」走到对应的列表。
-   * 现在点一下就地筛出那批任务。
+   * 这几个数字原来只是 Badge —— 点不动，用户没法从「逾期 0」走到对应的任务。
+   * 现在点一下弹窗列出那批任务。
    */
   const [statFilter, setStatFilter] = useState<'overdue' | 'due' | 'done' | 'open' | null>(null)
   /**
@@ -125,7 +118,7 @@ export function CarePage({
   const [purgeTasks, setPurgeTasks] = useState<CareTaskListItem[]>([])
   const [purgeLoading, setPurgeLoading] = useState(false)
   const [purgeBusy, setPurgeBusy] = useState(false)
-  /** 从月历空白日点「＋」新增任务时的预设日期 */
+  /** 新增任务时的预设日期（默认跟随选中的那天） */
   const [draftDate, setDraftDate] = useState<string | undefined>(undefined)
 
   /** 正在看的是不是今天所在的月份。只影响「回到今天」按钮的状态 */
@@ -133,62 +126,32 @@ export function CarePage({
 
   const bounds = useMemo(() => monthBounds(year, month), [year, month])
 
-  /**
-   * 手动记一笔养护日志。
-   *
-   * care:log.add 这个通道一直存在、preload 也暴露了，**就是界面没接** ——
-   * 而日志空态原本还写着「也可以随时手动记一笔」。
-   * **邀请用户做一件做不到的事，比不说更糟。** 与其删那句话，不如把路接上。
-   */
-  const addManualLog = async (): Promise<void> => {
-    const plantId = logPlantId ? Number(logPlantId) : null
-    const content = logDraft.trim()
-    if (plantId === null || !content) {
-      toast.push('先选一株植物，再写一句做了什么', 'error')
-      return
-    }
-    try {
-      await window.api.care.addLog({ plantId, content, kind: logKind })
-      setLogDraft('')
-      setLogs(await window.api.care.logs(logPlantId ? plantId : undefined, 100))
-      toast.push('已记一笔', 'success')
-    } catch (error) {
-      toast.push(`记录失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
-    }
-  }
+  /** 选中的那天真的属于当前显示的月份吗（翻月后旧选择要作废） */
+  const dayInMonth =
+    day !== null && day.startsWith(`${year}-${String(month).padStart(2, '0')}-`) ? day : null
 
-  /**
-   * 切换植株时重新拉日志。
-   *
-   * 原来只有 `addManualLog` 里调 `setLogs` —— 也就是说**下拉框换了植株，
-   * 列表纹丝不动**，用户看到的就是「切换没用」。
-   * 加载逻辑收到这里，记完一笔也会自动跟着走。
-   */
-  useEffect(() => {
-    let alive = true
-    void window.api.care
-      .logs(logPlantId ? Number(logPlantId) : undefined, 100)
-      .then((rows) => {
-        if (alive) setLogs(rows)
-      })
-      .catch(() => {
-        // 日志取不到不该让整页报错，空列表 + 上面的加载失败提示已经够了
-        if (alive) setLogs([])
-      })
-    return () => {
-      alive = false
-    }
-  }, [logPlantId])
+  /** 当天的全部计划：待办 / 已完成 / 已跳过都在里面 —— 「当天所有计划」 */
+  const dayTasks = useMemo(
+    () => (dayInMonth ? tasks.filter((t) => t.dueDate === dayInMonth) : []),
+    [tasks, dayInMonth]
+  )
+
+  /** 翻月：清掉日期选择，免得显示上个月的那一天 */
+  const shiftMonth = (delta: number): void => {
+    const next = new Date(year, month - 1 + delta, 1)
+    setYear(next.getFullYear())
+    setMonth(next.getMonth() + 1)
+    setDay(null)
+  }
 
   const reload = useCallback(async () => {
     setLoading(true)
     try {
       const plantId = plantFilter ? Number(plantFilter) : undefined
-      const [monthTasks, allOpen, ov, logList, plantList, speciesList, recipeList, materialList] = await Promise.all([
+      const [monthTasks, allOpen, ov, plantList, speciesList, recipeList, materialList] = await Promise.all([
         window.api.care.tasks({ from: bounds.from, to: bounds.to, plantId }),
         window.api.care.tasks({ status: 'open', plantId }),
         window.api.care.overview(year),
-        window.api.care.logs(plantId, 100),
         window.api.plants.list({ limit: 500 }),
         window.api.species.list({ limit: 500 }),
         /*
@@ -209,7 +172,6 @@ export function CarePage({
        */
       setAllOpen(allOpen)
       setOverview(ov)
-      setLogs(logList)
       setPlants(
         plantList.items.map((p) => ({
           id: p.id,
@@ -315,29 +277,6 @@ export function CarePage({
     }
   }
 
-  /**
-   * 删除一条养护日志。
-   *
-   * 日志删了就没了（不像任务还能重新生成），所以**要确认**。
-   * 完成后自动写入的日志同样可删 —— 误操作留下的记录也在这里清。
-   */
-  const removeLog = async (log: CareLog): Promise<void> => {
-    const what = log.content ? `「${log.content}」` : `这条${log.logDate}的记录`
-    if (!window.confirm(`确定删除养护日志 ${what} 吗？删除后无法恢复。`)) return
-    try {
-      const ok = await window.api.care.removeLog(log.id)
-      if (!ok) {
-        // 影响 0 行 = 这条已经不在了，如实说，不报「已删除」
-        toast.push('这条日志已经不在了，可能已在别处删过', 'error')
-      } else {
-        toast.push('已删除', 'success')
-      }
-      await reload()
-    } catch (error) {
-      toast.push(`删除失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
-    }
-  }
-
   const removeTask = async (task: CareTaskListItem): Promise<void> => {
     if (!window.confirm(`确定删除任务「${task.title}」吗？`)) return
     try {
@@ -434,9 +373,8 @@ export function CarePage({
   return (
     <div className="content-inner">
       {/*
-        月份导航搬进了月历面板（见下面 tab === 'calendar' 那块）：
-        这一页默认就是月历，导航贴着月历更直观；而且列表现在是「全部待办」，
-        不再受月份影响，把月份选择放在页头会让人以为它管着整个页面。
+        月份导航在月历面板里（这一页就剩月历 + 当天计划）。
+        日期选择也不再放在页头：它只影响下面的「当天计划」。
       */}
       <div className="row" style={{ alignItems: 'center', marginBottom: 10, flexWrap: 'nowrap' }}>
         <div style={{ width: 190 }}>
@@ -495,18 +433,6 @@ export function CarePage({
             )
           })}
         </div>
-
-        <div className="row tight" style={{ marginTop: 8 }}>
-          <Button size="small" variant={tab === 'calendar' ? 'primary' : 'ghost'} onClick={() => setTab('calendar')}>
-            月历
-          </Button>
-          <Button size="small" variant={tab === 'todo' ? 'primary' : 'ghost'} onClick={() => setTab('todo')}>
-            全部待办（{openRows.length}）
-          </Button>
-          <Button size="small" variant={tab === 'logs' ? 'primary' : 'ghost'} onClick={() => setTab('logs')}>
-            养护日志（{logs.length}）
-          </Button>
-        </div>
       </Panel>
 
       {overview && overview.plantsWithoutTasks > 0 ? (
@@ -544,183 +470,114 @@ export function CarePage({
         <Panel>
           <Spinner label="加载中…" />
         </Panel>
-      ) : tab === 'todo' ? (
-        <Panel>
-          <SectionTitle right={<span className="small muted">共 {openRows.length} 项未完成</span>}>
-            全部待办
-          </SectionTitle>
-          {openRows.length === 0 ? (
-            <EmptyState
-              icon="🗓"
-              title="还没有待办任务"
-              hint={
-                overview && overview.rules > 0
-                  ? '到「我的花园」里选中一株，点「生成计划」就会按规则库排出它该做的事；也可以手动加一条。'
-                  : '规则库还是空的，先到「规则库」里加几条，或者直接手动加任务。'
-              }
-              action={
-                <div className="row tight">
-                  {onGoGarden ? <Button onClick={onGoGarden}>去我的花园生成</Button> : null}
-                  <Button variant={onGoGarden ? undefined : 'primary'} onClick={() => setEditing('new')}>
-                    手动加一条
-                  </Button>
-                </div>
-              }
-            />
-          ) : (
-            <>
-              {/*
-                分组按紧急度，**不按月份**：这一页的数字要和今日页对得上。
-                月份只影响月历上画在哪个格子。
-              */}
-              <TaskGroup title="已过期" count={groups.overdue.length} tone="safety">
-                {groups.overdue.map(renderRow)}
-              </TaskGroup>
-              <TaskGroup title="该做了" count={groups.due.length} tone="warn">
-                {groups.due.map(renderRow)}
-              </TaskGroup>
-              <TaskGroup title="快到了" count={groups.soon.length}>
-                {groups.soon.map(renderRow)}
-              </TaskGroup>
-              <TaskGroup title="还早" count={groups.later.length}>
-                {groups.later.map(renderRow)}
-              </TaskGroup>
-              <div className="small muted" style={{ marginTop: 6 }}>
-                这一页只负责查看 / 编辑 / 删除；要做的事请到「今日」页勾完成或跳过。
-              </div>
-            </>
-          )}
-        </Panel>
-      ) : tab === 'calendar' ? (
-        <Panel>
-          <div className="row" style={{ marginBottom: 8, flexWrap: 'nowrap' }}>
-            <Button size="small" onClick={() => (month === 1 ? (setMonth(12), setYear(year - 1)) : setMonth(month - 1))}>
-              ‹
-            </Button>
-            <b style={{ minWidth: 108, textAlign: 'center' }}>
-              {year} 年 {month} 月
-            </b>
-            <Button size="small" onClick={() => (month === 12 ? (setMonth(1), setYear(year + 1)) : setMonth(month + 1))}>
-              ›
-            </Button>
-            {/*
-              「回到今天」用**默认实心样式**，不用 ghost。
-              ghost 是背景、边框全透明 + 弱化文字，放在这片蓝色画布上几乎看不见
-              （用户截图圈出来说「太不显眼」）。它两边都是深色描边的按钮框，
-              这个也该是同一档。
-            */}
-            <Button
-              size="small"
-              disabled={isCurrentMonth}
-              title={isCurrentMonth ? '已经在今天所在的月份了' : '回到今天所在的月份'}
-              onClick={() => {
-                const d = new Date()
-                setYear(d.getFullYear())
-                setMonth(d.getMonth() + 1)
-              }}
-            >
-              {isCurrentMonth ? '已是今天' : '回到今天'}
-            </Button>
-            <span className="spacer" />
-            <span className="small muted">
-              本月 {monthSummary.total} 项 · 完成 {monthSummary.done} · 待办 {monthSummary.pending}
-            </span>
-          </div>
-          <CareCalendar
-            year={year}
-            month={month}
-            tasks={tasks}
-            onPickTask={(t) => {
-              /*
-               * 待办任务跳到列表并高亮；已完成 / 已跳过的**不在「全部待办」里**，
-               * 跳过去会是个空处 —— 直接打开详情（可以看备注、改日期）。
-               */
-              if (t.status === 'pending') {
-                setTab('todo')
-                setHighlight(t.id)
-              } else {
-                setEditing(t)
-              }
-            }}
-            onPickDay={(date) => {
-              setEditing('new')
-              setDraftDate(date)
-            }}
-          />
-        </Panel>
       ) : (
-        <Panel>
-          <SectionTitle>养护日志</SectionTitle>
-          {/* 手动记一笔。原来空态写着「也可以随时手动记一笔」却没有入口，现在真给了。 */}
-          <div className="row tight" style={{ marginBottom: 8 }}>
-            <div style={{ width: 180 }}>
-              <SelectInput
-                value={logPlantId}
-                onChange={setLogPlantId}
-                placeholder="选一株植物…"
-                options={plants.map((pl) => ({ value: String(pl.id), label: pl.label }))}
+        <div className="plan-split">
+          <Panel className="plan-calendar">
+            <div className="row" style={{ marginBottom: 8, flexWrap: 'nowrap' }}>
+              <Button size="small" onClick={() => shiftMonth(-1)}>
+                ‹
+              </Button>
+              <b style={{ minWidth: 108, textAlign: 'center' }}>
+                {year} 年 {month} 月
+              </b>
+              <Button size="small" onClick={() => shiftMonth(1)}>
+                ›
+              </Button>
+              {/*
+                「回到今天」用**默认实心样式**，不用 ghost。
+                ghost 是背景、边框全透明 + 弱化文字，放在这片蓝色画布上几乎看不见
+                （用户截图圈出来说「太不显眼」）。它两边都是深色描边的按钮框，
+                这个也该是同一档。
+              */}
+              <Button
+                size="small"
+                disabled={isCurrentMonth}
+                title={isCurrentMonth ? '已经在今天所在的月份了' : '回到今天所在的月份'}
+                onClick={() => {
+                  const d = new Date()
+                  setYear(d.getFullYear())
+                  setMonth(d.getMonth() + 1)
+                  setDay(today)
+                }}
+              >
+                {isCurrentMonth ? '已是今天' : '回到今天'}
+              </Button>
+              <span className="spacer" />
+              <span className="small muted">
+                本月 {monthSummary.total} 项 · 完成 {monthSummary.done} · 待办 {monthSummary.pending}
+              </span>
+            </div>
+            <CareCalendar
+              year={year}
+              month={month}
+              tasks={tasks}
+              selectedDate={dayInMonth}
+              onPickTask={(t) => {
+                // 点任务 = 选中它所在的那一天，并高亮这一条
+                setDay(t.dueDate)
+                setHighlight(t.id)
+              }}
+              onPickDay={(date) => setDay(date)}
+            />
+          </Panel>
+
+          {/*
+            当天计划。
+            「这个月排了些什么」看月历，「这一天到底要做什么」看这里 ——
+            原来那个跨月的「全部待办」列表和月历重复，46 条翻起来也找不到今天。
+
+            放在月历右边而不是下面：点完一天不用滚动就能看到结果。
+            窗口窄（约 1000px 以下）时会自动换行堆叠。
+          */}
+          <Panel className="plan-day">
+            <SectionTitle
+              right={dayInMonth ? <span className="small muted">共 {dayTasks.length} 项</span> : null}
+            >
+              {dayInMonth
+                ? `${Number(dayInMonth.slice(5, 7))} 月 ${Number(dayInMonth.slice(8))} 日 · ${weekdayLabel(dayInMonth)}`
+                : '当天计划'}
+            </SectionTitle>
+            {!dayInMonth ? (
+              <EmptyState
+                icon="🗓"
+                title="点月历里的某一天"
+                hint="那一天安排了什么会列在这里，可以直接查看 / 编辑 / 删除。"
               />
-            </div>
-            <div style={{ width: 140 }}>
-              {/* 类型可选：手动记的也能带上「浇水 / 施肥 / 观察记录」这类标签 */}
-              <SelectInput
-                value={logKind}
-                onChange={setLogKind}
-                options={[
-                  ...CARE_ACTION_OPTIONS.map((o) => ({ value: String(o.value), label: o.label })),
-                  // 'note' 不是动作类型（CareActionType 里没有它），但它确实是日志的 kind
-                  { value: 'note', label: '📝 记录' }
-                ]}
+            ) : dayTasks.length === 0 ? (
+              <EmptyState
+                icon="🌿"
+                title="这一天还没有安排"
+                hint="可以给这天单独加一条；年度计划到「我的花园」里选中那株生成。"
+                action={
+                  <Button
+                    onClick={() => {
+                      setEditing('new')
+                      setDraftDate(dayInMonth)
+                    }}
+                  >
+                    给这天加一条
+                  </Button>
+                }
               />
-            </div>
-            <div style={{ flex: 1 }}>
-              <TextInput
-                value={logDraft}
-                onChange={setLogDraft}
-                placeholder="记一句做了什么，例如「换了盆，土是泥炭 5 : 珍珠岩 3」"
-              />
-            </div>
-            <Button onClick={() => void addManualLog()} disabled={!logPlantId || !logDraft.trim()}>
-              记一笔
-            </Button>
-          </div>
-          {logs.length === 0 ? (
-            <EmptyState icon="📓" title="还没有记录" hint="完成任务时会自动写一条日志；也可以在上面手动记一笔。" />
-          ) : (
-            <div className="log-timeline">
-              {logs.map((log) => {
-                const plant = plants.find((p) => p.id === log.plantId)
-                return (
-                  <div key={log.id} className="log-item">
-                    <div className="log-date">{log.logDate}</div>
-                    <div style={{ flex: 1 }}>
-                      <div>
-                        {/*
-                          走 logKindLabel 而不是 CARE_ACTION_LABELS[kind] ?? kind ——
-                          后者在遇到 'note'（后端没给 kind 时的默认值）时
-                          **会把英文键名直接显示出来**，用户截图里的 note 就是这么来的。
-                        */}
-                        <Badge tone="info">{logKindLabel(log.kind)}</Badge>
-                        {plant ? <span className="small muted">{plant.label}</span> : null}
-                      </div>
-                      {log.content ? <div className="small">{log.content}</div> : null}
-                    </div>
-                    {/*
-                      删除按钮：不用 ghost —— ghost 无背景无边框，
-                      在浅米色的日志行上「删除」两个字太淡了，看不见。
-                      外面包一层是为了让它垂直居中（.log-item 是 align-items:flex-start）
-                    */}
-                    <div style={{ alignSelf: 'center' }}>
-                      <Button size="small" title="删除这条日志（不可恢复）" onClick={() => void removeLog(log)}>
-                        删除
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </Panel>
+            ) : (
+              <>
+                {dayTasks.map(renderRow)}
+                <div className="row tight" style={{ marginTop: 8 }}>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setEditing('new')
+                      setDraftDate(dayInMonth)
+                    }}
+                  >
+                    给这天加一条
+                  </Button>
+                  <span className="small muted">完成与跳过在「今日」页</span>
+                </div>
+              </>
+            )}
+          </Panel>
+        </div>
       )}
 
       {editing ? (
