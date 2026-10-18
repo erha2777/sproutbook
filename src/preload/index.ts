@@ -34,7 +34,8 @@ const api: SproutbookApi = {
     backups: () => call('app:backups'),
     backupNow: () => call('app:backupNow'),
     openDataDir: () => call('app:openDataDir'),
-    openImagesDir: () => call('app:openImagesDir')
+    openImagesDir: () => call('app:openImagesDir'),
+    quit: () => call('app:quit')
   },
   sandbox: {
     status: () => call('sandbox:status'),

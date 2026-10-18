@@ -17,9 +17,16 @@ import { FIELD_TYPES } from '@core/fieldTypes'
 import type { FieldUsageSummary } from '@shared/api'
 import { LoadFailure, Badge, Button, EmptyState, Field, Modal, Notice, Panel, SelectInput, Spinner, TextArea, TextInput, cx, useToast } from '../components/ui'
 
-export function TemplatesPage(): ReactNode {
+export function TemplatesPage({
+  initialOwner = 'species',
+  onBack
+}: {
+  /** 从「物种库」或「我的花园」进来时预选的模板 */
+  initialOwner?: FieldOwner
+  onBack?: () => void
+} = {}): ReactNode {
   const toast = useToast()
-  const [owner, setOwner] = useState<FieldOwner>('species')
+  const [owner, setOwner] = useState<FieldOwner>(initialOwner)
   const [rows, setRows] = useState<FieldUsageSummary[]>([])
   /** 读取失败的原因。和「确实没有数据」是两回事，不能都显示成空态 */
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -91,6 +98,11 @@ export function TemplatesPage(): ReactNode {
       <Panel>
         <div className="row">
           <div className="tabs" style={{ border: 'none' }}>
+            {onBack ? (
+              <Button size="small" variant="ghost" onClick={onBack} title="回到上一页">
+                ← 返回
+              </Button>
+            ) : null}
             <button className={cx('tab', owner === 'species' && 'active')} onClick={() => setOwner('species')}>
               物种信息模板
             </button>

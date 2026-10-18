@@ -45,7 +45,14 @@ import { PlantEditorModal } from './PlantEditor'
 /** 地块里精灵的最大边长（比例 1.0 时）。比格子略小，留出边距。 */
 const PLOT_SPRITE_MAX = 78
 
-export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactNode {
+export function GardenPage({
+  onGoSpecies,
+  onOpenTemplates
+}: {
+  onGoSpecies: () => void
+  /** 植株信息模板（从首页挪进「我的花园」） */
+  onOpenTemplates?: () => void
+}): ReactNode {
   const toast = useToast()
   const [items, setItems] = useState<PlantListItem[]>([])
   const [stats, setStats] = useState<PlantListItemStats | null>(null)
@@ -421,6 +428,12 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                 ▦ 列表
               </button>
             </div>
+            {/* 植株信息模板挪进了「我的花园」——原来在侧栏是一个独立页 */}
+            {onOpenTemplates ? (
+              <Button size="small" onClick={onOpenTemplates} title="决定「本株信息」里有哪些项目">
+                🧩 信息模板
+              </Button>
+            ) : null}
             <Button variant="primary" onClick={() => setEditing('new')}>
               ＋ 新增植株
             </Button>

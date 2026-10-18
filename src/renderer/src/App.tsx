@@ -11,37 +11,42 @@ import { RecipesPage } from './pages/RecipesPage'
 import { CarePage } from './pages/CarePage'
 import { TodayPage } from './pages/TodayPage'
 import { LogsPage } from './pages/LogsPage'
+import { HomePage } from './pages/HomePage'
 import { pendingBuckets, todayIso } from '@core/care'
 
+type CareTab = 'today' | 'plans' | 'logs' | 'recipes'
+
 type Route =
+  | { name: 'home' }
   | { name: 'garden' }
   | { name: 'species' }
   | { name: 'species-edit'; id: number | null }
-  | { name: 'recipes' }
-  | { name: 'today' }
-  | { name: 'plans' }
-  | { name: 'logs' }
-  | { name: 'templates' }
+  | { name: 'care'; tab: CareTab }
+  | { name: 'templates'; owner: 'species' | 'plant' }
   | { name: 'settings' }
 
-const NAV: Array<{ key: Route['name']; icon: string; label: string }> = [
+/** 侧栏：首页 + 三个入口 + 设置。养护下面的四页在页内用 tab 切。 */
+const NAV: Array<{ key: 'home' | 'garden' | 'species' | 'care' | 'settings'; icon: string; label: string }> = [
+  { key: 'home', icon: '🏠', label: '首页' },
   { key: 'garden', icon: '🪴', label: '我的花园' },
   { key: 'species', icon: '📖', label: '物种库' },
-  { key: 'today', icon: '🌤️', label: '今日' },
-  { key: 'plans', icon: '📅', label: '养护计划' },
-  { key: 'logs', icon: '📓', label: '养护日志' },
-  { key: 'recipes', icon: '🧪', label: '配方' },
-  { key: 'templates', icon: '🧩', label: '信息模板' },
+  { key: 'care', icon: '🌱', label: '养护' },
   { key: 'settings', icon: '⚙️', label: '设置' }
 ]
 
+/** 养护子页（首页「养护」进去后的四个 tab） */
+const CARE_TABS: Array<{ key: CareTab; icon: string; label: string }> = [
+  { key: 'today', icon: '🌤️', label: '今日' },
+  { key: 'plans', icon: '📅', label: '养护计划' },
+  { key: 'logs', icon: '📓', label: '养护日志' },
+  { key: 'recipes', icon: '🧪', label: '配方' }
+]
+
 const HASH_TO_ROUTE: Record<string, Route['name']> = {
+  home: 'home',
   garden: 'garden',
   species: 'species',
-  today: 'today',
-  plans: 'plans',
-  logs: 'logs',
-  recipes: 'recipes',
+  care: 'care',
   templates: 'templates',
   settings: 'settings'
 }
@@ -49,16 +54,28 @@ const HASH_TO_ROUTE: Record<string, Route['name']> = {
 /**
  * 从 URL hash 还原当前页面。
  * 这样刷新不会跳回首页，也让「界面自检」可以逐页截图。
+ *
+ * 旧链接（#/today、#/plans、#/logs、#/recipes）继续能用 —— 它们现在归到
+ * 「养护」的对应 tab 下，书签和自检脚本不会失效。
  */
 function routeFromHash(): Route {
   const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0]
+  if (raw === 'today' || raw === 'plans' || raw === 'logs' || raw === 'recipes') {
+    return { name: 'care', tab: raw }
+  }
+  if (raw === 'templates') return { name: 'templates', owner: 'species' }
+  if (raw === 'home' || raw === '') return { name: 'home' }
   const name = HASH_TO_ROUTE[raw]
-  return name ? ({ name } as Route) : { name: 'garden' }
+  if (name === 'care') return { name: 'care', tab: 'today' }
+  if (name === 'templates') return { name: 'templates', owner: 'species' }
+  return name ? ({ name } as Route) : { name: 'home' }
 }
 
 function hashForRoute(route: Route): string {
-  const name = route.name === 'species-edit' ? 'species' : route.name
-  return `#/${name}`
+  if (route.name === 'species-edit') return '#/species'
+  if (route.name === 'care') return `#/${route.tab}`
+  if (route.name === 'templates') return '#/templates'
+  return `#/${route.name}`
 }
 
 
@@ -191,7 +208,35 @@ function Shell(): ReactNode {
     })()
   }, [toast])
 
-  const activeNav: Route['name'] = route.name === 'species-edit' ? 'species' : route.name
+  const activeNav: 'home' | 'garden' | 'species' | 'care' | 'settings' =
+    route.name === 'species-edit'
+      ? 'species'
+      : route.name === 'templates'
+        ? route.owner === 'plant'
+          ? 'garden'
+          : 'species'
+        : route.name
+
+  /*
+   * 首页是**标题画面**，不套侧栏：它把应用收成四个入口。
+   * 其余页面照旧用侧栏，方便在分区之间跳。
+   */
+  if (route.name === 'home') {
+    return (
+      <div className="app-frame">
+        <TitleBar />
+        <HomePage
+          version={appVersion}
+          carePending={carePending}
+          onGarden={() => setRoute({ name: 'garden' })}
+          onSpecies={() => setRoute({ name: 'species' })}
+          onCare={() => setRoute({ name: 'care', tab: 'today' })}
+          onQuit={() => void window.api.app.quit()}
+          onSettings={() => setRoute({ name: 'settings' })}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="app-frame">
@@ -207,7 +252,10 @@ function Shell(): ReactNode {
             <button
               key={item.key}
               className={cx('nav-item', activeNav === item.key && 'active')}
-              onClick={() => setRoute({ name: item.key } as Route)}
+              onClick={() => {
+                if (item.key === 'care') setRoute({ name: 'care', tab: 'today' })
+                else setRoute({ name: item.key } as Route)
+              }}
             >
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
@@ -218,10 +266,10 @@ function Shell(): ReactNode {
                 </>
               ) : null}
               {/*
-                角标挂在「今日」：那才是「今天要处理几件事」的入口。
+                角标挂在「养护」：那才是「今天要处理几件事」的入口。
                 只算「已过期 + 该做」—— 把远期任务也算进来就等于没有信号了。
               */}
-              {item.key === 'today' && carePending > 0 ? (
+              {item.key === 'care' && carePending > 0 ? (
                 <>
                   <span className="spacer" />
                   <span className="nav-badge" title={`${carePending} 件事需要处理`}>
@@ -294,13 +342,19 @@ function Shell(): ReactNode {
         ) : null}
 
         <div className="content">
-          <PageErrorBoundary resetKey={route.name}>
-          {route.name === 'garden' ? <GardenPage onGoSpecies={() => setRoute({ name: 'species' })} /> : null}
+          <PageErrorBoundary resetKey={`${route.name}:${route.name === 'care' ? route.tab : ''}`}>
+          {route.name === 'garden' ? (
+            <GardenPage
+              onGoSpecies={() => setRoute({ name: 'species' })}
+              onOpenTemplates={() => setRoute({ name: 'templates', owner: 'plant' })}
+            />
+          ) : null}
 
           {route.name === 'species' ? (
             <SpeciesPage
               onEdit={(id) => setRoute({ name: 'species-edit', id })}
               onCreate={() => setRoute({ name: 'species-edit', id: null })}
+              onOpenTemplates={() => setRoute({ name: 'templates', owner: 'species' })}
             />
           ) : null}
 
@@ -312,25 +366,45 @@ function Shell(): ReactNode {
             />
           ) : null}
 
-          {route.name === 'templates' ? <TemplatesPage /> : null}
+          {route.name === 'templates' ? (
+            <TemplatesPage
+              initialOwner={route.owner}
+              onBack={() => setRoute(route.owner === 'plant' ? { name: 'garden' } : { name: 'species' })}
+            />
+          ) : null}
           {route.name === 'settings' ? <SettingsPage /> : null}
 
-          {route.name === 'plans' ? (
-            <CarePage onCareChanged={refreshCareBadge} onGoGarden={() => setRoute({ name: 'garden' })} />
-          ) : null}
-
-          {route.name === 'logs' ? <LogsPage /> : null}
-
           {/*
-            今日页：当天待办 + 天气预警。
-            这两块原来挤在养护计划顶部，翻月、统计、月历都在抢同一屏，
-            「今天该干什么」反而要翻半天才看见。
+            养护：今日 / 养护计划 / 养护日志 / 配方 收进一个分区，
+            页内用 tab 切 —— 首页只留「养护」一个入口。
           */}
-          {route.name === 'today' ? (
-            <TodayPage onCareChanged={refreshCareBadge} onGoPlans={() => setRoute({ name: 'plans' })} />
+          {route.name === 'care' ? (
+            <div className="care-hub">
+              <div className="care-tabs">
+                {CARE_TABS.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    className={cx('care-tab', route.tab === tab.key && 'on')}
+                    onClick={() => setRoute({ name: 'care', tab: tab.key })}
+                  >
+                    {tab.icon} {tab.label}
+                  </button>
+                ))}
+              </div>
+              {route.tab === 'today' ? (
+                <TodayPage
+                  onCareChanged={refreshCareBadge}
+                  onGoPlans={() => setRoute({ name: 'care', tab: 'plans' })}
+                />
+              ) : null}
+              {route.tab === 'plans' ? (
+                <CarePage onCareChanged={refreshCareBadge} onGoGarden={() => setRoute({ name: 'garden' })} />
+              ) : null}
+              {route.tab === 'logs' ? <LogsPage /> : null}
+              {route.tab === 'recipes' ? <RecipesPage /> : null}
+            </div>
           ) : null}
-
-          {route.name === 'recipes' ? <RecipesPage /> : null}
           </PageErrorBoundary>
         </div>
       </main>

@@ -8,7 +8,16 @@ import type { SpeciesListItem } from '@shared/api'
 import { currentMonth, imageUrl } from '../lib/util'
 import { LoadFailure, Badge, Button, EmptyState, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 
-export function SpeciesPage({ onEdit, onCreate }: { onEdit: (id: number) => void; onCreate: () => void }): ReactNode {
+export function SpeciesPage({
+  onEdit,
+  onCreate,
+  onOpenTemplates
+}: {
+  onEdit: (id: number) => void
+  onCreate: () => void
+  /** 物种信息模板（从首页挪进「物种库」） */
+  onOpenTemplates?: () => void
+}): ReactNode {
   const toast = useToast()
   const [items, setItems] = useState<SpeciesListItem[]>([])
   const [families, setFamilies] = useState<Array<{ family: string; count: number }>>([])
@@ -86,6 +95,12 @@ export function SpeciesPage({ onEdit, onCreate }: { onEdit: (id: number) => void
             </Button>
           ) : null}
           <span className="spacer" />
+          {/* 物种信息模板挪进了「物种库」——原来在侧栏是一个独立页 */}
+          {onOpenTemplates ? (
+            <Button size="small" onClick={onOpenTemplates} title="决定「植物信息」里有哪些项目">
+              🧩 信息模板
+            </Button>
+          ) : null}
           <Button variant="primary" onClick={onCreate}>
             ＋ 新增物种
           </Button>

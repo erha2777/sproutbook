@@ -130,6 +130,8 @@ export interface SproutbookApi {
     backupNow(): Promise<BackupInfo | null>
     openDataDir(): Promise<boolean>
     openImagesDir(): Promise<boolean>
+    /** 退出应用（首页的「退出」按钮） */
+    quit(): Promise<boolean>
   }
   /**
    * 沙箱兜底。

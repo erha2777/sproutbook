@@ -232,6 +232,12 @@ function registerAppIpc(): void {
 
   handle('app:backupNow', () => makeManualBackup())
 
+  /** 首页的「退出」按钮 */
+  handle('app:quit', () => {
+    app.quit()
+    return true
+  })
+
   handle('app:paths', () => ({
     userData: app.getPath('userData'),
     data: dataDir(),
