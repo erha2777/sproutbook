@@ -9,6 +9,10 @@
    ========================================================================== */
 
 :root {
+  /* 像素云（SVG data URI，由脚本栅格化生成：白顶 + 浅蓝阴影 + 深蓝底边） */
+  --cloud-a: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22352%22%20height%3D%22176%22%20viewBox%3D%220%200%20352%20176%22%20shape-rendering%3D%22crispEdges%22%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M184%2016h72v8h-72z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M104%2024h160v8h-160z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M96%2032h176v8h-176z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M88%2040h192v8h-192z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M80%2048h200v8h-200z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M80%2056h216v8h-216z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M72%2064h240v8h-240z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M56%2072h264v8h-264z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M48%2080h280v8h-280z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M40%2088h288v8h-288z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M40%2096h296v8h-296z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M32%20104h296v8h-296z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M40%20112h288v8h-288z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M40%20120h280v8h-280z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M48%20128h264v8h-264z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M56%20136h56v8h-56z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M120%20136h176v8h-176z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M72%20144h24v8h-24z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M128%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M136%20144h24v8h-24z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M160%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M168%20144h24v8h-24z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M192%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M200%20144h24v8h-24z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M224%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M232%20144h24v8h-24z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M256%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M264%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M136%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M144%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M152%20152h16v8h-16z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M168%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M176%20152h16v8h-16z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M192%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M200%20152h16v8h-16z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M216%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M232%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M240%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M248%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23cfe3ef%22%20d%3D%22M144%20160h72v8h-72z%22%2F%3E%3C%2Fsvg%3E");
+  --cloud-b: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22352%22%20height%3D%22176%22%20viewBox%3D%220%200%20352%20176%22%20shape-rendering%3D%22crispEdges%22%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M184%2016h72v8h-72z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M104%2024h160v8h-160z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M96%2032h176v8h-176z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M88%2040h192v8h-192z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M80%2048h200v8h-200z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M80%2056h216v8h-216z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M72%2064h240v8h-240z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M56%2072h264v8h-264z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M48%2080h280v8h-280z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M40%2088h288v8h-288z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M40%2096h296v8h-296z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M32%20104h296v8h-296z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M40%20112h288v8h-288z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M40%20120h280v8h-280z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M48%20128h264v8h-264z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M56%20136h56v8h-56z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M120%20136h176v8h-176z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M72%20144h16v8h-16z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M88%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M128%20144h24v8h-24z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M152%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M160%20144h24v8h-24z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M184%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M192%20144h24v8h-24z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M216%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M224%20144h24v8h-24z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M248%20144h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M256%20144h16v8h-16z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M136%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M144%20152h16v8h-16z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M160%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M168%20152h16v8h-16z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M184%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M192%20152h16v8h-16z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M208%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M216%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M232%20152h8v8h-8z%22%2F%3E%3Cpath%20fill%3D%22%23e6f2fa%22%20d%3D%22M240%20152h16v8h-16z%22%2F%3E%3Cpath%20fill%3D%22%23cfe3ef%22%20d%3D%22M144%20160h72v8h-72z%22%2F%3E%3C%2Fsvg%3E");
+
   /* 天空（参考图的渐变：深蓝 → 青绿） */
   --sky-1: #1e6fc4;
   --sky-2: #3f9de0;
@@ -83,11 +87,12 @@ img {
     radial-gradient(900px 420px at 82% -12%, rgba(255, 240, 180, 0.5), transparent 62%),
     linear-gradient(
       180deg,
-      #17589f 0%,
-      var(--sky-1) 8%,
-      var(--sky-2) 28%,
-      var(--sky-3) 54%,
-      var(--sky-4) 78%,
+      #0a1f45 0%,
+      #10396f 6%,
+      #17589f 14%,
+      var(--sky-2) 34%,
+      var(--sky-3) 58%,
+      var(--sky-4) 80%,
       var(--sky-5) 100%
     );
   z-index: 0;
@@ -116,8 +121,8 @@ img {
 .sky-stars {
   position: absolute;
   inset: 0 0 auto 0;
-  height: 30%;
-  opacity: 0.5;
+  height: 34%;
+  opacity: 0.85;
   background-image:
     radial-gradient(2px 2px at 6% 28%, #fff, transparent),
     radial-gradient(2px 2px at 17% 12%, #fff, transparent),
@@ -142,14 +147,10 @@ img {
 
 .cloud {
   position: absolute;
-  /* 上白下蓝的轻微渐变 + 底部投影，比纯白更像像素画的云 */
-  background: linear-gradient(180deg, #ffffff 0%, #f2f9ff 55%, #d6e9f7 100%);
-  /* 用多边形裁出块状云朵，比圆角更接近像素画 */
-  clip-path: polygon(
-    18% 62%, 12% 62%, 12% 44%, 24% 44%, 24% 28%, 46% 28%, 46% 16%, 70% 16%,
-    70% 28%, 82% 28%, 82% 44%, 92% 44%, 92% 62%, 88% 62%, 88% 74%, 18% 74%
-  );
-  filter: drop-shadow(0 6px 0 rgba(24, 74, 116, 0.09));
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-image: var(--cloud-a);
+  filter: drop-shadow(0 6px 0 rgba(24, 74, 116, 0.12));
   will-change: transform;
   animation: cloud-drift 60s ease-in-out infinite alternate;
 }
@@ -161,13 +162,13 @@ img {
 
 /* 云只放在顶部一段，避免和内容卡片互相干扰；
    透明度压得很低，作用是「透出一点天空感」而不是抢戏。 */
-.cloud.c1 { width: 340px; height: 156px; left: 3%; top: -2%; opacity: 0.55; animation-duration: 96s; }
-.cloud.c2 { width: 200px; height: 92px; left: 56%; top: 0%; opacity: 0.42; animation-duration: 74s; animation-delay: -12s; }
-.cloud.c3 { width: 260px; height: 120px; left: 28%; top: 4%; opacity: 0.3; animation-duration: 110s; animation-delay: -30s; }
-.cloud.c4 { width: 180px; height: 82px; left: 82%; top: 5%; opacity: 0.34; animation-duration: 82s; animation-delay: -18s; }
-.cloud.c5 { width: 130px; height: 60px; left: 12%; top: 11%; opacity: 0.22; animation-duration: 130s; animation-delay: -40s; }
-.cloud.c6 { width: 150px; height: 68px; left: 44%; top: 12%; opacity: 0.2; animation-duration: 120s; animation-delay: -60s; }
-.cloud.c7 { width: 120px; height: 56px; left: 70%; top: 14%; opacity: 0.18; animation-duration: 140s; animation-delay: -25s; }
+.cloud.c1 { width: 430px; height: 215px; left: 1%; top: -5%; opacity: 0.95; animation-duration: 96s; }
+.cloud.c2 { width: 260px; height: 130px; left: 60%; top: 4%; opacity: 0.88; background-image: var(--cloud-b); animation-duration: 74s; animation-delay: -12s; }
+.cloud.c3 { width: 330px; height: 165px; left: 25%; top: 9%; opacity: 0.9; animation-duration: 110s; animation-delay: -30s; }
+.cloud.c4 { width: 220px; height: 110px; left: 83%; top: 12%; opacity: 0.82; background-image: var(--cloud-b); animation-duration: 82s; animation-delay: -18s; }
+.cloud.c5 { width: 210px; height: 105px; left: 4%; top: 40%; opacity: 0.78; animation-duration: 130s; animation-delay: -40s; }
+.cloud.c6 { width: 250px; height: 125px; left: 26%; top: 46%; opacity: 0.74; background-image: var(--cloud-b); animation-duration: 120s; animation-delay: -60s; }
+.cloud.c7 { width: 200px; height: 100px; left: 68%; top: 43%; opacity: 0.7; animation-duration: 140s; animation-delay: -25s; }
 
 /* ---------- 木质面板 ---------- */
 
@@ -1002,24 +1003,30 @@ img {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 46px;
-  padding: 24px;
+  /* 木牌偏上、按钮偏下，中间留出天空 —— 和参考图同一构图 */
+  justify-content: space-between;
+  gap: 24px;
+  /* 底部留出草地高度，按钮浮在草皮上方，不压到草线 */
+  padding: clamp(40px, 9vh, 110px) 24px clamp(150px, 18vh, 220px);
   min-height: 0;
 }
 
 /* 木牌：外层深木框 + 内层浅木牌，和游戏里那块牌子一个思路 */
 .home-sign {
-  padding: 14px;
-  background: linear-gradient(180deg, #d99a52, #b97434);
-  border: 6px solid #6f4218;
+  width: min(860px, 70vw);
+  padding: 16px;
+  background: linear-gradient(180deg, #e0a45c, #b97434);
+  border: 9px solid #5a3511;
   box-shadow:
-    inset 0 6px 0 #e8b06c,
-    inset 0 -6px 0 #8a5423,
-    0 8px 0 rgba(0, 0, 0, 0.25);
+    inset 0 9px 0 #f0c184,
+    inset 0 -9px 0 #8a5423,
+    inset 9px 0 0 #c98a45,
+    inset -9px 0 0 #c98a45,
+    0 0 0 3px #7a4a1c,
+    0 12px 0 rgba(0, 0, 0, 0.3);
 }
 .home-sign-inner {
-  padding: 16px 54px 18px;
+  padding: clamp(18px, 2vw, 30px) clamp(24px, 4vw, 64px) clamp(20px, 2.2vw, 34px);
   background: repeating-linear-gradient(180deg, #f2d6a4 0 14px, #eccd95 14px 16px);
   border: 4px solid #a86a2d;
   text-align: center;
@@ -1047,8 +1054,8 @@ img {
   justify-content: center;
 }
 .home-btn {
-  min-width: 140px;
-  padding: 14px 20px 10px;
+  min-width: 132px;
+  padding: 11px 18px 9px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2467,11 +2474,13 @@ img {
   position: relative;
   animation: sign-sway 7.5s ease-in-out infinite;
   transform-origin: 50% -20%;
+  /* 四角铆钉叠在木色渐变之上（别忘了最后那层底色，否则牌子是透明的） */
   background-image:
     radial-gradient(circle at 12px 12px, #ffd08a 0 3px, #6f4218 3px 5px, transparent 5px),
     radial-gradient(circle at calc(100% - 12px) 12px, #ffd08a 0 3px, #6f4218 3px 5px, transparent 5px),
     radial-gradient(circle at 12px calc(100% - 12px), #ffd08a 0 3px, #6f4218 3px 5px, transparent 5px),
-    radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #ffd08a 0 3px, #6f4218 3px 5px, transparent 5px);
+    radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #ffd08a 0 3px, #6f4218 3px 5px, transparent 5px),
+    linear-gradient(180deg, #e0a45c, #b97434);
 }
 
 /* 两根吊绳 */
@@ -2519,14 +2528,15 @@ img {
   50% { transform: rotate(0.5deg); }
 }
 
-/* 标题做成「刻进木头里」：实心木色 + 上亮下暗的阴影 */
+/* 标题：实心木色 + 刻字阴影。
+   别用 background-clip: text —— 在 Chromium 里字形会被背景吃掉，只剩阴影发白。 */
 .home-title {
+  font-size: clamp(44px, 4.6vw, 96px);
   color: #b4551f;
-  font-size: clamp(40px, 3.8vw, 64px);
   text-shadow:
     0 2px 0 #f9e6c2,
-    0 -1px 0 rgba(90, 45, 12, 0.3),
-    0 4px 0 rgba(90, 45, 12, 0.28);
+    0 -1px 0 rgba(90, 45, 12, 0.35),
+    0 4px 0 rgba(90, 45, 12, 0.3);
 }
 
 /* ---------- 首页按钮：高光扫过、图标跳动、按下回弹 ---------- */
@@ -2925,4 +2935,32 @@ img {
 .pixel-card,
 .garden-plot {
   cursor: pointer;
+}
+
+
+/* 木牌四角的包角（简单几何块，纯 CSS） */
+.sign-corner {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  background: linear-gradient(180deg, #c98a45, #a86a2d);
+  border: 3px solid #5a3511;
+  box-shadow: inset 0 3px 0 #f0c184, inset 0 -3px 0 #8a5423;
+  pointer-events: none;
+}
+.sign-corner.tl { left: -9px; top: -9px; }
+.sign-corner.tr { right: -9px; top: -9px; }
+.sign-corner.bl { left: -9px; bottom: -9px; }
+.sign-corner.br { right: -9px; bottom: -9px; }
+
+/* 每块包角中间挖一个小方孔，像钉过的铁片 */
+.sign-corner::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: 8px;
+  height: 8px;
+  background: #6f4218;
+  box-shadow: inset 0 2px 0 #3f2208;
 }

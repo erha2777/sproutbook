@@ -37,6 +37,11 @@ export function HomePage({
   return (
     <div className="home">
       <div className="home-sign">
+        {/* 四个角饰：像旧木牌上的包角铁片 */}
+        <i className="sign-corner tl" aria-hidden />
+        <i className="sign-corner tr" aria-hidden />
+        <i className="sign-corner bl" aria-hidden />
+        <i className="sign-corner br" aria-hidden />
         <div className="home-sign-inner">
           <div className="home-title">Sproutbook</div>
           <div className="home-subtitle">植物养护管理</div>
