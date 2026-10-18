@@ -542,7 +542,8 @@ node scripts/install-textures.mjs D:\素材 --data-dir=D:\sproutbook-data
 {
   "slots": {
     "sign":  { "file": "image/logo.png" },
-    "panel": { "file": "Stardew valley Material pack/LooseSprites/DialogBoxGreen..png", "slice": 24 },
+    "panel": { "file": "Stardew valley Material pack/LooseSprites/DialogBoxGreen..png",
+               "crop": { "x": 16, "y": 16, "w": 160, "h": 160 }, "slice": 24 },
     "cloud": { "file": "Stardew valley Material pack/Minigames/Clouds..png",
                "crop": { "x": 262, "y": 332, "w": 166, "h": 106 } }
   },

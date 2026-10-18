@@ -2,6 +2,38 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.31.0] - 2026-10-18
+
+### 用 DialogBoxGreen 做页面外框（九宫格）
+
+用户：「用 DialogBoxGreen.png 或 textBox..png 做边框呢」。
+
+#### 关键坑：先裁透明边
+
+`DialogBoxGreen..png` 是 192×192，但真正有内容的是 **x/y 16..176**：
+
+```json
+"panel": {
+  "file": "Stardew valley Material pack/LooseSprites/DialogBoxGreen..png",
+  "crop": { "x": 16, "y": 16, "w": 160, "h": 160 },
+  "slice": 24
+}
+```
+
+不裁的话，slice 会把空白算进边框，画出来就是一坨粗带（前两版就是这毛病）。
+
+#### 用在哪
+
+- **只给页面外框用**（`.content > .content-inner`），一页一个雕花框
+- 里面的小面板/卡片仍用 1.30 的双线细框 —— 每个小面板都套 24px 雕花框会吵到看不清
+- `border-image-repeat: stretch`：长边不重复出现缺口，像一整圈框
+- 边框宽度 = slice = 24px，1:1 不缩放，像素清晰；padding 34px 防压线
+
+#### 还修了
+
+- 旧的「整张图拉伸当面板背景」规则会和九宫格打架（面板上出现大块橙色），
+  加 `:not(.tex-panel-slice)` 守卫
+
 ## [1.30.0] - 2026-10-18
 
 ### 面板换成参考图那种「双线木框」
