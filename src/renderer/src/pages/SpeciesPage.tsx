@@ -66,7 +66,7 @@ export function SpeciesPage({
 
   return (
     <div className="content-inner">
-      <Panel>
+      <Panel className="sticky-head">
         <div className="row">
           <div style={{ flex: 1, minWidth: 200 }}>
             <TextInput value={query} onChange={setQuery} placeholder="搜索名称、别名、学名、科…" />

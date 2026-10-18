@@ -421,7 +421,11 @@ function createWindow(): void {
               const scrolled = await mainWindow?.webContents.executeJavaScript(
                 `(() => {
                    const modal = document.querySelector('.modal-body');
-                   const el = modal || document.querySelector('.content') || document.scrollingElement;
+                   /*
+                    * 页面滚动现在发生在 .content-inner（这样工具条才能钉住），
+                    * .content 本身不再滚 —— 两个都试，谁有高度滚谁。
+                    */
+                   const el = modal || document.querySelector('.content-inner') || document.querySelector('.content') || document.scrollingElement;
                    if (!el) return null;
                    el.scrollTop = ${JSON.stringify(value)} === 'bottom' ? el.scrollHeight : Number(${JSON.stringify(value)}) || 0;
                    return el.scrollTop;

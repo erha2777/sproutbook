@@ -393,7 +393,7 @@ export function GardenPage({
           </div>
         ) : null}
 
-        <Panel>
+        <Panel className="sticky-head">
           <div className="row" style={{ flexWrap: 'nowrap' }}>
             <div style={{ width: 190 }}>
               <TextInput value={query} onChange={(v) => patch({ query: v })} placeholder="搜索昵称 / 物种 / 别名…" />

@@ -216,7 +216,7 @@ export function LogsPage(): ReactNode {
 
   return (
     <div className="content-inner">
-      <Panel>
+      <Panel className="sticky-head">
         <SectionTitle right={<span className="small muted">{plantId ? `已完成 ${logs.length} 条` : `最近 ${logs.length} 条`}</span>}>
           养护日志
         </SectionTitle>

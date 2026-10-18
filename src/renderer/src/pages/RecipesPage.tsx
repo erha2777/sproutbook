@@ -83,30 +83,32 @@ export function RecipesPage(): ReactNode {
 
   return (
     <div className="content-inner">
-      <div className="row" style={{ alignItems: 'center', marginBottom: 10 }}>
-        <div style={{ width: 240 }}>
-          <input
-            className="pixel-input"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索配方名、材料…"
-          />
+      <Panel className="sticky-head">
+        <div className="row" style={{ alignItems: 'center' }}>
+          <div style={{ width: 240 }}>
+            <input
+              className="pixel-input"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜索配方名、材料…"
+            />
+          </div>
+          <div style={{ width: 150 }}>
+            <SelectInput value={kind} onChange={setKind} options={kindOptions} />
+          </div>
+          <label className="checkline">
+            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+            显示已归档
+          </label>
+          <span className="spacer" />
+          <Button size="small" onClick={() => setManagingMaterials(true)}>
+            材料库（{stats.materials}）
+          </Button>
+          <Button variant="primary" onClick={() => setEditing('new')}>
+            ＋ 新增配方
+          </Button>
         </div>
-        <div style={{ width: 150 }}>
-          <SelectInput value={kind} onChange={setKind} options={kindOptions} />
-        </div>
-        <label className="checkline">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-          显示已归档
-        </label>
-        <span className="spacer" />
-        <Button size="small" onClick={() => setManagingMaterials(true)}>
-          材料库（{stats.materials}）
-        </Button>
-        <Button variant="primary" onClick={() => setEditing('new')}>
-          ＋ 新增配方
-        </Button>
-      </div>
+      </Panel>
 
       <Panel>
         <SectionTitle

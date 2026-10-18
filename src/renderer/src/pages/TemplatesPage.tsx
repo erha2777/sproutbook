@@ -95,7 +95,7 @@ export function TemplatesPage({
 
   return (
     <div className="content-inner">
-      <Panel>
+      <Panel className="sticky-head">
         <div className="row">
           <div className="tabs" style={{ border: 'none' }}>
             {onBack ? (
