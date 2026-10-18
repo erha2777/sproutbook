@@ -1430,12 +1430,21 @@ img {
  * 宽屏下（2K/4K）一行拉到 2000px 会非常难读，也显得「塞满」。
  */
 .content > .content-inner {
-  padding-top: 20px;
+  padding: 20px;
   max-width: 1240px;
   margin: 0 auto;
   width: 100%;
   /* 像素字体比系统字体宽，宽表格可能顶出容器 —— 允许横向滚动，别裁掉操作列 */
   overflow-x: auto;
+  /*
+   * 所有内页共用一块「纸面」底：压在私有地图背景上，
+   * 内容不再直接浮在花花绿绿的地图上看不清。
+   */
+  background: rgba(247, 231, 200, 0.97);
+  border: 3px solid rgba(90, 60, 25, 0.85);
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.55),
+    0 6px 0 rgba(0, 0, 0, 0.25);
 }
 
 /*
@@ -3238,3 +3247,8 @@ html.tex-panel.tex-panel-slice .pixel-panel {
   position: relative;
   z-index: 1;
 }
+
+
+/* ---------- 内页「画布」：中间一块压暗的底 ---------- */
+
+
