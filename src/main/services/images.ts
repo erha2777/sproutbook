@@ -32,6 +32,176 @@ export interface ImportedImage {
   height: number | null
 }
 
+/** 一条网络图片候选：原图地址 + 缩略图（data URL，渲染层 CSP 只允许 data:） */
+export interface WebImageCandidate {
+  url: string
+  thumb: string
+  title: string | null
+}
+
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
+
+/**
+ * 用必应图片搜索找候选图。
+ *
+ * 为什么不是「让模型给图片」：chat 模型没有联网工具，给不出真实图片地址；
+ * 图片搜索/生成服务又都要各自的 key（百度图片接口已加反爬，直接 403）。
+ * 必应图片的 HTML 里带真实 `murl`（原图）和 `turl`（缩略图），
+ * 由**应用**去搜、由**用户**挑，这条链路既不依赖 key，也不怕模型编造。
+ *
+ * 注意：缩略图转成 data URL 返回 —— 渲染层 CSP 是
+ * `img-src 'self' plantimg: data: blob:`，远程 https 图片会被拦。
+ */
+export async function searchWebImages(query: string, limit = 12): Promise<WebImageCandidate[]> {
+  const q = query.trim()
+  if (!q) throw new Error('先输入要搜的名称')
+  const url = `https://cn.bing.com/images/search?q=${encodeURIComponent(q)}&form=HDRSC2&first=1`
+
+  const response = await net.fetch(url, {
+    headers: { 'user-agent': BROWSER_UA, accept: 'text/html' }
+  })
+  if (!response.ok) throw new Error(`搜索失败：HTTP ${response.status}`)
+  const html = await response.text()
+
+  // HTML 里是 `m="{&quot;murl&quot;:&quot;...&quot;,&quot;turl&quot;:&quot;...&quot;}"`
+  const originals = [...html.matchAll(/murl&quot;:&quot;(.*?)&quot;/g)].map((m) => decodeHtml(m[1]))
+  const thumbs = [...html.matchAll(/turl&quot;:&quot;(.*?)&quot;/g)].map((m) => decodeHtml(m[1]))
+  const titles = [...html.matchAll(/&quot;t&quot;:&quot;(.*?)&quot;/g)].map((m) => decodeHtml(m[1]))
+
+  const seen = new Set<string>()
+  const picked: Array<{ url: string; turl: string | null; title: string | null }> = []
+  for (let i = 0; i < originals.length && picked.length < limit; i++) {
+    const original = originals[i]
+    if (!original || !/^https?:\/\//i.test(original) || seen.has(original)) continue
+    seen.add(original)
+    picked.push({ url: original, turl: thumbs[i] ?? null, title: titles[i] ?? null })
+  }
+  if (picked.length === 0) throw new Error('没有搜到图片，换个名称再试')
+
+  // 缩略图并发下载，失败就跳过（不因为没有预览就丢掉候选）
+  const withThumbs = await Promise.all(
+    picked.map(async (item) => {
+      const thumb = item.turl ? await fetchAsDataUrl(item.turl) : null
+      const fallback = thumb ?? (await fetchAsDataUrl(item.url, 1_500_000))
+      return fallback ? { url: item.url, thumb: fallback, title: item.title } : null
+    })
+  )
+  const items = withThumbs.filter((v): v is WebImageCandidate => v !== null)
+  if (items.length === 0) throw new Error('图片都下载不下来，可能被站点限制了')
+  return items
+}
+
+function decodeHtml(text: string): string {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&#x2F;/g, '/')
+    .replace(/&quot;/g, '"')
+}
+
+/** 下载一张图并转 data URL；超过大小上限返回 null */
+async function fetchAsDataUrl(url: string, maxBytes = 3_000_000): Promise<string | null> {
+  try {
+    const response = await net.fetch(url, {
+      headers: { 'user-agent': BROWSER_UA, referer: 'https://cn.bing.com/' }
+    })
+    if (!response.ok) return null
+    const type = (response.headers.get('content-type') ?? '').toLowerCase()
+    if (!type.startsWith('image/')) return null
+    const buffer = Buffer.from(await response.arrayBuffer())
+    if (buffer.length === 0 || buffer.length > maxBytes) return null
+    return `data:${type};base64,${buffer.toString('base64')}`
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 从图片地址导入（用户粘贴的链接）。
+ *
+ * 为什么需要它：配置的聊天模型（如 deepseek-chat）拿不到图片，
+ * 而国内的图片搜索大多要另外的 key。先给一条「复制图片地址 → 粘贴」的路，
+ * 任何浏览器里能看到的图都能进来。
+ *
+ * 约束：只接受 http(s)、只接受 image/*、40MB 上限、超时 20 秒。
+ */
+export async function importImageFromUrl(url: string): Promise<ImportedImage> {
+  let parsed: URL
+  try {
+    parsed = new URL(url.trim())
+  } catch {
+    throw new Error('这不是一个合法的图片地址')
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('只支持 http / https 图片地址')
+  }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 20_000)
+  let response: globalThis.Response
+  try {
+    response = await net.fetch(parsed.toString(), { signal: controller.signal, redirect: 'follow' })
+  } catch (error) {
+    throw new Error(
+      `下载失败：${error instanceof Error && error.name === 'AbortError' ? '超时（20 秒）' : '网络不可达'}`
+    )
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!response.ok) throw new Error(`下载失败：HTTP ${response.status}`)
+
+  const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+  if (!contentType.startsWith('image/')) {
+    throw new Error(`这个地址不是图片（Content-Type: ${contentType || '未知'}）`)
+  }
+  const ext = extFromContentType(contentType)
+  if (!ext) throw new Error(`不支持的图片格式：${contentType}`)
+
+  const buffer = Buffer.from(await response.arrayBuffer())
+  if (buffer.length === 0) throw new Error('下载到的图片是空的')
+  if (buffer.length > 40 * 1024 * 1024) throw new Error('图片超过 40MB，请先压缩后再导入')
+
+  return saveImageBuffer(buffer, ext)
+}
+
+function extFromContentType(contentType: string): string | null {
+  if (contentType.includes('jpeg') || contentType.includes('jpg')) return '.jpg'
+  if (contentType.includes('png')) return '.png'
+  if (contentType.includes('webp')) return '.webp'
+  if (contentType.includes('gif')) return '.gif'
+  if (contentType.includes('bmp')) return '.bmp'
+  return null
+}
+
+/** 把内存里的图片写进 images 目录并生成缩略图（链接导入与本地导入共用） */
+function saveImageBuffer(buffer: Buffer, ext: string): ImportedImage {
+  const dir = ensureImagesDir()
+  const fileName = `${randomUUID()}${ext}`
+  const target = join(dir, fileName)
+  writeFileSync(target, buffer)
+
+  let thumbName: string | null = null
+  let width: number | null = null
+  let height: number | null = null
+  try {
+    const image = nativeImage.createFromBuffer(buffer)
+    if (!image.isEmpty()) {
+      const size = image.getSize()
+      width = size.width
+      height = size.height
+      const maxEdge = 640
+      const scale = Math.min(1, maxEdge / Math.max(size.width, size.height))
+      const resized = scale < 1 ? image.resize({ width: Math.round(size.width * scale) }) : image
+      thumbName = `${basename(fileName, ext)}_thumb.jpg`
+      writeFileSync(join(dir, thumbName), resized.toJPEG(82))
+    }
+  } catch {
+    // 缩略图失败不影响主流程，前端会退回显示原图
+    thumbName = null
+  }
+  return { fileName, thumbName, width, height }
+}
+
 /**
  * 把一个外部图片文件复制进应用数据目录，并生成缩略图。
  * 失败时抛错，由调用方转成用户可读的提示 —— 不静默失败。

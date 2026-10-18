@@ -78,6 +78,8 @@ const api: SproutbookApi = {
   images: {
     list: (owner) => call('images:list', owner),
     pick: (owner) => call('images:pick', owner),
+    importUrl: (owner, url) => call('images:importUrl', owner, url),
+    search: (query) => call('images:search', query),
     remove: (id) => call('images:delete', id),
   },
   materials: {

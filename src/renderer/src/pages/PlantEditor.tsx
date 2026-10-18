@@ -333,6 +333,7 @@ export function PlantEditorModal({
           disabled={savedId === null}
           coverId={savedId !== null ? coverId : undefined}
           onSetCover={savedId !== null ? setCoverId : undefined}
+          searchHint={plant?.species?.commonName ?? plant?.nickname}
           onChanged={() => undefined}
         />
       </div>

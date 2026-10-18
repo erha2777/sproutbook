@@ -391,6 +391,7 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
         <ImageStripWithHint
           owner={currentId !== null ? { speciesId: currentId } : {}}
           disabled={currentId === null}
+          searchHint={typeof values.common_name === 'string' ? values.common_name : undefined}
           hint={currentId === null ? '保存后即可添加图片。' : undefined}
         />
       </Panel>

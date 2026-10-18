@@ -97,6 +97,13 @@ export interface ImportResponse {
   failures?: string[]
 }
 
+/** 「网上找图」的一条候选：原图地址 + 可直接显示的缩略图（data URL） */
+export interface WebImageCandidate {
+  url: string
+  thumb: string
+  title: string | null
+}
+
 export interface AiRunRow {
   id: number
   kind: string
@@ -213,6 +220,10 @@ export interface SproutbookApi {
   images: {
     list(owner: { plantId?: number; speciesId?: number }): Promise<ImageRecord[]>
     pick(owner: { plantId?: number; speciesId?: number }): Promise<ImportResponse>
+    /** 从图片地址下载并导入（用户粘贴浏览器里看到的图片链接） */
+    importUrl(owner: { plantId?: number; speciesId?: number }, url: string): Promise<ImageRecord>
+    /** 用必应图片搜索找候选图（缩略图是 data URL，受 CSP 限制） */
+    search(query: string): Promise<WebImageCandidate[]>
     remove(id: number): Promise<ImageRecord | null>
   }
   materials: {

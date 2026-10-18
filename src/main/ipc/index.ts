@@ -99,7 +99,7 @@ import { autofillSpecies } from '../services/ai/autofill'
 import { identifyPlant } from '../services/ai/identify'
 import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } from '../services/ai/client'
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
-import { importImage, removeImageFiles } from '../services/images'
+import { importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
 import {
   createCompatShortcut,
   detectIntegrityLevel,
@@ -440,6 +440,25 @@ function registerEnvironmentIpc(): void {
 
 function registerImageIpc(): void {
   handle('images:list', (owner: { plantId?: number; speciesId?: number }) => listImages(getDb(), owner))
+
+  handle('images:search', (query: string) => searchWebImages(query, 12))
+
+  /*
+   * 从图片地址导入。
+   *
+   * 模型（deepseek-chat 之类）拿不到图片，国内的图片搜索又多要单独的 key，
+   * 所以先给一条「浏览器里看到图 → 复制图片地址 → 粘贴」的路。
+   */
+  handle('images:importUrl', async (owner: { plantId?: number; speciesId?: number }, url: string) => {
+    const file = await importImageFromUrl(url)
+    return addImage(getDb(), {
+      plantId: owner.plantId ?? null,
+      speciesId: owner.speciesId ?? null,
+      path: file.fileName,
+      thumbPath: file.thumbName,
+      origin: 'url'
+    })
+  })
 
   handle('images:pick', async (owner: { plantId?: number; speciesId?: number }) => {
     const result = await dialog.showOpenDialog({

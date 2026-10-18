@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import type { ImageRecord } from '@core/types'
 import { imageUrl } from '../lib/util'
 import { Button, Spinner, cx, useToast } from './ui'
+import { ImageSearchModal } from './ImageSearchModal'
 
 export interface ImageStripProps {
   owner: { plantId?: number; speciesId?: number }
@@ -20,13 +21,17 @@ export interface ImageStripProps {
    */
   coverId?: number | null
   onSetCover?: (imageId: number | null) => void
+  /** 「网上找图」的预填搜索词（物种名 / 昵称） */
+  searchHint?: string
 }
 
-export function ImageStrip({ owner, disabled, onChanged, coverId, onSetCover }: ImageStripProps): ReactNode {
+export function ImageStrip({ owner, disabled, onChanged, coverId, onSetCover, searchHint }: ImageStripProps): ReactNode {
   const toast = useToast()
   const [images, setImages] = useState<ImageRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+  /** 「网上找图」弹窗 */
+  const [searchOpen, setSearchOpen] = useState(false)
 
   const ownerKey = `${owner.plantId ?? ''}:${owner.speciesId ?? ''}`
 
@@ -87,6 +92,48 @@ export function ImageStrip({ owner, disabled, onChanged, coverId, onSetCover }: 
     }
   }
 
+  /**
+   * 从图片地址导入。
+   *
+   * 为什么是「粘贴链接」而不是「AI 自动找图」：配置的聊天模型（deepseek-chat）
+   * 是纯文本的，拿不到图片；图片搜索 / 生成服务又都各自要 key。
+   * 粘贴链接是零依赖的兜底：浏览器里能看到的图，右键「复制图片地址」就能进来。
+   */
+  const importByUrl = async (): Promise<void> => {
+    const url = window.prompt(
+      '粘贴图片地址（http / https）\n\n在浏览器里右键图片 →「复制图片地址」，然后粘贴到这里。'
+    )
+    if (!url || !url.trim()) return
+    setBusy(true)
+    try {
+      await window.api.images.importUrl(owner, url.trim())
+      toast.push('已从链接导入 1 张图片', 'success')
+      await load()
+      onChanged?.()
+    } catch (error) {
+      toast.push(`导入失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * 网上找图：挑中一张就下载入库（和链接导入同一条下载管线）。
+   */
+  const importFromSearch = async (url: string): Promise<void> => {
+    setBusy(true)
+    try {
+      await window.api.images.importUrl(owner, url)
+      toast.push('已导入 1 张图片', 'success')
+      await load()
+      onChanged?.()
+    } catch (error) {
+      toast.push(`导入失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="image-strip">
       {images.map((image) => {
@@ -117,6 +164,20 @@ export function ImageStrip({ owner, disabled, onChanged, coverId, onSetCover }: 
         </button>
       ) : null}
 
+      {!disabled ? (
+        <button className={cx('image-add')} onClick={() => void importByUrl()} disabled={busy} title="粘贴图片地址导入">
+          {busy ? <Spinner /> : <span style={{ fontSize: 18 }}>🔗</span>}
+          <span>链接导入</span>
+        </button>
+      ) : null}
+
+      {!disabled ? (
+        <button className={cx('image-add')} onClick={() => setSearchOpen(true)} disabled={busy} title="按名称在必应图片里搜">
+          {busy ? <Spinner /> : <span style={{ fontSize: 18 }}>🔍</span>}
+          <span>网上找图</span>
+        </button>
+      ) : null}
+
       {onSetCover && images.length > 0 ? (
         <div className="small muted" style={{ flexBasis: '100%' }}>
           封面：{coverId ? '已选一张照片' : '默认（最早导入的一张）'}
@@ -132,6 +193,17 @@ export function ImageStrip({ owner, disabled, onChanged, coverId, onSetCover }: 
 
       {images.length === 0 && disabled ? <span className="small muted">暂无图片</span> : null}
       {loading ? <Spinner label="读取中" /> : null}
+
+      {searchOpen ? (
+        <ImageSearchModal
+          initialQuery={searchHint}
+          onClose={() => setSearchOpen(false)}
+          onPick={(url) => {
+            setSearchOpen(false)
+            void importFromSearch(url)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
