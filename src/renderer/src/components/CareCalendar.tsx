@@ -12,7 +12,7 @@ import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import type { CareTaskStatus } from '@core/types'
 import type { CareTaskListItem } from '@shared/api'
-import { CARE_ACTION_ICONS, urgencyOf, todayIso } from '@core/care'
+import { addDays, urgencyOf, todayIso, windowRange } from '@core/care'
 import type { CareUrgency } from '@core/care'
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
@@ -35,7 +35,8 @@ export function CareCalendar({
   tasks,
   selectedDate,
   onPickTask,
-  onPickDay
+  onPickDay,
+  onPickCarriedTask
 }: {
   year: number
   month: number
@@ -45,20 +46,69 @@ export function CareCalendar({
   onPickTask: (task: CareTaskListItem) => void
   /** 点某一天：下面列出当天的全部计划 */
   onPickDay: (date: string) => void
+  /**
+   * 点「时间窗内可做」的虚标任务：**选中当前这天**，而不是跳回它的到期日。
+   *
+   * 不传时退化成 onPickTask（回到到期日）。
+   */
+  onPickCarriedTask?: (task: CareTaskListItem, date: string) => void
 }): ReactNode {
   const today = todayIso()
   const { leading, days } = useMemo(() => monthLayout(year, month), [year, month])
 
-  /** 日期 → 当天的任务 */
-  const byDate = useMemo(() => {
-    const map = new Map<string, CareTaskListItem[]>()
+  /**
+   * 日期 → 当天到期的任务（按 `ruleId + title` 合并计数）。
+   *
+   * 一条规则给七株生成七条任务，格子里不该出现七行一模一样的标签 ——
+   * 显示「×7」就够，具体哪一株点开看右侧当天列表。
+   */
+  const dueByDate = useMemo(() => {
+    const flat = new Map<string, Map<string, { task: CareTaskListItem; count: number }>>()
     for (const t of tasks) {
-      const list = map.get(t.dueDate) ?? []
-      list.push(t)
-      map.set(t.dueDate, list)
+      const key = `${t.ruleId ?? 'manual'}|${t.title}`
+      const dayMap = flat.get(t.dueDate) ?? new Map<string, { task: CareTaskListItem; count: number }>()
+      const hit = dayMap.get(key)
+      if (hit) hit.count++
+      else dayMap.set(key, { task: t, count: 1 })
+      flat.set(t.dueDate, dayMap)
     }
-    return map
+    const out = new Map<string, Array<{ task: CareTaskListItem; count: number }>>()
+    for (const [date, dayMap] of flat) out.set(date, [...dayMap.values()])
+    return out
   }, [tasks])
+
+  /**
+   * 日期 → 时间窗覆盖这天、但到期日更早的**待办**（按规则/标题合并计数）。
+   *
+   * 用户要求「日历上也要显示」：10/1 的任务可做期到 10/31，
+   * 那 10/18 这一格也该让人看见它还挂着 —— 用虚标样式区分「今天到期」。
+   *
+   * 这里**按 `ruleId + title` 去重**再显示「×N」：七株的任务如果每格都画七个
+   * 一样的虚标，整月日历就没法看了。要点具体哪一株，点开后右侧当天列表里有。
+   */
+  const carriedByDate = useMemo(() => {
+    const byDate = new Map<string, Map<string, { task: CareTaskListItem; count: number }>>()
+    const monthStart = `${year}-${pad(month)}-01`
+    const monthEnd = `${year}-${pad(month)}-${pad(days)}`
+    for (const t of tasks) {
+      if (t.status !== 'pending') continue
+      const end = windowRange(t).to
+      if (end <= t.dueDate) continue
+      const from = addDays(t.dueDate, 1) > monthStart ? addDays(t.dueDate, 1) : monthStart
+      const to = end < monthEnd ? end : monthEnd
+      const key = `${t.ruleId ?? 'manual'}|${t.title}`
+      for (let cursor = from; cursor <= to; cursor = addDays(cursor, 1)) {
+        const dayMap = byDate.get(cursor) ?? new Map<string, { task: CareTaskListItem; count: number }>()
+        const hit = dayMap.get(key)
+        if (hit) hit.count++
+        else dayMap.set(key, { task: t, count: 1 })
+        byDate.set(cursor, dayMap)
+      }
+    }
+    const out = new Map<string, Array<{ task: CareTaskListItem; count: number }>>()
+    for (const [date, dayMap] of byDate) out.set(date, [...dayMap.values()])
+    return out
+  }, [tasks, year, month, days])
 
   const cells: Array<{ date: string | null; day: number | null }> = []
   for (let i = 0; i < leading; i++) cells.push({ date: null, day: null })
@@ -87,35 +137,70 @@ export function CareCalendar({
         {cells.map((cell, i) => {
           const date = cell.date
           if (!date) return <div key={`empty-${i}`} className="cal-cell empty" />
-          const list = byDate.get(date) ?? []
+          const due = dueByDate.get(date) ?? []
+          const carried = carriedByDate.get(date) ?? []
           const isToday = date === today
           const isSelected = date === selectedDate
+          /*
+           * 一格最多 3 个标签：到期优先，但**给「时间窗内」留一格** ——
+           * 否则当天的计划和可补做的计划一起挤，窗口内的永远被挤掉。
+           */
+          const dueSlots = carried.length > 0 ? 2 : 3
+          const shownDue = due.slice(0, dueSlots)
+          const shownCarried = carried.slice(0, 3 - shownDue.length)
+          const dueCount = due.reduce((sum, c) => sum + c.count, 0)
+          const carriedCount = carried.reduce((sum, c) => sum + c.count, 0)
+          const hidden =
+            dueCount +
+            carriedCount -
+            shownDue.reduce((sum, c) => sum + c.count, 0) -
+            shownCarried.reduce((sum, c) => sum + c.count, 0)
+          const title =
+            `${date}：${dueCount} 项到期` +
+            (carriedCount > 0 ? `，${carriedCount} 项时间窗内可做` : '') +
+            '。点一下看当天的计划'
           return (
             <div
               key={date}
               className={`cal-cell${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}`}
-              title={`${date}：${list.length} 项。点一下看当天的计划`}
+              title={title}
               onClick={() => onPickDay(date)}
             >
               <div className="cal-day">
                 <span>{cell.day}</span>
               </div>
               <div className="cal-tasks">
-                {list.slice(0, 3).map((t) => (
+                {shownDue.map(({ task: t, count }) => (
                   <button
-                    key={t.id}
+                    key={`due-${t.ruleId ?? t.id}-${t.title}`}
                     className={`cal-chip ${toneOf(t.status, urgencyOf(t, today))}`}
-                    title={`${t.title}${t.plantName ? ` · ${t.plantName}` : ''}`}
+                    title={`${t.title}${count > 1 ? `（${count} 株）` : ''}${t.plantName ? ` · ${t.plantName}` : ''}`}
                     onClick={(event) => {
                       // 点任务只选中那天 + 高亮那条，别再冒泡成「点空白处」
                       event.stopPropagation()
                       onPickTask(t)
                     }}
                   >
-                    {CARE_ACTION_ICONS[t.actionType]} {t.title}
+                    <span className="cal-chip-title">{t.title}</span>
+                    {count > 1 ? <span className="cal-chip-count">×{count}</span> : null}
                   </button>
                 ))}
-                {list.length > 3 ? <div className="cal-more">还有 {list.length - 3} 项</div> : null}
+                {shownCarried.map(({ task: t, count }) => (
+                  <button
+                    key={`carried-${t.ruleId ?? t.id}-${t.title}`}
+                    className="cal-chip carried"
+                    title={`时间窗内可做：${t.title}（${count} 株，最早到期 ${t.dueDate}）`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      if (onPickCarriedTask) onPickCarriedTask(t, date)
+                      else onPickTask(t)
+                    }}
+                  >
+                    <span className="cal-chip-title">{t.title}</span>
+                    {count > 1 ? <span className="cal-chip-count">×{count}</span> : null}
+                  </button>
+                ))}
+                {hidden > 0 ? <div className="cal-more">还有 {hidden} 项</div> : null}
               </div>
             </div>
           )
@@ -128,6 +213,7 @@ export function CareCalendar({
         <span className="cal-dot pending" /> 计划中
         <span className="cal-dot done" /> 已完成
         <span className="cal-dot skipped" /> 已跳过
+        <span className="cal-dot carried" /> 时间窗内可做
         <span style={{ marginLeft: 10 }}>点日期看当天计划，点任务可查看 / 编辑</span>
       </div>
     </div>

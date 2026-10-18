@@ -497,7 +497,11 @@ img {
 .cal-head,
 .cal-body {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /*
+   * minmax(0, 1fr) 而不是 1fr：1fr 的最小宽度是内容的最小宽度，
+   * 长标签（「秋季补肥 ×7」）会把整列撑宽，月历就压到右边的当天计划上。
+   */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 .cal-head-cell {
   padding: 5px 0;
@@ -509,6 +513,8 @@ img {
 }
 .cal-cell {
   min-height: 84px;
+  min-width: 0;
+  overflow: hidden;
   padding: 4px 5px;
   border-right: 1px solid rgba(0, 0, 0, 0.12);
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
@@ -548,6 +554,7 @@ img {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 .cal-chip {
   font-family: inherit;
@@ -558,13 +565,38 @@ img {
   background: #fffbf0;
   cursor: pointer;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   width: 100%;
+  /* 标题占满、株数固定在右侧：格子窄时标题截断，×N 仍然看得见 */
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.cal-chip-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-chip-count {
+  flex: none;
+  font-size: 10px;
+  opacity: 0.75;
 }
 .cal-chip.overdue {
   border-color: var(--danger);
   background: #ffe4de;
+}
+/*
+ * 「时间窗内可做」的虚标：到期日在更早的某天，但可做期覆盖这一天。
+ * 用虚线和半透明区分「今天到期」的实标 —— 否则会以为它今天才到期。
+ */
+.cal-chip.carried {
+  border-style: dashed;
+  opacity: 0.66;
+  background: transparent;
 }
 .cal-chip.due {
   border-color: #8a5f10;
@@ -616,6 +648,12 @@ img {
 }
 .cal-dot.skipped {
   background: #e8ddc8;
+}
+/* 图例里的「时间窗内可做」：和虚标标签一样的虚线调性 */
+.cal-dot.carried {
+  border-style: dashed;
+  background: transparent;
+  opacity: 0.66;
 }
 
 /* 侧栏上的待办角标：不开应用也能一眼看到有几件事压着 */
