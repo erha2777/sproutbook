@@ -3252,3 +3252,47 @@ html.tex-panel.tex-panel-slice .pixel-panel {
 /* ---------- 内页「画布」：中间一块压暗的底 ---------- */
 
 
+
+
+/* ---------- 双线木框：照参考图的面板样式 ---------- */
+
+/*
+ * 结构：深橙外框(3px) → 4px 同色底色留白 → 2px 深色内线 → 内容。
+ * 用两层 inset box-shadow 画内线，不再用四周亮/暗倒角。
+ */
+.pixel-panel:not(.flat) {
+  border: 3px solid var(--wood-outline);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 4px var(--wood-panel),
+    inset 0 0 0 7px #8f4317,
+    0 4px 0 0 rgba(0, 0, 0, 0.22);
+  padding: calc(var(--step) * 3 + 9px);
+}
+
+/* 卡片同样处理，但保持 overflow: hidden 让缩略图贴边 */
+.pixel-card {
+  border: 3px solid var(--wood-outline);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 3px var(--wood-panel),
+    inset 0 0 0 6px #8f4317,
+    0 4px 0 0 rgba(0, 0, 0, 0.22);
+}
+.pixel-card:hover {
+  box-shadow:
+    inset 0 0 0 3px var(--wood-panel),
+    inset 0 0 0 6px #8f4317,
+    0 8px 0 0 rgba(0, 0, 0, 0.24);
+}
+
+/* 内页纸面底也套同样的双线 */
+.content > .content-inner {
+  border: 3px solid var(--wood-outline);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 4px rgba(251, 196, 119, 0.97),
+    inset 0 0 0 8px #8f4317,
+    0 6px 0 rgba(0, 0, 0, 0.25);
+  padding: 24px;
+}
