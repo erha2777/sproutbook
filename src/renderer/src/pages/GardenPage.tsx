@@ -38,14 +38,12 @@ import { flowerColorForSpecies } from '@core/sprite'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
 import { todayIso } from '@core/care'
 import { PlantSprite } from '../components/PlantSprite'
-import { Badge, Button, EmptyState, LoadFailure, Modal, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
+import { Badge, Button, EmptyState, LoadFailure, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 import { PlantEditorModal } from './PlantEditor'
 
 
 /** 地块里精灵的最大边长（比例 1.0 时）。比格子略小，留出边距。 */
 const PLOT_SPRITE_MAX = 78
-/** 详情面板里精灵的最大边长。 */
-const DETAIL_SPRITE_MAX = 108
 
 export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactNode {
   const toast = useToast()
@@ -63,7 +61,6 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
   const [status, setStatus] = useState<'' | PlantStatus>('')
   const [envId, setEnvId] = useState<string>('')
   const [view, setView] = useState<'scene' | 'list'>('scene')
-  const [selected, setSelected] = useState<number | null>(null)
   const [editing, setEditing] = useState<PlantListItem | 'new' | null>(null)
 
   const debouncedQuery = useDebounced(query)
@@ -249,7 +246,115 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
     }
   }
 
-  const selectedPlant = gardenItems.find((p) => p.id === selected) ?? null
+  /**
+   * 「现状」块：阶段与依据、物候标记、下一件事、按株生成计划。
+   *
+   * 它跟着**编辑弹窗**一起出现 —— 原来详情是另一个弹窗，看阶段和改信息
+   * 要来回切两个框。合并以后「看这一株」和「改这一株」是同一个地方。
+   */
+  const renderDetail = (plant: PlantListItem): ReactNode => {
+    const g = growthOf(plant)
+    const info = phases[plant.id]
+    // 手动标记的阶段持续了几天（和养护计划页用的是同一个纯函数）
+    const age = phaseAgeDays(info?.changedAt)
+    const result = deriveGrowthStage({
+      status: plant.status,
+      phase: info?.phase ?? null,
+      bloomMonths: g.bloomMonths,
+      dormancyMonths: g.dormancyMonths,
+      acquiredAt: plant.acquiredAt,
+      today: todayIso()
+    })
+    const task = nextTask[plant.id]
+    return (
+      <div>
+        <div className="row tight" style={{ flexWrap: 'wrap' }}>
+          <Badge tone="ok">🌱 {GROWTH_STAGE_LABELS[result.stage]}</Badge>
+          <span className="small muted">
+            {GROWTH_SOURCE_LABELS[result.source]} —— {result.reason}
+          </span>
+        </div>
+        <div className="small muted" style={{ marginTop: 4 }}>
+          {plant.species?.commonName ?? '未关联物种'}
+          {g.habit ? ` · ${g.habit}` : ''}
+          {` · ${g.heightText}`}
+          {plant.envName ? ` · ${plant.envName}` : ''}
+          {` · ${PLANT_STATUS_ICONS[plant.status]} ${PLANT_STATUS_LABELS[plant.status]}`}
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <div className="small" style={{ marginBottom: 4 }}>
+            物候阶段：
+            {info?.phase ? (
+              <>
+                <b>
+                  {' '}
+                  {CARE_PHASE_ICONS[info.phase]} {CARE_PHASE_LABELS[info.phase]}
+                </b>
+                {age !== null ? (
+                  <span
+                    className={`small ${age >= 45 ? 'phase-age stale' : 'muted'}`}
+                    title={`标记于 ${info?.changedAt?.slice(0, 10) ?? ''}`}
+                  >
+                    {' '}
+                    已 {age} 天{age >= 45 ? '，要不要重新看看？' : ''}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <span className="muted"> 还没标记（标记后，限定该阶段的规则才会生效）</span>
+            )}
+          </div>
+          <div className="row tight" style={{ flexWrap: 'wrap' }}>
+            {CARE_PHASE_OPTIONS.map((opt) => (
+              <Button
+                key={opt.value}
+                size="small"
+                variant={info?.phase === opt.value ? 'primary' : undefined}
+                onClick={() => void markPhase(plant.id, opt.value as CarePhase)}
+                title={CARE_PHASE_HINTS[opt.value as CarePhase]}
+              >
+                {CARE_PHASE_ICONS[opt.value as CarePhase]} {CARE_PHASE_LABELS[opt.value as CarePhase]}
+              </Button>
+            ))}
+            {info?.phase ? (
+              <Button
+                size="small"
+                onClick={() => void markPhase(plant.id, null)}
+                title="清除标记。限定阶段的规则会随之失效"
+              >
+                清除
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        <div className="row tight" style={{ marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="small">
+            {task ? (
+              <>
+                下一件事：<b>{task.title}</b>（{task.dueDate} · {dueDescription(task, todayIso())}）
+              </>
+            ) : (
+              <span className="muted">暂时没有待办</span>
+            )}
+          </span>
+          <span className="spacer" />
+          {/*
+            按株生成计划就在这一株身上。
+            放在「养护计划」页时，用户要排这一株得先离开花园、
+            再按一个会动到所有植株的按钮 —— 两件都不对。
+          */}
+          <Button
+            size="small"
+            disabled={generating === plant.id}
+            title="按规则库为这一株排出全年该做的事（已打勾的不会被覆盖）"
+            onClick={() => void generateForPlant(plant)}
+          >
+            {generating === plant.id ? '生成中…' : '生成计划'}
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   const patch = (p: Partial<{ query: string; status: '' | PlantStatus; envId: string }>): void => {
     if (p.query !== undefined) setQuery(p.query)
@@ -351,7 +456,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
         ) : view === 'scene' ? (
           <Panel>
             <SectionTitle
-              right={<span className="small muted">共 {gardenItems.length} 株 · 点一株看它在什么阶段</span>}
+              right={<span className="small muted">共 {gardenItems.length} 株 · 点一株看详情 / 编辑</span>}
             >
               我的花园
             </SectionTitle>
@@ -371,9 +476,9 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                 return (
                   <button
                     key={plant.id}
-                    className={`garden-plot${selected === plant.id ? ' selected' : ''}`}
-                    onClick={() => setSelected(plant.id)}
-                    title={`${plant.nickname} · ${GROWTH_STAGE_LABELS[result.stage]}`}
+                    className="garden-plot"
+                    onClick={() => setEditing(plant)}
+                    title={`${plant.nickname} · 点开看详情 / 编辑`}
                   >
                     {/* 高度固定、底部对齐：格子整齐，尺寸又能读出大小差别 */}
                     <div className="plot-stage-area">
@@ -403,192 +508,20 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
             <SectionTitle right={<span className="small muted">共 {items.length} 株</span>}>我的植物</SectionTitle>
             <div className="card-grid">
               {items.map((plant) => (
-                <PlantCard
-                  key={plant.id}
-                  plant={plant}
-                  selected={selected === plant.id}
-                  onClick={() => setSelected(plant.id)}
-                />
+                <PlantCard key={plant.id} plant={plant} onClick={() => setEditing(plant)} />
               ))}
             </div>
           </>
         )}
 
-        {/*
-          点一株 = 弹出详情（模态框），**不再在页面下方展开**。
-          植株一多，下方那块会被挤到屏幕外，点谁都要先滚半天 ——
-          模态框把「看这一株」和「列表有多长」解耦。
-          生成计划 / 编辑这株 / 标记物候阶段 / 下一件事都在这里。
-        */}
-        {selectedPlant
-          ? (() => {
-              const g = growthOf(selectedPlant)
-              const info = phases[selectedPlant.id]
-              // 手动标记的阶段持续了几天（和养护计划页用的是同一个纯函数）
-              const age = phaseAgeDays(info?.changedAt)
-              const result = deriveGrowthStage({
-                status: selectedPlant.status,
-                phase: info?.phase ?? null,
-                bloomMonths: g.bloomMonths,
-                dormancyMonths: g.dormancyMonths,
-                acquiredAt: selectedPlant.acquiredAt,
-                today: todayIso()
-              })
-              const task = nextTask[selectedPlant.id]
-              return (
-                <Modal
-                  title={`${selectedPlant.nickname} · 植株详情`}
-                  onClose={() => setSelected(null)}
-                  headerExtra={
-                    <>
-                      {/*
-                        按株生成计划就放在这一株的详情里。
-                        放在「养护计划」页时，用户要排这一株得先离开花园、
-                        再按一个会动到所有植株的按钮 —— 两件都不对。
-                      */}
-                      <Button
-                        size="small"
-                        disabled={generating === selectedPlant.id}
-                        title="按规则库为这一株排出全年该做的事（已打勾的不会被覆盖）"
-                        onClick={() => void generateForPlant(selectedPlant)}
-                      >
-                        {generating === selectedPlant.id ? '生成中…' : '生成计划'}
-                      </Button>
-                      <Button size="small" onClick={() => setEditing(selectedPlant)}>
-                        编辑这株
-                      </Button>
-                    </>
-                  }
-                  footer={<Button onClick={() => setSelected(null)}>关闭</Button>}
-                >
-                  <div className="content-inner">
-                  <div className="row" style={{ alignItems: 'flex-start' }}>
-                    <div className="detail-sprite-area">
-                      {selectedPlant.coverThumb ? (
-                        <img
-                          className="detail-cover"
-                          src={imageUrl(selectedPlant.coverThumb) ?? ''}
-                          alt={selectedPlant.nickname}
-                          title={`${selectedPlant.nickname} · 封面`}
-                        />
-                      ) : (
-                        <PlantSprite
-                          habit={g.habit}
-                          look={growthLook(result.stage)}
-                          cultivation={g.cultivation}
-                          spriteStyle={g.spriteStyle}
-                          flowerColor={g.flowerColor}
-                          size={Math.round(DETAIL_SPRITE_MAX * sizeScaleFor(g.heightCm))}
-                          title={`${selectedPlant.nickname} · ${g.heightText}`}
-                        />
-                      )}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="row tight" style={{ flexWrap: 'wrap' }}>
-                        <Badge tone="ok">🌱 {GROWTH_STAGE_LABELS[result.stage]}</Badge>
-                        <span className="small muted">
-                          {GROWTH_SOURCE_LABELS[result.source]} —— {result.reason}
-                        </span>
-                      </div>
-                      <div className="small muted" style={{ marginTop: 4 }}>
-                        {selectedPlant.species?.commonName ?? '未关联物种'}
-                        {g.habit ? ` · ${g.habit}` : ''}
-                        {/* 把尺寸的依据也写出来，否则「为什么这株画得大」全靠猜 */}
-                        {` · ${g.heightText}`}
-                        {selectedPlant.envName ? ` · ${selectedPlant.envName}` : ''}
-                        {` · ${PLANT_STATUS_ICONS[selectedPlant.status]} ${PLANT_STATUS_LABELS[selectedPlant.status]}`}
-                      </div>
-                      {/*
-                        就地标记物候阶段。
-                        原来这里只写「到『养护计划』页标记后，这里会更准」——
-                        又是指着别处说话。事情就在这一株身上，就地做就行。
 
-                        标记完会**立刻重新生成任务**：限定该阶段的规则
-                        （缓苗 / 暴雨后救苗）不必再手动建，标完就出现在「下一件事」里。
-                        这才是「事件触发」的意思 —— 事件一发生，该做的事自己冒出来。
-                      */}
-                      <div style={{ marginTop: 6 }}>
-                        <div className="small" style={{ marginBottom: 4 }}>
-                          物候阶段：
-                          {info?.phase ? (
-                            <>
-                              <b>
-                                {' '}
-                                {CARE_PHASE_ICONS[info.phase]} {CARE_PHASE_LABELS[info.phase]}
-                              </b>
-                              {/*
-                                天数放在这里，它的意义和「生长中」那句不同：
-                                上面那行是**推算**出来的显示状态（依据可以是开花月份、
-                                也可以是你标的阶段），这里是**手动标记**本身，不会自动过期。
-                                缓苗期这类临时状态标完容易忘 —— 天数摆出来才是提醒。
-
-                                天数原来只在「养护计划」页那一块显示，而那块整段都是重复信息：
-                                阶段和天数这里都有。所以天数搬过来，那块撤掉。
-                              */}
-                              {age !== null ? (
-                                <span
-                                  className={`small ${age >= 45 ? 'phase-age stale' : 'muted'}`}
-                                  title={`标记于 ${info?.changedAt?.slice(0, 10) ?? ''}`}
-                                >
-                                  {' '}
-                                  已 {age} 天{age >= 45 ? '，要不要重新看看？' : ''}
-                                </span>
-                              ) : null}
-                            </>
-                          ) : (
-                            <span className="muted"> 还没标记（标记后，限定该阶段的规则才会生效）</span>
-                          )}
-                        </div>
-                        <div className="row tight" style={{ flexWrap: 'wrap' }}>
-                          {CARE_PHASE_OPTIONS.map((opt) => (
-                            <Button
-                              key={opt.value}
-                              size="small"
-                              variant={info?.phase === opt.value ? 'primary' : undefined}
-                              onClick={() => void markPhase(selectedPlant.id, opt.value as CarePhase)}
-                              title={CARE_PHASE_HINTS[opt.value as CarePhase]}
-                            >
-                              {CARE_PHASE_ICONS[opt.value as CarePhase]} {CARE_PHASE_LABELS[opt.value as CarePhase]}
-                            </Button>
-                          ))}
-                          {info?.phase ? (
-                            <Button
-                              size="small"
-                              onClick={() => void markPhase(selectedPlant.id, null)}
-                              title="清除标记。限定阶段的规则会随之失效"
-                            >
-                              清除
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="small" style={{ marginTop: 4 }}>
-                        {task ? (
-                          <>
-                            下一件事：<b>{task.title}</b>（{task.dueDate} · {dueDescription(task, todayIso())}）
-                          </>
-                        ) : (
-                          <span className="muted">暂时没有待办</span>
-                        )}
-                      </div>
-
-                      {/*
-                        封面在「编辑这株」里设置（图片区点一张就设成封面）。
-                        这里只负责显示：有照片就显示照片，没有才显示像素图。
-                      */}
-                    </div>
-                  </div>
-                  </div>
-                </Modal>
-              )
-            })()
-          : null}
       </div>
 
       {editing ? (
         <PlantEditorModal
           plant={editing === 'new' ? null : editing}
           environments={environments}
+          detail={editing === 'new' ? null : renderDetail(editing)}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
@@ -600,19 +533,11 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
   )
 }
 
-function PlantCard({
-  plant,
-  onClick,
-  selected = false
-}: {
-  plant: PlantListItem
-  onClick: () => void
-  selected?: boolean
-}): ReactNode {
+function PlantCard({ plant, onClick }: { plant: PlantListItem; onClick: () => void }): ReactNode {
   const url = imageUrl(plant.coverThumb)
   const speciesName = plant.species?.commonName ?? '未关联物种'
   return (
-    <div className={`pixel-card${selected ? ' selected' : ''}`} onClick={onClick} title="点击看这株的详情">
+    <div className="pixel-card" onClick={onClick} title="点开看详情 / 编辑">
       <div className="card-thumb">
         {url ? <img src={url} alt={plant.nickname} /> : <span className="placeholder">{PLANT_STATUS_ICONS[plant.status]}</span>}
       </div>

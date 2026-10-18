@@ -18,6 +18,13 @@ import { ImageStrip } from '../components/ImageStrip'
 export interface PlantEditorModalProps {
   plant: PlantListItem | null
   environments: Environment[]
+  /**
+   * 「现状」块（阶段、物候标记、下一件事、生成计划）。
+   *
+   * 详情与编辑合并成一个弹窗：看这一株和改这一株是同一件事，
+   * 不该在两个弹窗之间来回切。
+   */
+  detail?: ReactNode
   /** 预选物种（例如从物种库「添加一株」进来）。当前还没有入口调用，留给那个流程。 */
   presetSpeciesId?: number
   onClose: () => void
@@ -27,6 +34,7 @@ export interface PlantEditorModalProps {
 export function PlantEditorModal({
   plant,
   environments,
+  detail,
   presetSpeciesId,
   onClose,
   onSaved
@@ -291,8 +299,18 @@ export function PlantEditorModal({
           </Notice>
         ) : null}
 
-        <div className="section-title">本株信息</div>
         {/*
+          详情与编辑合并：上面是这一株的现状（阶段 / 物候 / 下一件事 / 生成计划），
+          下面是可改的字段和图片。看和改在同一个弹窗里。
+        */}
+        {detail ? (
+          <Panel flat>
+            <div className="section-title">现状</div>
+            {detail}
+          </Panel>
+        ) : null}
+
+        <div className="section-title">本株信息</div>        {/*
           只排除「昵称」—— 它在最上面单独渲染。
           这里曾经还排除了 acquired_at，导致「入手 / 播种日期」在界面上
           根本没有输入框（模板里有这个字段，但表单里永远看不到）。
