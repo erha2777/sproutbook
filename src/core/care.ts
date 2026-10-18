@@ -301,13 +301,36 @@ export interface DateSpan {
  * 而生成 2027 年计划时又会产出一次，同一件事出现两遍。
  * 拆成「年初 1~2 月 + 年末 11~12 月」既在一个自然年内，也不重不漏。
  */
-export function dateSpansFor(year: number, monthFrom: number, monthTo: number | null): DateSpan[] {
+export function dateSpansFor(
+  year: number,
+  monthFrom: number,
+  monthTo: number | null,
+  monthFromDay = 1,
+  monthToDay: number | null = null
+): DateSpan[] {
   const months = monthsCovered({ monthFrom, monthTo })
   if (months.length === 0) return []
 
-  const monthSpan = (m: number): DateSpan => {
-    const mm = String(m).padStart(2, '0')
-    return { from: `${year}-${mm}-01`, to: `${year}-${mm}-${String(daysInMonth(year, m)).padStart(2, '0')}` }
+  const endMonth = monthTo === null || monthTo === undefined ? monthFrom : monthTo
+  /** 把「几号」收口到当月真实天数内：2 月没有 30 号。 */
+  const dayIn = (m: number, day: number | null): number => {
+    const max = daysInMonth(year, m)
+    if (day === null) return max
+    return Math.min(Math.max(1, Math.trunc(day)), max)
+  }
+  /*
+   * 区间端点的日：只有**包含起始月的那一段**用起始日，
+   * 只有**包含结束月的那一段**用结束日 —— 中间的月份整月都在区间里。
+   * 跨年拆成两段时（11~2 月），前一段从 11 月的起始日开始、到 12 月底；
+   * 后一段从 1 月 1 日、到 2 月的结束日。
+   */
+  const spanStart = (m: number): DateSpan['from'] => {
+    const day = m === monthFrom ? dayIn(m, monthFromDay) : 1
+    return `${year}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  }
+  const spanEnd = (m: number): DateSpan['to'] => {
+    const day = m === endMonth ? dayIn(m, monthToDay) : dayIn(m, null)
+    return `${year}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
   const sorted = [...months].sort((a, b) => a - b)
@@ -322,11 +345,11 @@ export function dateSpansFor(year: number, monthFrom: number, monthTo: number | 
       prev = cur
       continue
     }
-    spans.push({ from: monthSpan(runStart).from, to: monthSpan(prev).to })
+    spans.push({ from: spanStart(runStart), to: spanEnd(prev) })
     runStart = cur
     prev = cur
   }
-  spans.push({ from: monthSpan(runStart).from, to: monthSpan(prev).to })
+  spans.push({ from: spanStart(runStart), to: spanEnd(prev) })
 
   return spans
 }
@@ -440,27 +463,30 @@ export function generateTasks(
   }
 
   for (const rule of applicable) {
-    const spans = dateSpansFor(year, rule.monthFrom, rule.monthTo)
+    const spans = dateSpansFor(
+      year,
+      rule.monthFrom,
+      rule.monthTo,
+      rule.monthFromDay ?? 1,
+      rule.monthToDay ?? null
+    )
     if (spans.length === 0) continue
 
     const rotation = (rule.rotation ?? []).map((s) => s.trim()).filter(Boolean)
     /*
-     * 锚点日。
+     * 日期由规则的**区间两端**决定：起始月/日 ~ 结束月/日。
      *
-     * **默认每月 1 号** —— 用户要的是规律：「月份默认从第一天开始」。
-     * 规则里填了「每月几号」就用填的（1~28，29~31 夹到 28，小月不存在）。
-     *
-     * 不再按植株错开，也不再按规则 id 散开：那两套算法都让同一条规则
-     * 在月历上落到看不懂的日子。想错开的话，给不同规则填不同的号即可 ——
-     * 日期变成你说了算，而不是算法说了算。
+     * 不再有「每月几号」这种全局锚点，也不按植株或规则编号错开 ——
+     * 每月一条的规则，日期就是每个月的「起始日」（例如起始 3/15，
+     * 就是 3/15、4/15、5/15…，超出区间的那个月不生成）。
      */
-    const anchorDay =
-      typeof rule.anchorDay === 'number' && Number.isFinite(rule.anchorDay)
-        ? Math.min(28, Math.max(1, Math.trunc(rule.anchorDay)))
-        : 1
-    /** 某个月的锚点日（YYYY-MM-DD） */
-    const anchorDate = (month: number): string =>
-      `${year}-${String(month).padStart(2, '0')}-${String(anchorDay).padStart(2, '0')}`
+    const fromDay = Math.max(1, Math.trunc(rule.monthFromDay ?? 1))
+    const dateInMonth = (month: number): string => {
+      const day = Math.min(fromDay, daysInMonth(year, month))
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    }
+    /** 这个日期是否落在规则区间内（跨年时可能有两段） */
+    const inWindow = (date: string): boolean => spans.some((s) => date >= s.from && date <= s.to)
 
     // ---- 按天重复 ----
     if (rule.repeatDays !== null && rule.repeatDays !== undefined && rule.repeatDays > 0) {
@@ -470,9 +496,8 @@ export function generateTasks(
       let index = 0
 
       for (const span of spans) {
-        const month = Number(span.from.slice(5, 7))
-        // 从锚点日开始按 N 天一轮
-        let cursor = anchorDate(month)
+        // 从区间起点开始按 N 天一轮
+        let cursor = span.from
         // 上限保护：即使 repeatDays 被填成 1，也不会无限循环
         for (let guard = 0; guard < 400 && cursor <= span.to; guard++) {
           const label = rotation.length > 0 ? ` · ${rotation[index % rotation.length]}` : ''
@@ -493,12 +518,11 @@ export function generateTasks(
      * 按 **spans** 而不是月份迭代：连续几个月在 dateSpansFor 里已经合成一段，
      * 而跨年写法（11,12,1,2）会断开成两段 —— 那本来就该是两个窗口。
      *
-     * 日期落在窗口第一个月的锚点日（底肥这类事早做比晚做好）。
+     * 日期落在区间起点（底肥这类事早做比晚做好）。
      */
     if (rule.oncePerWindow) {
       for (const span of spans) {
-        const month = Number(span.from.slice(5, 7))
-        push(anchorDate(month), rule, rule.title, defaultWindow)
+        push(span.from, rule, rule.title, defaultWindow)
       }
       continue
     }
@@ -507,7 +531,10 @@ export function generateTasks(
     // 注意：这里必须按**月份**迭代而不是 spans —— 3~4 月是连续的两个月，
     // dateSpansFor 会把它们合成一个 span，按 span 走只会产出一条任务。
     for (const month of monthsCovered(rule)) {
-      push(anchorDate(month), rule, rule.title, defaultWindow)
+      const dueDate = dateInMonth(month)
+      // 结束日早于起始日时，最后一个月那条会落到区间外（如 3/15~6/10 的 6 月），不生成
+      if (!inWindow(dueDate)) continue
+      push(dueDate, rule, rule.title, defaultWindow)
     }
   }
 

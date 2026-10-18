@@ -1094,38 +1094,56 @@ export async function runSmoke(outFile: string): Promise<number> {
          * 「同日做」只管得住单条规则，跨规则就各算各的日子。
          * 填同一个号才能把同一件事对齐到一天。
          */
-        const anchored = { ...monthlyRule, anchorDay: 6 }
+        /*
+         * 日期区间：起始月/日 ~ 结束月/日。
+         *
+         * 用户的原话：「起始月份和结束月份后面需要设置几号，
+         * 默认起始月份第一天和结束月份最后一天」。
+         */
+        const anchored = { ...monthlyRule, monthFromDay: 6 }
         const a1 = generateTasks([anchored], null, 2026, { spreadSeed: 1 })[0].dueDate
         const a2 = generateTasks([anchored], null, 2026, { spreadSeed: 2 })[0].dueDate
-        check('指定日期：落在 6 号', a1 === '2026-10-06', a1)
-        check('指定日期：不同植株仍在同一天', a1 === a2, `${a1} vs ${a2}`)
+        check('起始日 6 号：落在 10-06', a1 === '2026-10-06', a1)
+        check('起始日 6 号：不同植株仍在同一天', a1 === a2, `${a1} vs ${a2}`)
 
-        const another = { ...monthlyRule, id: 90, title: '另一件事', anchorDay: 6 }
-        const aligned = generateTasks([anchored, another], null, 2026)
-        check(
-          '两条不同的规则填同一个号 → 对齐到同一天',
-          aligned.length === 2 && aligned.every((t) => t.dueDate === '2026-10-06'),
-          aligned.map((t) => t.dueDate).join(' ')
-        )
-
-        check(
-          '超过 28 的号会被夹到 28（小月不存在 29~31）',
-          generateTasks([{ ...monthlyRule, anchorDay: 31 }], null, 2026)[0].dueDate === '2026-10-28'
-        )
-
-        const onceAnchored = generateTasks(
-          [{ ...monthlyRule, monthFrom: 10, monthTo: 11, oncePerWindow: true, anchorDay: 6 }],
+        // 区间 3/15 ~ 6/10：6 月那条排在 15 号，超出结束日，不该生成
+        const ranged = generateTasks(
+          [{ ...monthlyRule, monthFrom: 3, monthTo: 6, monthFromDay: 15, monthToDay: 10 }],
           null,
           2026
         )
         check(
-          '窗口内一次也认指定日期',
+          '起始日决定每月那条落在几号',
+          ranged.map((t) => t.dueDate.slice(8)).every((d) => d === '15'),
+          ranged.map((t) => t.dueDate).join(' ')
+        )
+        check(
+          '结束日早于起始日的那一个月不生成（3/15~6/10 只有 3 条）',
+          ranged.length === 3 && ranged[2].dueDate === '2026-05-15',
+          ranged.map((t) => t.dueDate).join(' ')
+        )
+
+        // 结束日是月底时，最后一个月照常生成
+        const fullEnd = generateTasks(
+          [{ ...monthlyRule, monthFrom: 3, monthTo: 6, monthFromDay: 15, monthToDay: null }],
+          null,
+          2026
+        )
+        check('结束日留空＝月底，四个月都有', fullEnd.length === 4, fullEnd.map((t) => t.dueDate).join(' '))
+
+        const onceAnchored = generateTasks(
+          [{ ...monthlyRule, monthFrom: 10, monthTo: 11, oncePerWindow: true, monthFromDay: 6 }],
+          null,
+          2026
+        )
+        check(
+          '整段一次：落在区间起点 10-06',
           onceAnchored.length === 1 && onceAnchored[0].dueDate === '2026-10-06',
           onceAnchored.map((t) => t.dueDate).join(' ')
         )
 
-        const cycleAnchored = generateTasks([{ ...monthlyRule, repeatDays: 7, anchorDay: 6 }], null, 2026)
-        check('按天重复从指定日期开始', cycleAnchored[0].dueDate === '2026-10-06', cycleAnchored[0].dueDate)
+        const cycleAnchored = generateTasks([{ ...monthlyRule, repeatDays: 7, monthFromDay: 6 }], null, 2026)
+        check('按天重复从起始日开始', cycleAnchored[0].dueDate === '2026-10-06', cycleAnchored[0].dueDate)
         check('按天重复仍在同一条规则内保持间隔', Boolean(cycleAnchored[1]?.dueDate), cycleAnchored[1]?.dueDate)
       }
 
@@ -1148,12 +1166,20 @@ export async function runSmoke(outFile: string): Promise<number> {
           source: 'manual' as const,
           verified: true
         }
-        const saved = saveCareRule(db, { ...sameDayInput, title: '自检：同日底肥', sameDay: true, anchorDay: 6 })
+        const saved = saveCareRule(db, {
+          ...sameDayInput,
+          title: '自检：同日底肥',
+          sameDay: true,
+          monthFromDay: 6,
+          monthToDay: 10
+        })
         check('规则可以保存「同一天」', saved.sameDay === true, String(saved.sameDay))
-        check('规则可以保存「每月几号」', saved.anchorDay === 6, String(saved.anchorDay))
+        check('规则可以保存起始日', saved.monthFromDay === 6, String(saved.monthFromDay))
+        check('规则可以保存结束日', saved.monthToDay === 10, String(saved.monthToDay))
         const reread = listCareRules(db, { speciesKey: '*' }).find((r) => r.id === saved.id)
         check('重新读出来仍然是同一天', reread?.sameDay === true, String(reread?.sameDay))
-        check('重新读出来仍然是 6 号', reread?.anchorDay === 6, String(reread?.anchorDay))
+        check('重新读出来起始日仍是 6', reread?.monthFromDay === 6, String(reread?.monthFromDay))
+        check('重新读出来结束日仍是 10', reread?.monthToDay === 10, String(reread?.monthToDay))
         // 不传就是默认值：同一天（用户要的是规律，不是每株一个日子）
         const plain = saveCareRule(db, { ...sameDayInput, title: '自检：默认规则' })
         check('默认就是同一天', plain.sameDay === true, String(plain.sameDay))
@@ -1661,11 +1687,11 @@ export async function runSmoke(outFile: string): Promise<number> {
         check('而且就是窗口第一个月的 1 号', togetherDays[0] === '2026-10-01', togetherDays[0])
 
         const anchoredOnce = generateTasks(
-          [{ ...once, oncePerWindow: true, anchorDay: 9 }],
+          [{ ...once, oncePerWindow: true, monthFromDay: 9 }],
           null,
           2026
         )
-        check('窗口内一次认「每月几号」', anchoredOnce[0].dueDate === '2026-10-09', anchoredOnce[0].dueDate)
+        check('窗口内一次认起始日', anchoredOnce[0].dueDate === '2026-10-09', anchoredOnce[0].dueDate)
       }
 
       // ---- 规则绑定配方：存取往返 ----

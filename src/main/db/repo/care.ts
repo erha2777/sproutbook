@@ -51,6 +51,8 @@ interface CareRuleRow {
   climate_zone: string | null
   month_from: number
   month_to: number | null
+  month_from_day: number
+  month_to_day: number | null
   repeat_days: number | null
   rotation_json: string | null
   active_phases: string | null
@@ -75,10 +77,11 @@ function mapRule(row: CareRuleRow): CareRule {
     climateZone: row.climate_zone,
     monthFrom: row.month_from,
     monthTo: row.month_to,
+    monthFromDay: row.month_from_day ?? 1,
+    monthToDay: row.month_to_day ?? null,
     repeatDays: row.repeat_days,
     oncePerWindow: row.once_per_window === 1,
     sameDay: row.same_day === 1,
-    anchorDay: row.anchor_day ?? null,
     recipeId: row.recipe_id ?? null,
     rotation: parseRotation(row.rotation_json),
     activePhases: parsePhases(row.active_phases),
@@ -164,18 +167,21 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
    */
   const sameDay = input.sameDay !== false
   /*
-   * 「每月几号」。超过 28 的一律夹住 —— 2 月和 4 月没有 30 / 31 号，
-   * 存 31 会生成一个不存在的日期。
+   * 日期区间的两端：起始月的第几天（默认 1）、结束月的第几天（空＝月底）。
+   * 夹到 1~31；小月由生成逻辑按当月天数收口（2 月不会出现 30 号）。
    */
-  const anchorDay =
-    typeof input.anchorDay === 'number' && Number.isFinite(input.anchorDay)
-      ? Math.min(28, Math.max(1, Math.trunc(input.anchorDay)))
-      : null
+  const clampDay = (value: unknown): number | null => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null
+    return Math.min(31, Math.max(1, Math.trunc(value)))
+  }
+  const monthFromDay = clampDay(input.monthFromDay) ?? 1
+  const monthToDay = clampDay(input.monthToDay)
 
   if (input.id) {
     db.run(
       `UPDATE care_rules SET species_key=?, hemisphere=?, climate_zone=?, month_from=?, month_to=?,
-         repeat_days=?, once_per_window=?, same_day=?, anchor_day=?, recipe_id=?, rotation_json=?, active_phases=?,
+         month_from_day=?, month_to_day=?,
+         repeat_days=?, once_per_window=?, same_day=?, recipe_id=?, rotation_json=?, active_phases=?,
          action_type=?, title=?, detail=?, priority=?,
          source=?, verified=?
        WHERE id=?`,
@@ -184,10 +190,11 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
       input.climateZone,
       input.monthFrom,
       input.monthTo,
+      monthFromDay,
+      monthToDay,
       repeatDays,
       oncePerWindow ? 1 : 0,
       sameDay ? 1 : 0,
-      anchorDay,
       input.recipeId ?? null,
       rotationJson,
       phasesJson,
@@ -206,18 +213,20 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
 
   const r = db.run(
     `INSERT INTO care_rules (species_key, hemisphere, climate_zone, month_from, month_to,
-       repeat_days, once_per_window, same_day, anchor_day, recipe_id, rotation_json, active_phases,
+       month_from_day, month_to_day,
+       repeat_days, once_per_window, same_day, recipe_id, rotation_json, active_phases,
        action_type, title, detail, priority, source, verified)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     serializeSpeciesKeys(input.speciesKeys),
     input.hemisphere,
     input.climateZone,
     input.monthFrom,
     input.monthTo,
+    monthFromDay,
+    monthToDay,
     repeatDays,
     oncePerWindow ? 1 : 0,
     sameDay ? 1 : 0,
-    anchorDay,
     input.recipeId ?? null,
     rotationJson,
     phasesJson,

@@ -540,6 +540,20 @@ const V14_RULE_ANCHOR_DAY = /* sql */ `
 ALTER TABLE care_rules ADD COLUMN anchor_day INTEGER;
 `
 
+/**
+ * 规则从「月份区间」升级成「日期区间」：起始月/日 ~ 结束月/日。
+ *
+ * 用户的原话：「起始月份和结束月份后面需要设置几号，默认起始月份第一天和
+ * 结束月份最后一天」。原来只能精确到月，锚点日要么靠算法算、要么单填一个
+ * 「每月几号」—— 都不足以表达「3 月 15 号到 6 月 10 号」这种区间。
+ *
+ * `month_to_day` 为空＝该月最后一天（2 月自动按 28/29 算）。
+ */
+const V15_RULE_MONTH_DAYS = /* sql */ `
+ALTER TABLE care_rules ADD COLUMN month_from_day INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE care_rules ADD COLUMN month_to_day INTEGER;
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -554,7 +568,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 11, name: 'env_district', sql: V11_ENV_DISTRICT },
   { version: 12, name: 'rule_same_day', sql: V12_RULE_SAME_DAY },
   { version: 13, name: 'same_day_default', sql: V13_SAME_DAY_DEFAULT },
-  { version: 14, name: 'rule_anchor_day', sql: V14_RULE_ANCHOR_DAY }
+  { version: 14, name: 'rule_anchor_day', sql: V14_RULE_ANCHOR_DAY },
+  { version: 15, name: 'rule_month_days', sql: V15_RULE_MONTH_DAYS }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

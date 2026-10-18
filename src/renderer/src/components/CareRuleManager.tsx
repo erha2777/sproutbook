@@ -16,12 +16,20 @@ import {
   CARE_PHASE_LABELS,
   CARE_PHASE_OPTIONS,
   UNIVERSAL_SPECIES_KEY,
-  isUniversalRule,
-  monthsCovered
+  isUniversalRule
 } from '@core/care'
 import { Badge, Button, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextArea, TextInput, useToast } from './ui'
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `${i + 1} 月` }))
+/** 1~31 日。小月由生成逻辑按当月天数收口（2 月不会出现 30 号）。 */
+const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: `${i + 1} 日` }))
+
+/** 「3/15 – 6/月底」这种区间写法，列表和摘要共用。 */
+function formatRange(rule: Pick<CareRule, 'monthFrom' | 'monthTo' | 'monthFromDay' | 'monthToDay'>): string {
+  const start = `${rule.monthFrom}/${rule.monthFromDay ?? 1}`
+  const endMonth = rule.monthTo ?? rule.monthFrom
+  return `${start} – ${endMonth}/${rule.monthToDay ?? '月底'}`
+}
 
 interface Draft {
   id?: number
@@ -29,6 +37,10 @@ interface Draft {
   speciesKeys: string[]
   monthFrom: string
   monthTo: string
+  /** 起始月的第几天（默认 1） */
+  fromDay: string
+  /** 结束月的第几天；空＝月底 */
+  toDay: string
   repeatDays: string
   /**
    * 跨月区间里只做一次。
@@ -36,13 +48,6 @@ interface Draft {
    * 那时只能把区间收窄到单月绕过，规则本身表达不了「这个窗口里做一次就够」。
    */
   oncePerWindow: boolean
-  /**
-   * 每月几号（1~28）。空＝1 号。
-   *
-   * 日期只由这个决定：不再按植株错开，也不再按规则编号散开 ——
-   * 那两套算法都让同一条规则在月历上落到看不懂的日子。
-   */
-  anchorDay: string
   /** 绑定的配方 id（字符串形式便于 select），空＝没有材料清单 */
   recipeId: string
   /** 每行一个轮换步骤 */
@@ -60,9 +65,10 @@ const BLANK: Draft = {
   speciesKeys: [UNIVERSAL_SPECIES_KEY],
   monthFrom: '3',
   monthTo: '',
+  fromDay: '1',
+  toDay: '',
   repeatDays: '',
   oncePerWindow: false,
-  anchorDay: '',
   recipeId: '',
   rotationText: '',
   phases: [],
@@ -149,9 +155,10 @@ export function CareRuleManager({
         climateZone: null,
         monthFrom: Number(draft.monthFrom),
         monthTo: draft.monthTo ? Number(draft.monthTo) : null,
+        monthFromDay: Number(draft.fromDay) || 1,
+        monthToDay: draft.toDay ? Number(draft.toDay) : null,
         repeatDays: draft.repeatDays.trim() ? Number(draft.repeatDays) : null,
         oncePerWindow: draft.oncePerWindow,
-        anchorDay: draft.anchorDay.trim() ? Number(draft.anchorDay) : null,
         recipeId: draft.recipeId ? Number(draft.recipeId) : null,
         rotation: rotation.length > 0 ? rotation : null,
         activePhases: draft.phases.length > 0 ? draft.phases : null,
@@ -189,9 +196,10 @@ export function CareRuleManager({
     speciesKeys: rule.speciesKeys,
     monthFrom: String(rule.monthFrom),
     monthTo: rule.monthTo === null ? '' : String(rule.monthTo),
+    fromDay: String(rule.monthFromDay ?? 1),
+    toDay: rule.monthToDay === null || rule.monthToDay === undefined ? '' : String(rule.monthToDay),
     repeatDays: rule.repeatDays === null ? '' : String(rule.repeatDays),
     oncePerWindow: rule.oncePerWindow,
-    anchorDay: rule.anchorDay === null || rule.anchorDay === undefined ? '' : String(rule.anchorDay),
     recipeId: rule.recipeId === null ? '' : String(rule.recipeId),
     rotationText: (rule.rotation ?? []).join('\n'),
     phases: rule.activePhases ?? [],
@@ -335,21 +343,55 @@ export function CareRuleManager({
 
         <div className="form-grid">
           <Field
-            label={phasesActive ? '起始月份（已忽略）' : '起始月份'}
-            help={phasesActive ? '下面勾了生效阶段，月份就不再参与判断。保留数值只是为了取消阶段勾选后能恢复。' : undefined}
+            label={phasesActive ? '起始（已忽略）' : '起始'}
+            help={
+              phasesActive
+                ? '下面勾了生效阶段，月份就不再参与判断。保留数值只是为了取消阶段勾选后能恢复。'
+                : '默认该月第 1 天。每月一条的规则，日期就取每个月的这一天。'
+            }
           >
-            <SelectInput value={draft.monthFrom} onChange={(v) => setDraft({ ...draft, monthFrom: v })} options={MONTH_OPTIONS} />
+            <div className="row tight" style={{ flexWrap: 'nowrap' }}>
+              <div style={{ flex: 1 }}>
+                <SelectInput
+                  value={draft.monthFrom}
+                  onChange={(v) => setDraft({ ...draft, monthFrom: v })}
+                  options={MONTH_OPTIONS}
+                />
+              </div>
+              <div style={{ width: 96 }}>
+                <SelectInput
+                  value={draft.fromDay}
+                  onChange={(v) => setDraft({ ...draft, fromDay: v })}
+                  options={DAY_OPTIONS}
+                />
+              </div>
+            </div>
           </Field>
           <Field
-            label={phasesActive ? '结束月份（已忽略）' : '结束月份'}
-            help={phasesActive ? undefined : '留空表示只在这一件事发生在起始月。'}
+            label={phasesActive ? '结束（已忽略）' : '结束'}
+            help={
+              phasesActive
+                ? undefined
+                : '留空＝只做起始月这一件事。结束日默认当月最后一天（2 月按 28/29 算）。'
+            }
           >
-            <SelectInput
-              value={draft.monthTo}
-              onChange={(v) => setDraft({ ...draft, monthTo: v })}
-              placeholder="（仅起始月）"
-              options={[{ value: '', label: '（仅起始月）' }, ...MONTH_OPTIONS]}
-            />
+            <div className="row tight" style={{ flexWrap: 'nowrap' }}>
+              <div style={{ flex: 1 }}>
+                <SelectInput
+                  value={draft.monthTo}
+                  onChange={(v) => setDraft({ ...draft, monthTo: v })}
+                  placeholder="（仅起始月）"
+                  options={[{ value: '', label: '（仅起始月）' }, ...MONTH_OPTIONS]}
+                />
+              </div>
+              <div style={{ width: 110 }}>
+                <SelectInput
+                  value={draft.toDay}
+                  onChange={(v) => setDraft({ ...draft, toDay: v })}
+                  options={[{ value: '', label: '月底' }, ...DAY_OPTIONS]}
+                />
+              </div>
+            </div>
           </Field>
         </div>
         <Field label="标题" required>
@@ -394,10 +436,8 @@ export function CareRuleManager({
           </Notice>
         ) : (
           <div className="small muted" style={{ marginBottom: 8 }}>
-            覆盖月份：
-            {monthsCovered({ monthFrom: Number(draft.monthFrom), monthTo: draft.monthTo ? Number(draft.monthTo) : null })
-              .map((m) => `${m}月`)
-              .join('、') || '—'}
+            覆盖日期：
+            {`${draft.monthFrom}/${draft.fromDay || 1} – ${draft.monthTo || draft.monthFrom}/${draft.toDay || '月底'}`}
           </div>
         )}
 
@@ -434,20 +474,6 @@ export function CareRuleManager({
               />
             </Field>
           ) : null}
-          {/*
-            日期只由这里决定：默认 1 号；同一件事拆成几条规则时，
-            填同一个号才会落在同一天。
-          */}
-          <Field
-            label="每月几号"
-            help="留空＝每月 1 号。同一件事写在几条规则里时（通用底肥 + 各物种的底肥组合），给它们填同一个号就会落在同一天；想错开就给不同规则填不同的号。1~28（29~31 在小月不存在，会按 28 算）。"
-          >
-            <TextInput
-              value={draft.anchorDay}
-              onChange={(v) => setDraft({ ...draft, anchorDay: v })}
-              placeholder="1"
-            />
-          </Field>
           <Field
             label="绑定配方"
             help={
@@ -602,32 +628,23 @@ export function CareRuleManager({
                             ))}
                           </div>
                         ) : (
-                          <>{monthsCovered(rule).join('/')} 月</>
+                          <>{formatRange(rule)}</>
                         )}
                         {rule.repeatDays ? (
                           <div className="muted">每 {rule.repeatDays} 天</div>
                         ) : rule.oncePerWindow ? (
-                          <div className="muted" title="跨月区间只生成一条任务，落在窗口开头">
+                          <div className="muted" title="跨月区间只生成一条任务，落在区间起点">
                             整段只做一次
                           </div>
                         ) : null}
-                        {rule.anchorDay !== null && rule.anchorDay !== undefined ? (
-                          <div className="muted" title="规则里指定了每月的哪一天">
-                            每月 {rule.anchorDay} 号
-                          </div>
-                        ) : (
-                          <div className="muted" title="没指定时默认落在每月 1 号">
-                            每月 1 号
-                          </div>
-                        )}
                         {rule.recipeId ? (
                           <div className="muted" title="生成的任务会直接列出这份配方">
                             📋 {recipes.find((r) => r.id === rule.recipeId)?.name ?? `配方 #${rule.recipeId}`}
                           </div>
                         ) : null}
                         {phased ? (
-                          <div className="muted" title={`规则里写的是 ${monthsCovered(rule).join('/')} 月，但限定生效阶段后不再参与判断`}>
-                            不看月份
+                          <div className="muted" title={`规则里写的是 ${formatRange(rule)}，但限定生效阶段后不再参与判断`}>
+                            不看日期
                           </div>
                         ) : null}
                       </td>
