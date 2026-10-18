@@ -510,6 +510,38 @@ export const CARE_URGENCY_LABELS: Record<CareUrgency, string> = {
   closed: '已完成'
 }
 
+/**
+ * 未完成任务按紧急度分桶。**今日页和养护计划共用这一份。**
+ *
+ * 存在的理由是一次真实的矛盾：今日页按「全部未完成」算，养护计划按
+ * 「当月任务 + 另外补逾期」算，于是同一天同一批数据，
+ * 一边写「今天该做 10」、一边写「该做了 6」——
+ * 差的那 4 条是时间窗已经开始、到期日落在下个月的。
+ * 用户一眼看出不对，但两边各自的算法都「说得通」。
+ *
+ * 所以口径只留一处：**全部未完成任务都进桶，不分月份**。
+ * 月份只影响月历上画在哪个格子。
+ */
+export function pendingBuckets<T extends Pick<CareTask, 'status' | 'dueDate' | 'windowDays' | 'priority'>>(
+  tasks: T[],
+  today: string = todayIso()
+): { overdue: T[]; due: T[]; soon: T[]; later: T[] } {
+  const buckets = { overdue: [] as T[], due: [] as T[], soon: [] as T[], later: [] as T[] }
+  for (const task of tasks) {
+    if (task.status !== 'pending') continue
+    const urgency = urgencyOf(task, today)
+    if (urgency === 'closed') continue
+    buckets[urgency].push(task)
+  }
+  // 同紧急度里：先按日期，再按优先级。两页的顺序也就不用各写一遍。
+  const order = (a: T, b: T): number => a.dueDate.localeCompare(b.dueDate) || a.priority - b.priority
+  buckets.overdue.sort(order)
+  buckets.due.sort(order)
+  buckets.soon.sort(order)
+  buckets.later.sort(order)
+  return buckets
+}
+
 /** 排序用：越紧急越靠前，同紧急度按优先级与日期。 */
 export function compareTasks(a: CareTask, b: CareTask, today: string = todayIso()): number {
   const rank: Record<CareUrgency, number> = { overdue: 0, due: 1, soon: 2, later: 3, closed: 4 }

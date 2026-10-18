@@ -123,7 +123,7 @@ export function CareCalendar({
         <span className="cal-dot pending" /> 计划中
         <span className="cal-dot done" /> 已完成
         <span className="cal-dot skipped" /> 已跳过
-        <span style={{ marginLeft: 10 }}>点任务可跳到待办列表处理</span>
+        <span style={{ marginLeft: 10 }}>点任务可查看 / 编辑（完成与跳过在「今日」页）</span>
       </div>
     </div>
   )

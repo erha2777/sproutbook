@@ -81,13 +81,21 @@ export interface CareTaskRowProps {
   busy?: boolean
   /** 从月历跳过来时高亮一下，让人看得见是哪一条 */
   highlighted?: boolean
+  /**
+   * 这一行能做什么。
+   *
+   * - `act`（默认）：今日页用。完成 / 跳过 / 撤销 —— 「执行」在这一页。
+   * - `manage`：养护计划用。只给**查看 / 编辑 / 删除** —— 计划页负责排和改，
+   *   执行动作统一收到今日页，免得同一个任务两个地方两套按钮。
+   */
+  mode?: 'act' | 'manage'
   recipes: RecipeListItem[] | null
   materials: Material[] | null
   /** 把这一行的 DOM 交给页面（跳转后要 scrollIntoView） */
   registerRef?: (el: HTMLDivElement | null) => void
-  onComplete: (task: CareTaskListItem, note: string) => void
-  onSkip: (task: CareTaskListItem) => void
-  onReopen: (task: CareTaskListItem) => void
+  onComplete?: (task: CareTaskListItem, note: string) => void
+  onSkip?: (task: CareTaskListItem) => void
+  onReopen?: (task: CareTaskListItem) => void
   onEdit: (task: CareTaskListItem) => void
   onDelete: (task: CareTaskListItem) => void
 }
@@ -97,6 +105,7 @@ export function CareTaskRow({
   today,
   busy = false,
   highlighted = false,
+  mode = 'act',
   recipes,
   materials,
   registerRef,
@@ -167,7 +176,7 @@ export function CareTaskRow({
         {task.recipeId ? <TaskRecipe recipeId={task.recipeId} recipes={recipes} materials={materials} /> : null}
         {task.completedNote ? <div className="small muted">备注：{task.completedNote}</div> : null}
 
-        {noteOpen ? (
+        {noteOpen && mode === 'act' ? (
           <div className="row tight" style={{ marginTop: 6 }}>
             <div style={{ flex: 1 }}>
               <TextInput value={note} onChange={setNote} placeholder="记一句当时的情况（可留空）" autoFocus />
@@ -177,7 +186,7 @@ export function CareTaskRow({
               variant="primary"
               onClick={() => {
                 setNoteOpen(false)
-                onComplete(task, note)
+                onComplete?.(task, note)
               }}
             >
               确认完成
@@ -197,9 +206,19 @@ export function CareTaskRow({
       </div>
 
       <div className="row tight" style={{ flexWrap: 'nowrap' }}>
-        {closed ? (
+        {mode === 'manage' ? (
           <>
-            <Button size="small" disabled={busy} onClick={() => onReopen(task)}>
+            {/* 计划页只做「看 / 改 / 删」：完成和跳过是执行业务，归今日页 */}
+            <Button size="small" variant="ghost" onClick={() => onEdit(task)}>
+              编辑
+            </Button>
+            <Button size="small" variant="ghost" onClick={() => onDelete(task)}>
+              删除
+            </Button>
+          </>
+        ) : closed ? (
+          <>
+            <Button size="small" disabled={busy} onClick={() => onReopen?.(task)}>
               撤销
             </Button>
             <Button size="small" variant="ghost" onClick={() => onDelete(task)}>
@@ -219,7 +238,7 @@ export function CareTaskRow({
             >
               完成
             </Button>
-            <Button size="small" disabled={busy} onClick={() => onSkip(task)}>
+            <Button size="small" disabled={busy} onClick={() => onSkip?.(task)}>
               跳过
             </Button>
             <Button size="small" variant="ghost" onClick={() => onEdit(task)}>

@@ -179,6 +179,52 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
 
   /** 送人的植株不留在花园里 —— 它已经不在你这儿了。 */
   const gardenItems = useMemo(() => items.filter((p) => p.status !== 'gifted'), [items])
+  /** 正在给哪一株生成计划（按钮显示「生成中…」） */
+  const [generating, setGenerating] = useState<number | null>(null)
+
+  /**
+   * 刷新某一株的「下一件事」。
+   *
+   * 生成计划 / 改阶段之后都要走一次：不重取的话，卡片上会挂着一条
+   * 已经不该做（或还没出现）的任务。
+   */
+  const refreshNextTask = useCallback(async (plantId: number): Promise<void> => {
+    const open = await window.api.care.tasks({ status: 'open' })
+    const mine = open.filter((t) => t.plantId === plantId).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    setNextTask((prev) => {
+      const next = { ...prev }
+      if (mine[0]) next[plantId] = mine[0]
+      else delete next[plantId]
+      return next
+    })
+  }, [])
+
+  /**
+   * 给**这一株**单独生成 / 更新年度计划。
+   *
+   * 生成计划原来在「养护计划」页，一个按钮把所有植株排一遍。用户要的是按株来：
+   * 这株刚加进来、这株改了阶段，都是这一株自己的事，没理由顺手动别人的计划。
+   * 接口 `care:generate(plantId, year)` 一直都在（标记阶段时已经在用），只是没有入口。
+   */
+  const generateForPlant = async (plant: PlantListItem): Promise<void> => {
+    setGenerating(plant.id)
+    try {
+      const year = new Date().getFullYear()
+      const r = await window.api.care.generate(plant.id, year)
+      toast.push(
+        r.created > 0
+          ? `已为「${plant.nickname}」生成 ${r.created} 项任务（保留已有 ${r.kept} 项）`
+          : `「${plant.nickname}」的 ${year} 年计划已是最新（${r.kept} 项无需变动）`,
+        'success'
+      )
+      await refreshNextTask(plant.id)
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : '生成计划失败', 'error')
+    } finally {
+      setGenerating(null)
+    }
+  }
+
   /**
    * 就地标记物候阶段。
    *
@@ -195,21 +241,8 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
       setPhases((prev) => ({ ...prev, [plantId]: info }))
       // 重新生成任务：阶段一变，限定该阶段的规则就该生效/失效
       await window.api.care.generate(plantId, new Date().getFullYear())
-      /*
-       * 「下一件事」也要跟着刷新。
-       * 阶段一变，限定该阶段的规则就会生效或失效 ——
-       * 不重取的话，卡片上还挂着一条已经不该做的事。
-       */
-      const open = await window.api.care.tasks({ status: 'open' })
-      const mine = open
-        .filter((t) => t.plantId === plantId)
-        .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-      setNextTask((prev) => {
-        const next = { ...prev }
-        if (mine[0]) next[plantId] = mine[0]
-        else delete next[plantId]
-        return next
-      })
+      // 「下一件事」也要跟着刷新（阶段一变就可能有新任务，或旧任务失效）
+      await refreshNextTask(plantId)
       toast.push(phase ? `已标记为「${CARE_PHASE_LABELS[phase]}」，相关任务已重新生成` : '已清除阶段标记', 'success')
     } catch (error) {
       toast.push(`标记失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
@@ -403,9 +436,24 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                 <Panel>
                   <SectionTitle
                     right={
-                      <Button size="small" onClick={() => setEditing(selectedPlant)}>
-                        编辑这株
-                      </Button>
+                      <>
+                        {/*
+                          按株生成计划就放在这一株的详情里。
+                          放在「养护计划」页时，用户要排这一株得先离开花园、
+                          再按一个会动到所有植株的按钮 —— 两件都不对。
+                        */}
+                        <Button
+                          size="small"
+                          disabled={generating === selectedPlant.id}
+                          title="按规则库为这一株排出全年该做的事（已打勾的不会被覆盖）"
+                          onClick={() => void generateForPlant(selectedPlant)}
+                        >
+                          {generating === selectedPlant.id ? '生成中…' : '生成计划'}
+                        </Button>
+                        <Button size="small" onClick={() => setEditing(selectedPlant)}>
+                          编辑这株
+                        </Button>
+                      </>
                     }
                   >
                     {selectedPlant.nickname}

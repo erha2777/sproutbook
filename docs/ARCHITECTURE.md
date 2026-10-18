@@ -74,16 +74,20 @@ flowchart TB
 
 路径别名在三份构建配置里一致（`electron.vite.config.ts`）：`@core` → `src/core`，`@shared` → `src/shared`，`@` → `src/renderer/src`。
 
-### 「今日」与「养护计划」的分工（v1.8.0）
+### 「今日」与「养护计划」的分工（v1.8.2）
 
-两块界面面对的是**同一批养护任务**（`care:tasks`），只是口径不同：
+两块界面面对的是**同一批养护任务**（`care:tasks`），口径统一在 `core/care.ts` 的 `pendingBuckets`：
 
-| 页面 | 口径 | 谁在用 |
+| 页面 | 口径 | 能做什么 |
 |---|---|---|
-| **今日** | 全部未完成任务里 `urgencyOf` = `overdue` / `due`（跨月、跨年）；勾完成、跳过、撤销；天气预警 | 每天打开看「今天该干什么」 |
-| **养护计划** | 选中月份的整月任务 + 全年统计 + 月历 + 养护日志 | 排计划、翻月份、清理、查历史 |
+| **今日** | 全部未完成任务里 `urgencyOf` = `overdue` / `due`（跨月、跨年）；侧栏角标就是这个数 | 勾完成 / 跳过 / 撤销；看天气预警 |
+| **养护计划** | 同一份 `pendingBuckets`（逾期 / 该做 / 快到了 / 还早）+ 本月月历 + 本年已完成 + 养护日志 | 只看：查看 / 编辑 / 删除；默认月历 |
 
-任务行（`components/CareTaskRow.tsx`）和天气面板（`components/WeatherPanel.tsx`）都是**共享组件**，不各自复制一份 —— 这个仓库为「双份实现」付过代价（`suggestTask` 的副本少了一个「前」字，而自检测的是没人用的那份）。
+**生成计划不在养护计划里**：在「我的花园」选中一株，点「生成计划」——
+走 `care:generate(plantId, year)`，只动这一株。`care:generateAll` 仍是通道，
+但界面不再调用（批量生成会顺手动到别人的计划）。
+
+任务行（`components/CareTaskRow.tsx`）和天气面板（`components/WeatherPanel.tsx`）都是**共享组件**，不各自复制一份 —— 这个仓库为「双份实现」付过代价（`suggestTask` 的副本少了一个「前」字，而自检测的是没人用的那份）。任务行用 `mode` 区分两种用法：`act`（今日，带完成/跳过）与 `manage`（养护计划，只有编辑/删除）。
 
 ---
 

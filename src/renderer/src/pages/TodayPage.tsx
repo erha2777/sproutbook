@@ -20,7 +20,7 @@ import type { ReactNode } from 'react'
 import type { CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareTaskListItem, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
 import { suggestTask } from '@core/weather'
-import { addDays, todayIso, urgencyOf } from '@core/care'
+import { addDays, pendingBuckets, todayIso } from '@core/care'
 import { Button, EmptyState, Panel, SectionTitle, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
@@ -155,19 +155,13 @@ export function TodayPage({
     }
   }, [today, toast])
 
-  /** 全部未完成任务里，按紧急度分成「已过期 / 该做了 / 快到了」 */
-  const groups = useMemo(() => {
-    const pending = openTasks.filter((t) => t.status === 'pending')
-    const byUrgency = (u: 'overdue' | 'due' | 'soon'): CareTaskListItem[] =>
-      pending
-        .filter((t) => urgencyOf(t, today) === u)
-        .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.priority - b.priority)
-    return {
-      overdue: byUrgency('overdue'),
-      due: byUrgency('due'),
-      soon: byUrgency('soon')
-    }
-  }, [openTasks, today])
+  /**
+   * 全部未完成任务按紧急度分组。
+   *
+   * 用的是 core 的 pendingBuckets —— 养护计划页用同一个函数，
+   * 这样「今日 该做 N」和「养护计划 该做了 N」永远是同一个数。
+   */
+  const groups = useMemo(() => pendingBuckets(openTasks, today), [openTasks, today])
 
   /**
    * 已经加进计划里的天气任务。

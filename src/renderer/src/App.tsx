@@ -9,6 +9,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { RecipesPage } from './pages/RecipesPage'
 import { CarePage } from './pages/CarePage'
 import { TodayPage } from './pages/TodayPage'
+import { pendingBuckets, todayIso } from '@core/care'
 
 type Route =
   | { name: 'garden' }
@@ -101,13 +102,16 @@ function Shell(): ReactNode {
    *
    * 这个数字必须能被刷新 —— 第一版只在挂载时取一次，于是打完勾、
    * 页面上明明显示「逾期 0、该做 0」，侧栏那个红点还挂着，看着像没生效。
-   * 现在两处触发：路由切换时（万一别处改动了数据），
-   * 以及养护计划页每次操作之后（通过 onCareChanged 回调）。
+   *
+   * **口径和今日页完全一致**：取全部未完成任务，按 core 的 pendingBuckets
+   * 数「已过期 + 该做」。原先用 careOverview（只统计本年、按到期日筛），
+   * 会出现「侧栏 12、今日 10、养护计划 6」三个数字并存的情况。
    */
   const refreshCareBadge = useCallback(async () => {
     try {
-      const overview = await window.api.care.overview(new Date().getFullYear())
-      setCarePending(overview.overdue + overview.due)
+      const open = await window.api.care.tasks({ status: 'open' })
+      const buckets = pendingBuckets(open, todayIso())
+      setCarePending(buckets.overdue.length + buckets.due.length)
     } catch {
       // 养护表还没就绪时静默跳过，不因为角标影响启动
     }
@@ -206,10 +210,10 @@ function Shell(): ReactNode {
                 </>
               ) : null}
               {/*
-                养护计划的角标：不开这个页面也能看到有几件事压着。
-                只算「已过期 + 该做了」——把远期任务也算进来就等于没有信号了。
+                角标挂在「今日」：那才是「今天要处理几件事」的入口。
+                只算「已过期 + 该做」—— 把远期任务也算进来就等于没有信号了。
               */}
-              {item.key === 'plans' && carePending > 0 ? (
+              {item.key === 'today' && carePending > 0 ? (
                 <>
                   <span className="spacer" />
                   <span className="nav-badge" title={`${carePending} 件事需要处理`}>
@@ -303,7 +307,9 @@ function Shell(): ReactNode {
           {route.name === 'templates' ? <TemplatesPage /> : null}
           {route.name === 'settings' ? <SettingsPage /> : null}
 
-          {route.name === 'plans' ? <CarePage onCareChanged={refreshCareBadge} /> : null}
+          {route.name === 'plans' ? (
+            <CarePage onCareChanged={refreshCareBadge} onGoGarden={() => setRoute({ name: 'garden' })} />
+          ) : null}
 
           {/*
             今日页：当天待办 + 天气预警。
