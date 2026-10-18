@@ -450,6 +450,44 @@ img {
   box-shadow: 0 0 0 3px rgba(124, 196, 78, 0.45);
 }
 
+/*
+ * 分组展示（今日页：同一条规则的多株）。
+ *
+ * 外层一块木质边框，头部写标题 / 日期 / 可做期 / 共几株；
+ * 里面每株仍是独立的一行，各自完成、各自备注 —— 只是不再重复标题和说明。
+ */
+.task-group {
+  border: 2px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+  padding: 8px 10px 4px;
+  margin-bottom: 8px;
+}
+.task-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.task-group-note {
+  margin: 2px 0 4px;
+}
+.task-group-body {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 2px dashed var(--wood-outline);
+}
+/* 分组里的行：去掉自己的外框，让它们看起来是同一组里的条目 */
+.task-group-body .task-row {
+  border: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: transparent;
+  margin-bottom: 0;
+  padding: 6px 2px;
+}
+.task-group-body .task-row:last-child {
+  border-bottom: none;
+}
+
 /* ---------- 月历 ---------- */
 
 .care-calendar {

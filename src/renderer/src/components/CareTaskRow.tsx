@@ -28,7 +28,7 @@ import { Badge, Button, TextInput } from './ui'
 
 type BadgeTone = 'safety' | 'ai' | 'ok' | 'warn' | 'info' | 'muted'
 
-const URGENCY_TONE: Record<CareUrgency, BadgeTone> = {
+export const URGENCY_TONE: Record<CareUrgency, BadgeTone> = {
   overdue: 'safety',
   due: 'warn',
   soon: 'info',
@@ -89,6 +89,13 @@ export interface CareTaskRowProps {
    *   执行动作统一收到今日页，免得同一个任务两个地方两套按钮。
    */
   mode?: 'act' | 'manage'
+  /**
+   * 紧凑模式：放在「分组」里时用（今日页同一规则的多株）。
+   *
+   * 分组头已经写了标题、日期、可做期、说明和配方，所以行里只留**植株名**
+   * 和按钮 —— 每株仍是独立一行、独立完成，日志（以后还有照片）按株记。
+   */
+  compact?: boolean
   recipes: RecipeListItem[] | null
   materials: Material[] | null
   /** 把这一行的 DOM 交给页面（跳转后要 scrollIntoView） */
@@ -106,6 +113,7 @@ export function CareTaskRow({
   busy = false,
   highlighted = false,
   mode = 'act',
+  compact = false,
   recipes,
   materials,
   registerRef,
@@ -151,31 +159,44 @@ export function CareTaskRow({
       <span className="task-icon">{CARE_ACTION_ICONS[task.actionType]}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="row tight" style={{ alignItems: 'center' }}>
-          <b>{task.title}</b>
-          <Badge tone={URGENCY_TONE[urgency]}>
-            {closed
-              ? task.status === 'done'
-                ? '已完成'
-                : '已跳过'
-              : badgeText}
-          </Badge>
-          {task.priority === 1 ? <Badge tone="safety">高优先</Badge> : null}
-          {task.source === 'manual' ? <Badge tone="muted">手动</Badge> : null}
+          {compact ? (
+            <>
+              <b>{task.plantName ?? task.speciesName ?? `任务 #${task.id}`}</b>
+              {task.source === 'manual' ? <Badge tone="muted">手动</Badge> : null}
+            </>
+          ) : (
+            <>
+              <b>{task.title}</b>
+              <Badge tone={URGENCY_TONE[urgency]}>
+                {closed
+                  ? task.status === 'done'
+                    ? '已完成'
+                    : '已跳过'
+                  : badgeText}
+              </Badge>
+              {task.priority === 1 ? <Badge tone="safety">高优先</Badge> : null}
+              {task.source === 'manual' ? <Badge tone="muted">手动</Badge> : null}
+            </>
+          )}
         </div>
-        <div className="small muted">
-          {task.dueDate}
-          {task.plantName ? ` · ${task.plantName}` : ''}
-          {task.speciesName ? ` · ${task.speciesName}` : ''}
-          {` · ${CARE_ACTION_LABELS[task.actionType]}`}
-          {task.windowDays > 0 ? ` · 可做至 ${windowEnd}` : ''}
-        </div>
-        {task.detail ? <div className="small">{task.detail}</div> : null}
+        {compact ? null : (
+          <div className="small muted">
+            {task.dueDate}
+            {task.plantName ? ` · ${task.plantName}` : ''}
+            {task.speciesName ? ` · ${task.speciesName}` : ''}
+            {` · ${CARE_ACTION_LABELS[task.actionType]}`}
+            {task.windowDays > 0 ? ` · 可做至 ${windowEnd}` : ''}
+          </div>
+        )}
+        {compact ? null : task.detail ? <div className="small">{task.detail}</div> : null}
         {/*
           绑了配方的规则，任务上直接列出材料清单 ——
           做的时候不用再翻回规则库查「羊粪放多少」。
           按 id 现查，所以配方改了名字这里会跟着变。
         */}
-        {task.recipeId ? <TaskRecipe recipeId={task.recipeId} recipes={recipes} materials={materials} /> : null}
+        {compact ? null : task.recipeId ? (
+          <TaskRecipe recipeId={task.recipeId} recipes={recipes} materials={materials} />
+        ) : null}
         {task.completedNote ? <div className="small muted">备注：{task.completedNote}</div> : null}
 
         {noteOpen && mode === 'act' ? (
