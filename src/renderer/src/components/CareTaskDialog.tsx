@@ -76,7 +76,11 @@ export function CareTaskDialog({
     }
   }
 
-  const win = { from: addDays(dueDate, -(Number(windowDays) || 0)), to: addDays(dueDate, Number(windowDays) || 0) }
+  /*
+   * 窗口从**到期日当天**开始，往后延续 N 天（不再是 ±N）——
+   * 提前不会变成「该做了」，过期前都还有宽限。
+   */
+  const win = { from: dueDate, to: addDays(dueDate, Number(windowDays) || 0) }
 
   return (
     <Modal
@@ -115,7 +119,7 @@ export function CareTaskDialog({
           <Field label="计划日期">
             <TextInput value={dueDate} onChange={setDueDate} placeholder="2026-06-15" />
           </Field>
-          <Field label="时间窗（±天）" help="窗口内做都算准时，不会一过期就变红。日常养护建议 3~7 天。">
+          <Field label="宽限（天）" help="到期之后还能拖几天都算准时。窗口从到期日当天开始，不会提前变红。日常养护建议 3~7 天。">
             <TextInput value={windowDays} onChange={setWindowDays} placeholder="3" />
           </Field>
           <Field label="优先级" help="数字越小越优先，1 最高。">

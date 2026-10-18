@@ -20,7 +20,8 @@ import {
   CARE_ACTION_LABELS,
   CARE_URGENCY_LABELS,
   dueDescription,
-  urgencyOf
+  urgencyOf,
+  windowRange
 } from '@core/care'
 import type { CareUrgency } from '@core/care'
 import { Badge, Button, TextInput } from './ui'
@@ -118,18 +119,14 @@ export function CareTaskRow({
   const closed = task.status !== 'pending'
   const urgency = urgencyOf(task, today)
   /*
-   * 时间窗已经开了、但**到期日还没到** —— 这不是「该做了」，是「可以提前做」。
-   * 不区分的话，今天看一条 11 月 2 日的任务，徽章会写「该做了」，
-   * 看起来像是在说今天必须做。
-   */
-  const early = !closed && urgency === 'due' && task.dueDate > today
-  /*
    * dueDescription 在逾期时本身就以「已过期」开头，再拼一次标签就成了
    * 「已过期 · 已过期 26 天」。只有两者不重复时才拼。
    */
-  const urgencyLabel = early ? '可以提前做' : CARE_URGENCY_LABELS[urgency]
+  const urgencyLabel = CARE_URGENCY_LABELS[urgency]
   const dueText = dueDescription(task, today)
   const badgeText = dueText.startsWith(urgencyLabel) ? dueText : `${urgencyLabel} · ${dueText}`
+  /** 可执行到哪天 —— 窗口现在是「到期日 → 到期日 + 宽限」 */
+  const windowEnd = windowRange(task).to
 
   /** 备注输入框：点「完成」先展开，确认后才真写 */
   const [noteOpen, setNoteOpen] = useState(false)
@@ -171,7 +168,7 @@ export function CareTaskRow({
           {task.plantName ? ` · ${task.plantName}` : ''}
           {task.speciesName ? ` · ${task.speciesName}` : ''}
           {` · ${CARE_ACTION_LABELS[task.actionType]}`}
-          {task.windowDays > 0 ? ` · 时间窗 ±${task.windowDays} 天` : ''}
+          {task.windowDays > 0 ? ` · 可做至 ${windowEnd}` : ''}
         </div>
         {task.detail ? <div className="small">{task.detail}</div> : null}
         {/*

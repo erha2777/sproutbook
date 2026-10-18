@@ -1018,9 +1018,9 @@ export async function runSmoke(outFile: string): Promise<number> {
         cyc.slice(0, 4).map((t) => t.title).join(' | ')
       )
       check(
-        '周期任务的时间窗收窄到半个间隔（相邻两次不互相覆盖）',
-        cyc.every((t) => t.windowDays === 5),
-        String(cyc[0].windowDays)
+        '周期任务的宽限到下一次之前（相邻两次不互相覆盖）',
+        cyc[0].windowDays === 9 && cyc.every((t) => t.windowDays <= 9),
+        cyc.map((t) => t.windowDays).join(',')
       )
       check('没有轮换步骤时标题不带后缀', generateTasks([{ ...cycleRule, rotation: null }], null, 2026)[0].title === '追肥')
       check(
@@ -1201,26 +1201,31 @@ export async function runSmoke(outFile: string): Promise<number> {
         )
       }
 
-      // ---- 时间窗与紧急度 ----
+      /*
+       * ---- 时间窗与紧急度 ----
+       *
+       * 窗口 = 到期日 → 到期日 + 宽限（不是 ±N）。
+       * 用户的原话「生成的任务的时间窗不对」：规则写 10/1~10/31，
+       * 那这条整个 10 月都该能做，而不是 10/16 就过期。
+       */
       const task = (dueDate: string, status: CareTaskStatus = 'pending', windowDays = 3) =>
         ({ dueDate, windowDays, status }) as Pick<CareTask, 'dueDate' | 'windowDays' | 'status'>
 
-      check('时间窗两端正确', windowRange({ dueDate: '2026-06-10', windowDays: 3 }).from === '2026-06-07')
-      check('时间窗末端正确', windowRange({ dueDate: '2026-06-10', windowDays: 3 }).to === '2026-06-13')
+      check('时间窗从到期日当天开始', windowRange({ dueDate: '2026-06-10', windowDays: 3 }).from === '2026-06-10')
+      check('时间窗末端 = 到期日 + 宽限', windowRange({ dueDate: '2026-06-10', windowDays: 3 }).to === '2026-06-13')
       check('窗口内算「该做了」', urgencyOf(task('2026-06-10'), '2026-06-10') === 'due')
-      check('窗口首日也算「该做了」', urgencyOf(task('2026-06-10'), '2026-06-07') === 'due')
+      check('到期日之后仍算「该做了」', urgencyOf(task('2026-06-10'), '2026-06-12') === 'due')
+      check('提前不会算「该做了」', urgencyOf(task('2026-06-10'), '2026-06-07') === 'soon')
       check('超过窗口末端算逾期', urgencyOf(task('2026-06-10'), '2026-06-14') === 'overdue')
-      check('窗口开始前的近期算「快到了」', urgencyOf(task('2026-06-20'), '2026-06-10') === 'soon')
+      check('到期前 7 天内算「快到了」', urgencyOf(task('2026-06-17'), '2026-06-10') === 'soon')
       check('远期任务算「还早」', urgencyOf(task('2026-09-01'), '2026-06-10') === 'later')
       check('已完成不再判紧急度', urgencyOf(task('2026-06-10', 'done'), '2026-07-01') === 'closed')
       check('已跳过同样算关闭', urgencyOf(task('2026-06-10', 'skipped'), '2026-07-01') === 'closed')
 
       /*
-       * 分桶：把「窗口开了但还没到期」和「今天该做」分开。
-       *
-       * 这是用户报过的一个真实问题：11 月 2 日的任务，时间窗从 10 月 18 日就开，
-       * 于是它出现在「今日 · 今天该做」里 —— 用户的反应是
-       * 「今日要做怎么会有大于今天的计划」。所以这里要把边界钉死。
+       * 分桶：窗口从到期日当天开始，所以「窗口开了但还没到期」这种情况
+       * 已经不可能出现（early 永远是空的）。这里钉的是：
+       * 到期日 ≤ 今天才是「该做」，未来日期的任务只能进 soon / later。
        */
       const bucketTask = (dueDate: string, priority = 2) =>
         ({ dueDate, windowDays: 3, status: 'pending', priority }) as Pick<
@@ -1229,11 +1234,11 @@ export async function runSmoke(outFile: string): Promise<number> {
         >
       const buckets = pendingBuckets(
         [
-          bucketTask('2026-06-01'), // 窗口 5/29~6/4，今天 6/10 → 逾期
-          bucketTask('2026-06-08'), // 窗口到 6/11，到期日已过 → 该做
+          bucketTask('2026-06-01'), // 窗口 6/1~6/4，今天 6/10 → 逾期
+          bucketTask('2026-06-08'), // 窗口 6/8~6/11，到期日已过 → 该做
           bucketTask('2026-06-10'), // 今天到期 → 该做
-          bucketTask('2026-06-12'), // 窗口 6/9 已开，到期日还没到 → 可以提前做
-          bucketTask('2026-06-18'), // 窗口 6/15 才开，5 天后 → 快到了
+          bucketTask('2026-06-12'), // 到期日在未来 → 快到了（不是「可以提前做」）
+          bucketTask('2026-06-18'), // 8 天后 → 还早
           bucketTask('2026-09-01') // 远 → 还早
         ],
         '2026-06-10'
@@ -1248,18 +1253,14 @@ export async function runSmoke(outFile: string): Promise<number> {
         buckets.due.length === 2 && buckets.due.every((t) => t.dueDate <= '2026-06-10'),
         `due=${buckets.due.map((t) => t.dueDate).join(',')}`
       )
-      check(
-        '分桶：窗口已开但到期日在未来 → 可以提前做，不算今天该做',
-        buckets.early.length === 1 && buckets.early[0].dueDate === '2026-06-12',
-        `early=${buckets.early.length}`
-      )
+      check('分桶：不再有「窗口开了但没到期」这一类', buckets.early.length === 0, `early=${buckets.early.length}`)
       check(
         '分桶：未来日期的任务绝不会进「今天该做」',
-        buckets.due.every((t) => t.dueDate <= '2026-06-10') && buckets.early.every((t) => t.dueDate > '2026-06-10')
+        buckets.due.every((t) => t.dueDate <= '2026-06-10')
       )
       check(
         '分桶：快到了与还早各归各位',
-        buckets.soon.length === 1 && buckets.later.length === 1,
+        buckets.soon.length === 1 && buckets.later.length === 2,
         `soon=${buckets.soon.length} later=${buckets.later.length}`
       )
       check(
@@ -1268,12 +1269,12 @@ export async function runSmoke(outFile: string): Promise<number> {
         buckets.due.map((t) => t.dueDate).join(' < ')
       )
 
-      // 描述必须基于时间窗：写着 6/10、窗口 ±3 天，那 6/12 仍是「窗口内」，
+      // 描述必须基于时间窗：写着 6/10、宽限 3 天，那 6/12 仍是「窗口内」，
       // 说成「已过 2 天」会让人误以为逾期
       check('窗口内描述为「时间窗内」', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-12').includes('时间窗内'), dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-12'))
       check('窗口最后一天有特别提示', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-13') === '今天是最后一天')
       check('超过窗口才说已过期', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-15') === '已过期 2 天', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-15'))
-      check('窗口未开始说还有几天', dueDescription({ dueDate: '2026-06-20', windowDays: 3 }, '2026-06-10').includes('还有 7 天'), dueDescription({ dueDate: '2026-06-20', windowDays: 3 }, '2026-06-10'))
+      check('窗口未开始说还有几天', dueDescription({ dueDate: '2026-06-20', windowDays: 3 }, '2026-06-10').includes('还有 10 天'), dueDescription({ dueDate: '2026-06-20', windowDays: 3 }, '2026-06-10'))
 
       // ---- 排序与统计 ----
       const sortable = [

@@ -385,11 +385,11 @@ export interface GeneratedTask {
  * 把规则展开成某一年的一组任务。
  *
  * 两种节奏：
- *  - **按月**（默认）：区间内每月一条，日期取该月的锚点日（见 spreadDay），
- *    时间窗默认 ±15 天 —— 也就是「这个月内做都行」。
- *  - **按天**（规则填了 repeatDays）：区间内每隔 N 天一条。
- *    这是为「7~10 天一轮」这类真实节奏准备的；时间窗收窄到半个间隔，
- *    这样相邻两次不会互相覆盖判定。
+ *  - **按月**（默认）：区间内每月一条，日期取每个月的起始日；
+ *    宽限从这一天到下一次之前（最后一次到区间结束）——
+ *    于是「10 月 1 日」的这条整个 10 月都能做，而不是 15 天就过期。
+ *  - **按天**（规则填了 repeatDays）：区间内每隔 N 天一条，
+ *    宽限到下一次之前，相邻两次不会互相覆盖判定。
  *
  * 规则填了 rotation 时，每次取序列里的下一步，标题变成「追肥 · 花多多1号」，
  * 循环使用 —— 对应施肥方案里的三肥轮换。
@@ -404,9 +404,10 @@ export function generateTasks(
   year: number,
   options: {
     hemisphere?: 'N' | 'S'
+    /** @deprecated 宽限现在由规则区间算出来，这个参数不再使用。 */
     defaultWindowDays?: number
     /**
-     * @deprecated 日期不再按植株错开（默认每月 1 号，或规则里的「每月几号」）。
+     * @deprecated 日期不再按植株错开（由规则的起始日决定）。
      * 保留这个参数只是为了不改一堆调用点，值会被忽略。
      */
     spreadSeed?: number
@@ -415,7 +416,6 @@ export function generateTasks(
   } = {}
 ): GeneratedTask[] {
   const hemisphere = options.hemisphere ?? 'N'
-  const defaultWindow = options.defaultWindowDays ?? 15
   const phase = options.phase ?? null
 
   const applicable = rules.filter((r) => {
@@ -487,12 +487,13 @@ export function generateTasks(
     }
     /** 这个日期是否落在规则区间内（跨年时可能有两段） */
     const inWindow = (date: string): boolean => spans.some((s) => date >= s.from && date <= s.to)
+    /** 从 dueDate 到 endDate 的宽限天数（窗口现在是「到期日 → 到期日+N」，见 windowRange） */
+    const untilDays = (dueDate: string, endDate: string): number =>
+      Math.max(0, daysBetween(endDate < dueDate ? dueDate : endDate, dueDate))
 
     // ---- 按天重复 ----
     if (rule.repeatDays !== null && rule.repeatDays !== undefined && rule.repeatDays > 0) {
       const step = Math.max(1, Math.trunc(rule.repeatDays))
-      // 相邻两次不能共用同一个判定窗口，否则「该做了」会一直亮着
-      const win = Math.max(1, Math.min(defaultWindow, Math.floor(step / 2)))
       let index = 0
 
       for (const span of spans) {
@@ -501,9 +502,12 @@ export function generateTasks(
         // 上限保护：即使 repeatDays 被填成 1，也不会无限循环
         for (let guard = 0; guard < 400 && cursor <= span.to; guard++) {
           const label = rotation.length > 0 ? ` · ${rotation[index % rotation.length]}` : ''
-          push(cursor, rule, `${rule.title}${label}`, win)
+          // 宽限到下一次之前（或区间结束），这样相邻两次不会互相覆盖
+          const next = addDays(cursor, step)
+          const end = next <= span.to ? addDays(next, -1) : span.to
+          push(cursor, rule, `${rule.title}${label}`, untilDays(cursor, end))
           index++
-          cursor = addDays(cursor, step)
+          cursor = next
         }
       }
       continue
@@ -518,11 +522,11 @@ export function generateTasks(
      * 按 **spans** 而不是月份迭代：连续几个月在 dateSpansFor 里已经合成一段，
      * 而跨年写法（11,12,1,2）会断开成两段 —— 那本来就该是两个窗口。
      *
-     * 日期落在区间起点（底肥这类事早做比晚做好）。
+     * 日期落在区间起点（底肥这类事早做比晚做好），**宽限到区间结束**。
      */
     if (rule.oncePerWindow) {
       for (const span of spans) {
-        push(span.from, rule, rule.title, defaultWindow)
+        push(span.from, rule, rule.title, untilDays(span.from, span.to))
       }
       continue
     }
@@ -530,11 +534,31 @@ export function generateTasks(
     // ---- 每月一条（原行为）----
     // 注意：这里必须按**月份**迭代而不是 spans —— 3~4 月是连续的两个月，
     // dateSpansFor 会把它们合成一个 span，按 span 走只会产出一条任务。
+    const occurrences: Array<{ date: string; end: string }> = []
     for (const month of monthsCovered(rule)) {
       const dueDate = dateInMonth(month)
       // 结束日早于起始日时，最后一个月那条会落到区间外（如 3/15~6/10 的 6 月），不生成
       if (!inWindow(dueDate)) continue
-      push(dueDate, rule, rule.title, defaultWindow)
+      const span = spans.find((s) => dueDate >= s.from && dueDate <= s.to)
+      if (!span) continue
+      occurrences.push({ date: dueDate, end: span.to })
+    }
+    // 每月这条的宽限：到下一次之前（最后一次到区间结束），
+    // 于是「10 月 1 日」的任务整个 10 月都能做，而不是 15 天就过期
+    occurrences.sort((a, b) => a.date.localeCompare(b.date))
+    for (let i = 0; i < occurrences.length; i++) {
+      const cur = occurrences[i]
+      const next = occurrences[i + 1]
+      /*
+       * 宽限到「下一次之前」，但**不能跨出本段区间**。
+       *
+       * 跨年规则（11~2 月）会拆成两段：2/1 的下一次是 11/1，
+       * 中间隔着 8 个月 —— 直接取「下一次前一天」会得到 10/31，
+       * 于是 2 月的任务在整个夏天都算「该做了」。
+       */
+      const untilNext = next ? addDays(next.date, -1) : cur.end
+      const end = untilNext < cur.end ? untilNext : cur.end
+      push(cur.date, rule, rule.title, untilDays(cur.date, end))
     }
   }
 
@@ -552,10 +576,23 @@ export interface CareWindow {
   to: string
 }
 
-/** 任务的可执行区间。 */
+/**
+ * 任务的可执行区间。
+ *
+ * ⚠️ **窗口从到期日当天开始，往后延续 windowDays 天** —— 不是 ±N。
+ *
+ * 原来的 ±N 表示「提前 N 天就能做」，于是 10 月 1 日的任务在 9 月 16 日就
+ * 算「该做了」，反过来 10 月 18 日又已经「已过期」（窗口 10-16 结束）——
+ * 用户的原话是「生成的任务的时间窗不对」：规则写的是 10 月 1 日到 10 月 31 日，
+ * 那这件事整个 10 月都应该能做。
+ *
+ * 所以 windowDays 现在的含义是「到期之后还能拖几天」：生成任务时按规则的
+ * 日期区间算出这段宽限（10 月的任务 → 到 10 月 31 日为止），
+ * 手动任务则用它自己填的宽限天数。
+ */
 export function windowRange(task: Pick<CareTask, 'dueDate' | 'windowDays'>): CareWindow {
   const w = Math.max(0, task.windowDays)
-  return { from: addDays(task.dueDate, -w), to: addDays(task.dueDate, w) }
+  return { from: task.dueDate, to: addDays(task.dueDate, w) }
 }
 
 /** 逾期判定留一点余量，避免「昨天该浇水」就被标红。 */
