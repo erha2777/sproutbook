@@ -20,11 +20,12 @@ import type { ReactNode } from 'react'
 import type { CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareTaskListItem, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
 import { suggestTask } from '@core/weather'
-import { addDays, CARE_ACTION_ICONS, CARE_ACTION_LABELS, CARE_URGENCY_LABELS, dueDescription, groupTasksByRule, pendingBuckets, todayIso, urgencyOf, windowRange } from '@core/care'
-import { Badge, Button, EmptyState, Panel, SectionTitle, Spinner, useToast } from '../components/ui'
+import { addDays, groupTasksByRule, pendingBuckets, todayIso } from '@core/care'
+import { Button, EmptyState, Panel, SectionTitle, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
-import { CareTaskRow, TaskGroup, TaskRecipe, URGENCY_TONE } from '../components/CareTaskRow'
+import { CareTaskRow, TaskGroup } from '../components/CareTaskRow'
+import { CareTaskGroup } from '../components/CareTaskGroup'
 import { WeatherPanel, weatherTaskKey } from '../components/WeatherPanel'
 
 /**
@@ -293,39 +294,20 @@ export function TodayPage({
    *
    * **只分组，不合并动作**：同一条规则的多株仍然是各自独立的一行
    * （各自的完成 / 跳过 / 备注，以后还要按株加照片日志）。
-   * 分组头只负责把「这是同一件事」讲清楚：标题、日期、可做期、说明、配方，
-   * 以及共几株 —— 否则七行重复的标题和说明会把页面撑得很长。
+   * 组头只负责把「这是同一件事」讲清楚。
    */
   const renderGroup = (list: CareTaskListItem[]): ReactNode => {
     if (list.length === 1) return renderRow(list[0])
-    const first = list[0]
-    const urgency = urgencyOf(first, today)
-    const dueText = dueDescription(first, today)
-    const label = CARE_URGENCY_LABELS[urgency]
     return (
-      <div className="task-group" key={`${first.ruleId}-${first.dueDate}-${first.title}`}>
-        <div className="task-group-head">
-          <span className="task-icon">{CARE_ACTION_ICONS[first.actionType]}</span>
-          <b>{first.title}</b>
-          <Badge tone={URGENCY_TONE[urgency]}>
-            {dueText.startsWith(label) ? dueText : `${label} · ${dueText}`}
-          </Badge>
-          {first.priority === 1 ? <Badge tone="safety">高优先</Badge> : null}
-          <Badge tone="muted">共 {list.length} 株</Badge>
-          <span className="spacer" />
-          <span className="small muted">
-            {first.dueDate} · {CARE_ACTION_LABELS[first.actionType]}
-            {first.windowDays > 0 ? ` · 可做至 ${windowRange(first).to}` : ''}
-          </span>
-        </div>
-        {first.detail ? <div className="small task-group-note">{first.detail}</div> : null}
-        {first.recipeId ? (
-          <div className="task-group-note">
-            <TaskRecipe recipeId={first.recipeId} recipes={recipes} materials={materials} />
-          </div>
-        ) : null}
-        <div className="task-group-body">{list.map((t) => renderRow(t, true))}</div>
-      </div>
+      <CareTaskGroup
+        key={`${list[0].ruleId}-${list[0].dueDate}-${list[0].title}`}
+        tasks={list}
+        today={today}
+        recipes={recipes}
+        materials={materials}
+      >
+        {list.map((t) => renderRow(t, true))}
+      </CareTaskGroup>
     )
   }
 

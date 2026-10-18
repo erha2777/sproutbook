@@ -20,6 +20,7 @@ import {
   CARE_ACTION_LABELS,
   CARE_ACTION_OPTIONS,
   dueDescription,
+  groupTasksByRule,
   pendingBuckets,
   summarizeTasks,
   todayIso,
@@ -31,6 +32,7 @@ import type { PlantOption } from '../components/CareTaskDialog'
 import { CareRuleManager } from '../components/CareRuleManager'
 import { CareCalendar } from '../components/CareCalendar'
 import { CareTaskRow } from '../components/CareTaskRow'
+import { CareTaskGroup } from '../components/CareTaskGroup'
 
 /** 四个统计筛选的标题。列表面板和空态提示共用，免得两处各写一份。 */
 const STAT_FILTER_TITLES: Record<'overdue' | 'due' | 'done' | 'open', string> = {
@@ -336,12 +338,13 @@ export function CarePage({
    * 行本身在 components/CareTaskRow —— 今日页也要用同一份。
    * 这里给 `manage` 模式：只有查看 / 编辑 / 删除，没有完成和跳过。
    */
-  const renderRow = (t: CareTaskListItem): ReactNode => (
+  const renderRow = (t: CareTaskListItem, compact = false): ReactNode => (
     <CareTaskRow
       key={t.id}
       task={t}
       today={today}
       mode="manage"
+      compact={compact}
       highlighted={highlight === t.id}
       recipes={recipes}
       materials={materials}
@@ -353,6 +356,27 @@ export function CarePage({
       onDelete={(task) => void removeTask(task)}
     />
   )
+
+  /**
+   * 当天的计划按「同一规则 + 同一天 + 同一标题」分组显示。
+   *
+   * 和今日页共用同一份分组布局（CareTaskGroup）；区别是这里的行是 `manage` 模式：
+   * 查看 / 编辑 / 删除，没有完成和跳过 —— 执行统一在今日页。
+   */
+  const renderGroup = (list: CareTaskListItem[]): ReactNode => {
+    if (list.length === 1) return renderRow(list[0])
+    return (
+      <CareTaskGroup
+        key={`${list[0].ruleId}-${list[0].dueDate}-${list[0].title}`}
+        tasks={list}
+        today={today}
+        recipes={recipes}
+        materials={materials}
+      >
+        {list.map((t) => renderRow(t, true))}
+      </CareTaskGroup>
+    )
+  }
 
   /**
    * 把高亮的那条任务滚进视野。
@@ -561,7 +585,7 @@ export function CarePage({
               />
             ) : (
               <>
-                {dayTasks.map(renderRow)}
+                {groupTasksByRule(dayTasks).map(renderGroup)}
                 <div className="row tight" style={{ marginTop: 8 }}>
                   <Button
                     size="small"

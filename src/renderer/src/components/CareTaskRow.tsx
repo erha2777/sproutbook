@@ -162,6 +162,11 @@ export function CareTaskRow({
           {compact ? (
             <>
               <b>{task.plantName ?? task.speciesName ?? `任务 #${task.id}`}</b>
+              {/* 组内每条的状态：待办不重复写紧急度（组头有），已完成/已跳过必须标出来 */}
+              {closed ? (
+                <Badge tone={URGENCY_TONE.closed}>{task.status === 'done' ? '已完成' : '已跳过'}</Badge>
+              ) : null}
+              {task.priority === 1 ? <Badge tone="safety">高优先</Badge> : null}
               {task.source === 'manual' ? <Badge tone="muted">手动</Badge> : null}
             </>
           ) : (
