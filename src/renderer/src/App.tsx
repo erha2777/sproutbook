@@ -237,6 +237,26 @@ function Shell(): ReactNode {
     }
   }, [])
 
+  /**
+   * data URL → blob URL。
+   *
+   * 为什么不用 data URL 直接写进 CSS 变量：大图（2MB+ base64）作为自定义属性
+   * 会被浏览器截断/丢弃，背景图就"静默不显示"；blob URL 只有几十个字符，稳。
+   */
+  const dataUrlToObjectUrl = (dataUrl: string): string | null => {
+    try {
+      const comma = dataUrl.indexOf(',')
+      if (comma < 0) return null
+      const mime = /data:([^;]+)/.exec(dataUrl.slice(0, comma))?.[1] ?? 'image/png'
+      const binary = atob(dataUrl.slice(comma + 1))
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      return URL.createObjectURL(new Blob([bytes], { type: mime }))
+    } catch {
+      return null
+    }
+  }
+
   /*
    * 私有素材（可选）：<userData>/textures 里有图片就套上。
    * 星露谷 wiki 的图是版权素材，不能随仓库分发 —— 只在本机生效。
@@ -254,11 +274,27 @@ function Shell(): ReactNode {
           ['panel', '--tex-panel', 'tex-panel'],
           ['cloud', '--tex-cloud', 'tex-cloud']
         ]
+        const blobUrls: Record<string, string> = {}
         for (const [slot, cssVar, cls] of vars) {
-          const url = slots[slot]
-          if (!url) continue
+          const raw = slots[slot]
+          if (!raw) continue
+          const url = dataUrlToObjectUrl(raw) ?? raw
+          blobUrls[slot] = url
           root.style.setProperty(cssVar, `url("${url}")`)
           root.classList.add(cls)
+        }
+        /*
+         * 木牌是整张图，比例各不相同 —— 读一下真实宽高写进 CSS 变量，
+         * 让牌子的 aspect-ratio 跟着图走，别把图拉扁。
+         */
+        if (blobUrls.sign) {
+          const probe = new Image()
+          probe.onload = () => {
+            if (probe.naturalWidth > 0 && probe.naturalHeight > 0) {
+              root.style.setProperty('--tex-sign-ratio', String(probe.naturalWidth / probe.naturalHeight))
+            }
+          }
+          probe.src = blobUrls.sign
         }
       } catch {
         // 素材读不到就用画出来的默认外观

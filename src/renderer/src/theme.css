@@ -3057,11 +3057,14 @@ html.tex-home .home {
 html.tex-sign .home-sign {
   background-image: var(--tex-sign);
   background-size: 100% 100%;
+  background-repeat: no-repeat;
   border: 0;
   box-shadow: none;
   animation: none;
   padding: 0;
-  aspect-ratio: 960 / 300;
+  /* 比例跟着图片走；宽度同时受视口宽高限制，别顶出屏幕 */
+  aspect-ratio: var(--tex-sign-ratio, 960 / 300);
+  width: min(860px, 70vw, calc(46vh * var(--tex-sign-ratio, 3.2)));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3128,28 +3131,33 @@ html.tex-cloud .cloud {
   animation-iteration-count: infinite;
   animation-direction: alternate;
   animation-fill-mode: both;
-  will-change: transform;
+  will-change: background-position;
 }
 .map-layer.on {
   /* 截图本身要清楚：完全不透明，靠下面那层很淡的暗角保证可读性 */
   opacity: 1;
 }
 
-@keyframes map-pan-a {
-  from { transform: scale(var(--map-zoom, 1.2)) translate3d(-6%, -4%, 0); }
-  to { transform: scale(var(--map-zoom, 1.2)) translate3d(6%, 4%, 0); }
+/*
+ * 运镜 = 把整张图从一角扫到对角（background-position 0%→100%），
+ * 再靠 alternate 扫回来。这样整张图的每一块都会经过窗口中心，
+ * 不会像小幅平移那样只看得到中间一小片。
+ */
+@keyframes map-sweep-a {
+  from { background-position: 0% 0%; }
+  to { background-position: 100% 100%; }
 }
-@keyframes map-pan-b {
-  from { transform: scale(var(--map-zoom, 1.2)) translate3d(6%, 4%, 0); }
-  to { transform: scale(var(--map-zoom, 1.2)) translate3d(-6%, -4%, 0); }
+@keyframes map-sweep-b {
+  from { background-position: 100% 100%; }
+  to { background-position: 0% 0%; }
 }
-@keyframes map-pan-c {
-  from { transform: scale(var(--map-zoom, 1.2)) translate3d(-6%, 4%, 0); }
-  to { transform: scale(var(--map-zoom, 1.2)) translate3d(6%, -4%, 0); }
+@keyframes map-sweep-c {
+  from { background-position: 100% 0%; }
+  to { background-position: 0% 100%; }
 }
-@keyframes map-pan-d {
-  from { transform: scale(var(--map-zoom, 1.2)) translate3d(6%, -4%, 0); }
-  to { transform: scale(var(--map-zoom, 1.2)) translate3d(-6%, 4%, 0); }
+@keyframes map-sweep-d {
+  from { background-position: 0% 100%; }
+  to { background-position: 100% 0%; }
 }
 
 /* 内容压在这些背景之上（别把绝对定位的齿轮/版本号改成 relative） */

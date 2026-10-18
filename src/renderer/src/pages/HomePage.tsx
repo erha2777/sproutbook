@@ -60,17 +60,16 @@ export function HomePage({
           return x - Math.floor(x)
         }
         const variant = ['a', 'b', 'c', 'd'][index % 4]
-        const zoom = 1.12 + rand(1) * 0.08
-        const duration = 34 + rand(2) * 12 // 34~46s 巡一遍
-        const delay = -rand(3) * 20
+        // 60~84 秒把整张图从一角扫到对角，再扫回来
+        const duration = 60 + rand(1) * 24
+        const delay = -rand(3) * 30
         return {
           key: `map-${index}`,
           style: {
             backgroundImage: `url("${url}")`,
-            animationName: `map-pan-${variant}`,
+            animationName: `map-sweep-${variant}`,
             animationDuration: `${duration}s`,
-            animationDelay: `${delay}s`,
-            ['--map-zoom' as string]: `${zoom}`
+            animationDelay: `${delay}s`
           } as CSSProperties
         }
       }),
