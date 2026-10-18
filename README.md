@@ -528,6 +528,7 @@ node scripts/install-textures.mjs D:\素材 --data-dir=D:\sproutbook-data
 | `button.png` | 首页四个按钮的底图 |
 | `panel.png` | 所有木色面板的底图 |
 | `cloud.png` | 云的贴图 |
+| `music/*.mp3` | 背景音乐（放 `textures/music/` 子目录，循环播放第一首） |
 
 除上面五个固定名字外，**其余图片**会当成首页背景：铺满窗口、镜头缓慢平移巡视
 （最多 8 张，每 26 秒淡入下一张，每张 34~46 秒巡一遍，方向随机）。

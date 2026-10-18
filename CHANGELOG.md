@@ -2,6 +2,24 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.25.0] - 2026-10-18
+
+### 私有背景音乐：续播、循环、跟静音开关联动
+
+用户：「我又加了背景音乐」（`textures/music/bg_winter.mp3`）。
+
+- 新增 `sproutmusic://` 自定义协议（主进程 `services/music.ts`）：
+  - 只读、只认 mp3/ogg/wav/m4a/flac/opus，路径必须落在允许目录内（防目录穿越）
+  - 用 `net.fetch(file://)` 返回，支持 Range，长音频也能正常循环
+  - 目录：`<userData>/textures/music` + 开发期的仓库 `textures/music`
+- 渲染层：进应用就放第一首、循环、音量 0.3；浏览器拒绝自动播放时等第一次点击再起
+- 主进程加了 `autoplay-policy=no-user-gesture-required`，桌面应用不需要手势
+- 和音效共用一个 🔊 开关：关掉即暂停，打开继续
+- 首页右下角加了一个小木牌样式的「♪ 曲名」提示（未播放时会标注）
+- CSP 放行 `media-src 'self' sproutmusic: data: blob:`
+- 音频文件不进仓库：`textures/` 已在 .gitignore；`bg_winter.mp3` 已同步到
+  `%APPDATA%\Sproutbook\textures\music\`，打包版也能播
+
 ## [1.24.1] - 2026-10-18
 
 ### 背景图变清晰：去掉 pixelated 与压色滤镜

@@ -3153,7 +3153,7 @@ html.tex-cloud .cloud {
 }
 
 /* 内容压在这些背景之上（别把绝对定位的齿轮/版本号改成 relative） */
-.home > *:not(.home-backdrops):not(.home-gear):not(.home-version) {
+.home > *:not(.home-backdrops):not(.home-gear):not(.home-version):not(.home-music) {
   position: relative;
   z-index: 1;
 }
@@ -3166,4 +3166,23 @@ html.tex-cloud .cloud {
   .map-layer {
     animation: none;
   }
+}
+
+
+/* 首页右下角：正在播放的私有背景音乐（文件名去扩展名） */
+.home-music.paused {
+  opacity: 0.45;
+}
+.home-music {
+  position: absolute;
+  right: 18px;
+  bottom: 46px;
+  z-index: 2;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: #ffe9b0;
+  background: rgba(20, 30, 24, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }

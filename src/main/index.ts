@@ -15,6 +15,7 @@ import { join, resolve } from 'node:path'
 import { closeDatabase, dataDir, dbFilePath, getLastReport, imagesDir, initDatabase } from './db'
 import { registerIpc } from './ipc'
 import { handleImageProtocol, registerImageScheme } from './services/images'
+import { handleMusicProtocol, registerMusicScheme } from './services/music'
 import { runSmoke } from './smoke'
 import { applySandboxDecision, enableGpuFallback, isGpuFallbackActive, shouldDisableGpu } from './sandbox'
 import type { SandboxDecision } from './sandbox'
@@ -98,6 +99,13 @@ if (isSmoke) {
 
 // 自定义协议特权注册必须早于 ready
 registerImageScheme()
+registerMusicScheme()
+
+/*
+ * 背景音乐自动播放：Chromium 默认要等一次用户手势。
+ * 桌面应用没有这个必要，直接放开，进入首页就开始放。
+ */
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 /**
  * 单实例锁。
@@ -541,6 +549,7 @@ app.whenReady().then(async () => {
   try {
     registerIpc()
     handleImageProtocol()
+handleMusicProtocol()
 
     if (!isDev) Menu.setApplicationMenu(null)
 

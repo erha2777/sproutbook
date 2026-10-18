@@ -102,6 +102,7 @@ import { identifyPlant } from '../services/ai/identify'
 import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } from '../services/ai/client'
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
 import { importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
+import { listMusic } from '../services/music'
 import {
   createCompatShortcut,
   detectIntegrityLevel,
@@ -342,6 +343,9 @@ function registerAppIpc(): void {
 
     return { slots: out, backgrounds }
   })
+
+  /** 私有背景音乐列表（<userData>/textures/music） */
+  handle('app:music', () => listMusic())
 
   /** 首页的「退出」按钮 */
   handle('app:quit', () => {

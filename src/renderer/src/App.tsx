@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useState } from 'react'
+import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, ToastProvider, cx, useToast } from './components/ui'
 import { TitleBar } from './components/TitleBar'
@@ -105,6 +105,15 @@ function Shell(): ReactNode {
   const [soundOn, setSoundOn] = useState(isSfxOn)
   /** 私有背景图：首页背后缓慢飘动的截图 */
   const [backdrops, setBackdrops] = useState<string[]>([])
+  /** 正在播放的私有背景音乐（没有就是 null） */
+  const [musicName, setMusicName] = useState<string | null>(null)
+  const [musicPlaying, setMusicPlaying] = useState(false)
+  /**
+   * 背景音乐（私有）：<userData>/textures/music 下的音频，循环播放。
+   * 和音效共用一个静音开关（soundOn）。
+   */
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
   /**
    * 兼容模式首启提示。
    *
@@ -257,6 +266,54 @@ function Shell(): ReactNode {
     })()
   }, [])
 
+  /*
+   * 背景音乐：取列表里的第一首，循环播放，音量压到 0.3 左右。
+   * 自动播放被系统拦下时，等用户第一次点窗口再开始（Electron 里已放开 autoplay）。
+   */
+  useEffect(() => {
+    let disposed = false
+    void (async () => {
+      try {
+        const tracks = await window.api.app.music()
+        if (disposed || tracks.length === 0) return
+        setMusicName(tracks[0].name)
+        const audio = new Audio(tracks[0].url)
+        audio.loop = true
+        audio.volume = 0.3
+        audioRef.current = audio
+        if (!isSfxOn()) return
+        try {
+          await audio.play()
+          setMusicPlaying(true)
+        } catch {
+          const resume = (): void => {
+            if (isSfxOn()) void audio.play().then(() => setMusicPlaying(true)).catch(() => undefined)
+            window.removeEventListener('pointerdown', resume)
+          }
+          window.addEventListener('pointerdown', resume, { once: true })
+        }
+      } catch {
+        // 没有音乐就安静地放着
+      }
+    })()
+    return () => {
+      disposed = true
+      audioRef.current?.pause()
+      audioRef.current = null
+    }
+  }, [])
+
+  // 静音开关同时控制背景音乐
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (soundOn) void audio.play().then(() => setMusicPlaying(true)).catch(() => undefined)
+    else {
+      audio.pause()
+      setMusicPlaying(false)
+    }
+  }, [soundOn])
+
   // 首次进入时做一次环境自检，把明显的问题尽早告诉用户
   useEffect(() => {
     void (async () => {
@@ -289,6 +346,8 @@ function Shell(): ReactNode {
           onQuit={() => void window.api.app.quit()}
           onSettings={() => setRoute({ name: 'settings' })}
           backdrops={backdrops}
+          musicName={musicName}
+          musicPlaying={musicPlaying}
           soundOn={soundOn}
           onToggleSound={() => {
             const next = !soundOn

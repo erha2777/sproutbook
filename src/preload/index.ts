@@ -37,7 +37,8 @@ const api: SproutbookApi = {
     openImagesDir: () => call('app:openImagesDir'),
     quit: () => call('app:quit'),
     fonts: () => call('app:fonts'),
-    textures: () => call('app:textures')
+    textures: () => call('app:textures'),
+    music: () => call('app:music')
   },
   sandbox: {
     status: () => call('sandbox:status'),

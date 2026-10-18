@@ -23,7 +23,9 @@ export function HomePage({
   version,
   soundOn,
   onToggleSound,
-  backdrops = []
+  backdrops = [],
+  musicName = null,
+  musicPlaying = false
 }: {
   onGarden: () => void
   onSpecies: () => void
@@ -38,6 +40,10 @@ export function HomePage({
   onToggleSound: () => void
   /** 私有背景图：在首页背后缓慢飘动（来自 <userData>/textures 的其余图片） */
   backdrops?: string[]
+  /** 正在播放的背景音乐文件名（没有就不显示） */
+  musicName?: string | null
+  /** 音乐是否真的在播（浏览器可能拒绝自动播放） */
+  musicPlaying?: boolean
 }): ReactNode {
   /*
    * 「巡视地图」：每张截图铺满窗口，镜头在图上缓慢平移（Ken Burns 式运镜），
@@ -138,12 +144,21 @@ export function HomePage({
       <button
         type="button"
         className="home-gear home-sound"
-        title={soundOn ? '关闭音效' : '开启音效'}
-        aria-label={soundOn ? '关闭音效' : '开启音效'}
+        title={soundOn ? '关闭声音（音效 + 背景音乐）' : '开启声音（音效 + 背景音乐）'}
+        aria-label={soundOn ? '关闭声音' : '开启声音'}
         onClick={onToggleSound}
       >
         <PixelIcon name={soundOn ? 'sound' : 'mute'} size={24} />
       </button>
+      {musicName ? (
+        <div
+          className={`home-music${musicPlaying ? '' : ' paused'}`}
+          title={`背景音乐：${musicName}${musicPlaying ? '' : '（未播放）'}`}
+        >
+          ♪ {musicName.replace(/\.[^.]+$/, '')}
+          {musicPlaying ? '' : '（未播放）'}
+        </div>
+      ) : null}
       <div className="home-version">{version ? `v${version}` : ''}</div>
     </div>
   )
