@@ -1208,51 +1208,31 @@ img {
   text-align: center;
 }
 
-/* 页内顶部导航（侧栏已去掉） */
-.topnav {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px 14px;
-  margin: 10px 14px 0;
-  background: var(--wood-panel);
-  border: 3px solid var(--wood-outline);
-  box-shadow:
-    inset 0 3px 0 var(--wood-panel-light),
-    inset 0 -3px 0 var(--wood-panel-dark);
-}
-.topnav-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+/* 分区页没有导航条：右下角一块木牌「← 后退」回首页（参考图里也是这么一块） */
+.back-btn {
+  position: fixed;
+  right: 20px;
+  bottom: 18px;
+  z-index: 50;
+  padding: 9px 22px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
-  color: #7a5533;
-  background: transparent;
-  border: 2px solid transparent;
+  letter-spacing: 2px;
+  color: #a8451a;
+  background: #f2d6a4;
+  border: 4px solid #a86a2d;
+  box-shadow:
+    inset 0 4px 0 #fae8c8,
+    inset 0 -4px 0 #dcb87e,
+    0 5px 0 rgba(0, 0, 0, 0.22);
   cursor: pointer;
 }
-.topnav-item:hover {
-  background: var(--wood-panel-light);
-  border-color: var(--wood-outline);
+.back-btn:hover {
+  background: #fae8c8;
 }
-.topnav-item.on {
-  color: #17340a;
-  background: var(--green-light);
-  border-color: var(--wood-outline);
-}
-.topnav-count {
-  font-size: 11px;
-  color: var(--ink-soft);
-  font-weight: 400;
-}
-.topnav-version {
-  font-size: 12px;
-  color: var(--ink-soft);
-  padding-right: 4px;
+.back-btn:active {
+  transform: translateY(2px);
 }
 
 .page-shell {
@@ -1263,7 +1243,8 @@ img {
 }
 .page-shell > .main {
   flex: 1;
-  padding: 10px 14px 14px;
+  /* 给右下角的后退按钮留位置，内容滚到底也不会被它挡住 */
+  padding: 10px 14px 72px;
 }
 
 .main {

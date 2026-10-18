@@ -2,7 +2,6 @@ import { Component, useCallback, useEffect, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, ToastProvider, cx, useToast } from './components/ui'
 import { TitleBar } from './components/TitleBar'
-import { TopNav } from './components/TopNav'
 import { GardenPage } from './pages/GardenPage'
 import { SpeciesPage } from './pages/SpeciesPage'
 import { SpeciesEditor } from './pages/SpeciesEditor'
@@ -95,7 +94,6 @@ function Sky(): ReactNode {
 function Shell(): ReactNode {
   const toast = useToast()
   const [route, setRoute] = useState<Route>(routeFromHash)
-  const [speciesCount, setSpeciesCount] = useState<number | null>(null)
   /**
    * 兼容模式首启提示。
    *
@@ -173,19 +171,6 @@ function Shell(): ReactNode {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  const refreshCounts = useCallback(async () => {
-    try {
-      const list = await window.api.species.list({ limit: 1 })
-      setSpeciesCount(list.total)
-    } catch {
-      setSpeciesCount(null)
-    }
-  }, [])
-
-  useEffect(() => {
-    void refreshCounts()
-  }, [refreshCounts, route])
-
   // 首次进入时做一次环境自检，把明显的问题尽早告诉用户
   useEffect(() => {
     void (async () => {
@@ -200,18 +185,10 @@ function Shell(): ReactNode {
     })()
   }, [toast])
 
-  const activeNav: 'home' | 'garden' | 'species' | 'care' | 'settings' =
-    route.name === 'species-edit'
-      ? 'species'
-      : route.name === 'templates'
-        ? route.owner === 'plant'
-          ? 'garden'
-          : 'species'
-        : route.name
-
   /*
    * 首页是**标题画面**，不套导航：它把应用收成四个入口。
-   * 其余页面用顶部一条横栏在分区间切换（侧栏已去掉）。
+   * 其余页面**没有横向导航**，只靠右下角的「← 后退」回首页再换分区
+   * （和参考图一致：分区里不摆一排入口）。
    */
   if (route.name === 'home') {
     return (
@@ -230,23 +207,24 @@ function Shell(): ReactNode {
     )
   }
 
+  /**
+   * 后退去哪：
+   *  - 物种编辑 → 物种库
+   *  - 信息模板 → 来源分区（植株→花园 / 物种→物种库）
+   *  - 其它 → 首页
+   */
+  const goBack = (): void => {
+    if (route.name === 'species-edit') setRoute({ name: 'species' })
+    else if (route.name === 'templates') {
+      setRoute(route.owner === 'plant' ? { name: 'garden' } : { name: 'species' })
+    } else setRoute({ name: 'home' })
+  }
+
   return (
     <div className="app-frame">
       {/* 无边框窗口的自制标题栏：拖动 + 最小化 / 最大化 / 关闭 */}
       <TitleBar />
       <div className="page-shell">
-        <TopNav
-          active={activeNav}
-          carePending={carePending}
-          speciesCount={speciesCount}
-          version={appVersion}
-          onNavigate={(key) => {
-            if (key === 'home') setRoute({ name: 'home' })
-            else if (key === 'care') setRoute({ name: 'care', tab: 'today' })
-            else setRoute({ name: key } as Route)
-          }}
-        />
-
       <main className="main">
         {compatHint ? (
           <div style={{ padding: '0 0 2px' }}>
@@ -307,7 +285,7 @@ function Shell(): ReactNode {
             <SpeciesEditor
               speciesId={route.id}
               onBack={() => setRoute({ name: 'species' })}
-              onSaved={() => void refreshCounts()}
+              onSaved={() => undefined}
             />
           ) : null}
 
@@ -353,6 +331,10 @@ function Shell(): ReactNode {
           </PageErrorBoundary>
         </div>
       </main>
+      {/* 分区页没有导航条：右下角「← 后退」回首页再换分区 */}
+      <button type="button" className="back-btn" onClick={goBack} title="返回上一页 / 首页">
+        ← 后退
+      </button>
       </div>
     </div>
   )
