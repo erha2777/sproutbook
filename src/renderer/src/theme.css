@@ -1208,6 +1208,64 @@ img {
   text-align: center;
 }
 
+/* 页内顶部导航（侧栏已去掉） */
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  margin: 10px 14px 0;
+  background: var(--wood-panel);
+  border: 3px solid var(--wood-outline);
+  box-shadow:
+    inset 0 3px 0 var(--wood-panel-light),
+    inset 0 -3px 0 var(--wood-panel-dark);
+}
+.topnav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #7a5533;
+  background: transparent;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.topnav-item:hover {
+  background: var(--wood-panel-light);
+  border-color: var(--wood-outline);
+}
+.topnav-item.on {
+  color: #17340a;
+  background: var(--green-light);
+  border-color: var(--wood-outline);
+}
+.topnav-count {
+  font-size: 11px;
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+.topnav-version {
+  font-size: 12px;
+  color: var(--ink-soft);
+  padding-right: 4px;
+}
+
+.page-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.page-shell > .main {
+  flex: 1;
+  padding: 10px 14px 14px;
+}
+
 .main {
   display: flex;
   flex-direction: column;

@@ -1,7 +1,8 @@
 import { Component, useCallback, useEffect, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
-import { Button, Notice, Panel, Sign, ToastProvider, cx, useToast } from './components/ui'
+import { Button, Notice, Panel, ToastProvider, cx, useToast } from './components/ui'
 import { TitleBar } from './components/TitleBar'
+import { TopNav } from './components/TopNav'
 import { GardenPage } from './pages/GardenPage'
 import { SpeciesPage } from './pages/SpeciesPage'
 import { SpeciesEditor } from './pages/SpeciesEditor'
@@ -24,15 +25,6 @@ type Route =
   | { name: 'care'; tab: CareTab }
   | { name: 'templates'; owner: 'species' | 'plant' }
   | { name: 'settings' }
-
-/** 侧栏：首页 + 三个入口 + 设置。养护下面的四页在页内用 tab 切。 */
-const NAV: Array<{ key: 'home' | 'garden' | 'species' | 'care' | 'settings'; icon: string; label: string }> = [
-  { key: 'home', icon: '🏠', label: '首页' },
-  { key: 'garden', icon: '🪴', label: '我的花园' },
-  { key: 'species', icon: '📖', label: '物种库' },
-  { key: 'care', icon: '🌱', label: '养护' },
-  { key: 'settings', icon: '⚙️', label: '设置' }
-]
 
 /** 养护子页（首页「养护」进去后的四个 tab） */
 const CARE_TABS: Array<{ key: CareTab; icon: string; label: string }> = [
@@ -218,8 +210,8 @@ function Shell(): ReactNode {
         : route.name
 
   /*
-   * 首页是**标题画面**，不套侧栏：它把应用收成四个入口。
-   * 其余页面照旧用侧栏，方便在分区之间跳。
+   * 首页是**标题画面**，不套导航：它把应用收成四个入口。
+   * 其余页面用顶部一条横栏在分区间切换（侧栏已去掉）。
    */
   if (route.name === 'home') {
     return (
@@ -242,65 +234,18 @@ function Shell(): ReactNode {
     <div className="app-frame">
       {/* 无边框窗口的自制标题栏：拖动 + 最小化 / 最大化 / 关闭 */}
       <TitleBar />
-      <div className="app-shell">
-      <aside className="sidebar">
-        <Panel className="nav">
-          <div style={{ textAlign: 'center', padding: '4px 0 8px' }}>
-            <Sign>Sproutbook</Sign>
-          </div>
-          {NAV.map((item) => (
-            <button
-              key={item.key}
-              className={cx('nav-item', activeNav === item.key && 'active')}
-              onClick={() => {
-                if (item.key === 'care') setRoute({ name: 'care', tab: 'today' })
-                else setRoute({ name: item.key } as Route)
-              }}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
-              {item.key === 'species' && speciesCount !== null ? (
-                <>
-                  <span className="spacer" />
-                  <span className="small muted">{speciesCount}</span>
-                </>
-              ) : null}
-              {/*
-                角标挂在「养护」：那才是「今天要处理几件事」的入口。
-                只算「已过期 + 该做」—— 把远期任务也算进来就等于没有信号了。
-              */}
-              {item.key === 'care' && carePending > 0 ? (
-                <>
-                  <span className="spacer" />
-                  <span className="nav-badge" title={`${carePending} 件事需要处理`}>
-                    {carePending}
-                  </span>
-                </>
-              ) : null}
-            </button>
-          ))}
-        </Panel>
-
-        <Panel flat>
-          <div className="small muted" style={{ lineHeight: 1.7 }}>
-            数据全部保存在本机。
-            <br />
-            记得定期到「设置」里备份。
-          </div>
-        </Panel>
-        <span className="spacer" />
-        <Panel flat>
-          {/*
-            版本号从 app:info 读，不要写死。
-            之前这里硬编码「v0.1.0 · 早期版本」，发版时必然忘记改，
-            界面显示的版本会和真实版本不一致 —— 用户报 bug 时这很要命。
-          */}
-          <div className="small muted">
-            {appVersion ? `v${appVersion}` : ''}
-            {appVersion?.startsWith('0.') ? ' · 早期版本' : ''}
-          </div>
-        </Panel>
-      </aside>
+      <div className="page-shell">
+        <TopNav
+          active={activeNav}
+          carePending={carePending}
+          speciesCount={speciesCount}
+          version={appVersion}
+          onNavigate={(key) => {
+            if (key === 'home') setRoute({ name: 'home' })
+            else if (key === 'care') setRoute({ name: 'care', tab: 'today' })
+            else setRoute({ name: key } as Route)
+          }}
+        />
 
       <main className="main">
         {compatHint ? (
