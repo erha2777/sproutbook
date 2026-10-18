@@ -2,6 +2,47 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.27.0] - 2026-10-18
+
+### textures/theme.json：支持子目录、裁切、九宫格
+
+用户要「切图 + 九宫格」把素材包用起来。
+
+#### 新配置
+
+```json
+{
+  "slots": {
+    "sign":  { "file": "image/logo.png" },
+    "panel": { "file": "Stardew valley Material pack/LooseSprites/DialogBoxGreen..png", "slice": 24 },
+    "cloud": { "file": "Stardew valley Material pack/Minigames/Clouds..png",
+               "crop": { "x": 262, "y": 332, "w": 166, "h": 106 } }
+  },
+  "backgrounds": ["image/bg_winter.png"]
+}
+```
+
+- `file`：相对 textures 的路径，可以进子目录（素材包那一堆 `..png` 也能用）
+- `crop`：从图集里裁一块（用 nativeImage 裁完转 PNG，保留透明）
+- `slice`：九宫格边距，面板用 `border-image` 绘制，四角不拉伸
+- `backgrounds`：巡视地图的图片列表（≤8 张）
+- 没有 theme.json 时仍然按原来的「约定文件名」工作，向后兼容
+
+#### 实测结论
+
+- ✅ `image/logo.png`（木板标题）当 sign：完美，比例自适应
+- ✅ `image/bg_winter.png` 当巡视背景：正常
+- ⚠️ `DialogBoxGreen` 当面板九宫格：**技术上跑通了，但不好看** ——
+  这张图是给游戏菜单那种小方块用的，边厚、内圈还有一圈暗角，
+  铺到我们这种又宽又长的面板上会变成两条粗横带。默认不启用
+- ⚠️ `Clouds` 云贴图：首页有整屏背景图，云被盖住了；只有在没有背景图的页面才看得见
+- ❌ `TitleButtons` 的按钮带「创建/加载/捕鱼篓/退出」字样，和我们的入口不符
+
+#### 顺带
+
+- 九宫格变量统一用无单位数字（`border-image-slice` 只接受数字/百分比，
+  之前传 `24px` 导致整条声明失效、边框画歪）
+
 ## [1.26.0] - 2026-10-18
 
 ### 木板标题 logo 接上（sign 槽位），修大图不显示的问题

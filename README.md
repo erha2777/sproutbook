@@ -534,6 +534,26 @@ node scripts/install-textures.mjs D:\素材 --data-dir=D:\sproutbook-data
 素材包（人物、地图、图块、位图字体）大部分和本应用无关；可用的只有对话框九宫格、
 标题按钮、云朵贴图和"后退"按钮，这些需要切图后再接。
 
+### theme.json（素材包进阶用法）
+
+`textures/theme.json` 支持子目录、图集裁切和九宫格：
+
+```json
+{
+  "slots": {
+    "sign":  { "file": "image/logo.png" },
+    "panel": { "file": "Stardew valley Material pack/LooseSprites/DialogBoxGreen..png", "slice": 24 },
+    "cloud": { "file": "Stardew valley Material pack/Minigames/Clouds..png",
+               "crop": { "x": 262, "y": 332, "w": 166, "h": 106 } }
+  },
+  "backgrounds": ["image/bg_winter.png"]
+}
+```
+
+- `file` 相对 textures 目录；`crop` 是源图像素坐标；`slice` 是九宫格边距
+- `backgrounds` 决定首页巡视的图片（最多 8 张）
+- 没有 theme.json 时退回「sign.png / home-bg.png …」的约定文件名
+
 除上面五个固定名字外，**其余图片**会当成首页背景：铺满窗口、镜头缓慢平移巡视
 （最多 8 张，每 26 秒淡入下一张，每张 34~46 秒巡一遍，方向随机）。
 

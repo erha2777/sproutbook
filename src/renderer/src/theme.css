@@ -3194,3 +3194,24 @@ html.tex-cloud .cloud {
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
   pointer-events: none;
 }
+
+
+/* ---------- 九宫格：theme.json 里给了 slice 的槽位 ---------- */
+
+/*
+ * 面板：用 border-image 画边框，中心不填（fill 不写），
+ * 这样中间还是我们的木色底，只有框换成素材包的图，九宫格不拉伸变形。
+ */
+html.tex-panel.tex-panel-slice .pixel-panel {
+  border-image-source: var(--tex-panel);
+  /* 不 fill：中间保留我们的纸色，只有框换成素材 */
+  border-image-slice: var(--tex-panel-slice, 14);
+  border-width: calc(var(--tex-panel-slice, 14) * 1px);
+  border-style: solid;
+  border-color: transparent;
+  border-image-width: calc(var(--tex-panel-slice, 14) * 1px);
+  border-image-repeat: stretch;
+  background-image: none;
+  box-shadow: none;
+  padding: calc(var(--tex-panel-slice, 14) * 1px + 8px);
+}

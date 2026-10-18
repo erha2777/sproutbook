@@ -264,7 +264,7 @@ function Shell(): ReactNode {
   useEffect(() => {
     void (async () => {
       try {
-        const { slots, backgrounds } = await window.api.app.textures()
+        const { slots, slices, backgrounds } = await window.api.app.textures()
         if (backgrounds.length > 0) setBackdrops(backgrounds)
         const root = document.documentElement
         const vars: Array<[string, string, string]> = [
@@ -282,6 +282,12 @@ function Shell(): ReactNode {
           blobUrls[slot] = url
           root.style.setProperty(cssVar, `url("${url}")`)
           root.classList.add(cls)
+          const slice = slices?.[slot]
+          if (slice) {
+            // border-image-slice 只认数字，单位由 CSS 里 calc(*1px) 补
+            root.style.setProperty(`--tex-${slot}-slice`, String(slice))
+            root.classList.add(`tex-${slot}-slice`)
+          }
         }
         /*
          * 木牌是整张图，比例各不相同 —— 读一下真实宽高写进 CSS 变量，

@@ -143,7 +143,12 @@ export interface SproutbookApi {
      * slots: home-bg / sign / button / panel / cloud
      * backgrounds: 其余图片，首页背景里缓慢飘动
      */
-    textures(): Promise<{ slots: Record<string, string>; backgrounds: string[] }>
+    textures(): Promise<{
+      slots: Record<string, string>
+      /** 九宫格边距（theme.json 里的 slice，单位像素） */
+      slices: Record<string, number>
+      backgrounds: string[]
+    }>
   }
   /**
    * 沙箱兜底。

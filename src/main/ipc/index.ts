@@ -13,7 +13,7 @@ import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
 import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, normalize, resolve } from 'node:path'
 import type { Db } from '../db/connection'
 import { backupsDir, dataDir, dbFilePath, getDb, imagesDir, makeManualBackup } from '../db'
 import { listBackups } from '../db/backup'
@@ -277,19 +277,22 @@ function registerAppIpc(): void {
    * 为什么走运行时：星露谷 wiki 上的图是版权素材，不能随仓库/安装包分发；
    * 用户自己拿到的图放本地即可替换外观。
    */
+  /*
+   * 私有素材：<userData>/textures（开发期加上 appPath/textures）。
+   *
+   * 两种用法：
+   *  1) theme.json —— 支持子目录、裁切(crop) 和九宫格边距(slice)，适合素材包；
+   *  2) 约定文件名(legacy) —— sign/home-bg/button/panel/cloud + 其余图片当巡视背景。
+   *
+   * 为什么走运行时：商业游戏的图是版权素材，不能随仓库/安装包分发。
+   */
   handle('app:textures', () => {
-    /*
-     * 两个来源：
-     *   1) <userData>/textures —— 正式安装后用这个（scripts/install-textures.mjs 也往这装）
-     *   2) 开发期的仓库根 textures/ —— 方便调试，打包后不存在
-     * 后者不进仓库（.gitignore 已忽略 textures/）。
-     */
     const dirs = [join(app.getPath('userData'), 'textures')]
     if (!app.isPackaged) dirs.push(join(app.getAppPath(), 'textures'))
-    const slots = ['home-bg', 'sign', 'button', 'panel', 'cloud']
-    const exts = ['png', 'jpg', 'jpeg', 'webp']
-    const out: Record<string, string> = {}
+    const slots: Record<string, string> = {}
+    const slices: Record<string, number> = {}
     const backgrounds: string[] = []
+    const exts = ['png', 'jpg', 'jpeg', 'webp']
     const seen = new Set<string>()
 
     const mimeOf = (file: string): string => {
@@ -298,30 +301,90 @@ function registerAppIpc(): void {
     }
     const readAsUrl = (file: string): string | null => {
       try {
-        // 单张上限 8MB：背景图通常是截图，别让 base64 把内存顶爆
-        if (statSync(file).size > 8 * 1024 * 1024) return null
+        if (statSync(file).size > 24 * 1024 * 1024) return null
         return `data:${mimeOf(file)};base64,${readFileSync(file).toString('base64')}`
       } catch {
         return null
       }
     }
 
+    /** 把任意图片（可裁切）转成 data URL；裁切时统一转 PNG 保留透明 */
+    const loadSlotImage = (dir: string, entry: { file: string; crop?: { x: number; y: number; w: number; h: number } }): string | null => {
+      const file = resolve(normalize(join(dir, entry.file)))
+      if (!file.startsWith(resolve(dir))) return null
+      if (!existsSync(file)) return null
+      if (!entry.crop) return readAsUrl(file)
+      try {
+        const img = nativeImage.createFromPath(file)
+        if (img.isEmpty()) return null
+        const { x, y, w, h } = entry.crop
+        const size = img.getSize()
+        const rect = {
+          x: Math.max(0, Math.min(x, size.width - 1)),
+          y: Math.max(0, Math.min(y, size.height - 1)),
+          width: Math.max(1, Math.min(w, size.width)),
+          height: Math.max(1, Math.min(h, size.height))
+        }
+        const png = img.crop(rect).toPNG().toString('base64')
+        return `data:image/png;base64,${png}`
+      } catch {
+        return null
+      }
+    }
+
+    interface ThemeEntry {
+      file: string
+      crop?: { x: number; y: number; w: number; h: number }
+      slice?: number
+    }
+    interface ThemeFile {
+      slots?: Record<string, ThemeEntry>
+      backgrounds?: string[]
+    }
+
+    // 1) theme.json（先找到的目录优先）
+    for (const dir of dirs) {
+      const themePath = join(dir, 'theme.json')
+      if (!existsSync(themePath)) continue
+      let theme: ThemeFile
+      try {
+        theme = JSON.parse(readFileSync(themePath, 'utf-8')) as ThemeFile
+      } catch {
+        continue
+      }
+      for (const [slot, entry] of Object.entries(theme.slots ?? {})) {
+        if (!entry || typeof entry.file !== 'string') continue
+        const url = loadSlotImage(dir, entry)
+        if (url) slots[slot] = url
+        if (typeof entry.slice === 'number' && entry.slice > 0) slices[slot] = entry.slice
+      }
+      for (const rel of theme.backgrounds ?? []) {
+        if (backgrounds.length >= 8) break
+        const file = resolve(normalize(join(dir, rel)))
+        if (!file.startsWith(resolve(dir)) || !existsSync(file)) continue
+        if (seen.has(file)) continue
+        const url = readAsUrl(file)
+        if (!url) continue
+        seen.add(file)
+        backgrounds.push(url)
+      }
+      return { slots, slices, backgrounds }
+    }
+
+    // 2) 没有 theme.json：约定文件名
+    const legacySlots = ['home-bg', 'sign', 'button', 'panel', 'cloud']
     for (const dir of dirs) {
       if (!existsSync(dir)) continue
-
-      // 固定槽位（先找到的目录优先）
-      for (const slot of slots) {
-        if (out[slot]) continue
+      for (const slot of legacySlots) {
+        if (slots[slot]) continue
         for (const ext of exts) {
           const file = join(dir, `${slot}.${ext}`)
           if (!existsSync(file)) continue
           const url = readAsUrl(file)
-          if (url) out[slot] = url
+          if (url) slots[slot] = url
           break
         }
       }
-
-      // 其余图片：首页「巡视地图」的背景，文件名随意
       let names: string[] = []
       try {
         names = readdirSync(dir)
@@ -333,7 +396,7 @@ function registerAppIpc(): void {
       for (const name of names) {
         if (backgrounds.length >= 8) break
         const base = name.slice(0, name.lastIndexOf('.'))
-        if (slots.includes(base) || seen.has(name)) continue
+        if (legacySlots.includes(base) || seen.has(name)) continue
         const url = readAsUrl(join(dir, name))
         if (!url) continue
         seen.add(name)
@@ -341,7 +404,7 @@ function registerAppIpc(): void {
       }
     }
 
-    return { slots: out, backgrounds }
+    return { slots, slices, backgrounds }
   })
 
   /** 私有背景音乐列表（<userData>/textures/music） */
