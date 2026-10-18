@@ -11,3 +11,10 @@
 - 作者：TakWolf
 - 来源：https://github.com/TakWolf/fusion-pixel-font
 - 许可：SIL Open Font License 1.1，全文见 `src/renderer/src/assets/FUSION-PIXEL-OFL.txt`
+
+## 评估过但未采用的字体
+
+- **IPix**（itch.io，作者 Sadi）：由 HZK16 字模矢量化而来；HZK16 出自 DOS 时代的
+  UCDOS / Compufont 字模，[作者自己的说明](https://github.com/TakWolf/hzk-pixel-font/blob/master/LICENSE-FONT.md)
+  明确写着「并非公有领域，请自负版权风险」。本仓库是公开 MIT 项目，
+  因此**不打包**这套字体。界面字体继续用 OFL 授权的 Fusion Pixel（见上）。

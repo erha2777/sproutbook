@@ -101,13 +101,13 @@ img {
     radial-gradient(900px 420px at 82% -12%, rgba(255, 240, 180, 0.5), transparent 62%),
     linear-gradient(
       180deg,
-      #0a1f45 0%,
-      #10396f 6%,
-      #17589f 14%,
-      var(--sky-2) 34%,
-      var(--sky-3) 58%,
-      var(--sky-4) 80%,
-      var(--sky-5) 100%
+      #00305f 0%,
+      #01438a 9%,
+      #0157b4 20%,
+      #0472e0 38%,
+      #0f8bf2 56%,
+      #35b4ef 76%,
+      #5ad8e7 100%
     );
   z-index: 0;
   overflow: hidden;
@@ -3015,4 +3015,30 @@ img {
 .section-title,
 .card-title {
   -webkit-text-stroke: 0.35px currentColor;
+}
+
+
+/* ---------- 对照参考图取色的微调（安全做法：只调颜色，不复制美术资源） ---------- */
+
+.home-sign {
+  background-image:
+    radial-gradient(circle at 12px 12px, #ffe9b0 0 3px, #7a4a1c 3px 5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 12px) 12px, #ffe9b0 0 3px, #7a4a1c 3px 5px, transparent 5px),
+    radial-gradient(circle at 12px calc(100% - 12px), #ffe9b0 0 3px, #7a4a1c 3px 5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #ffe9b0 0 3px, #7a4a1c 3px 5px, transparent 5px),
+    linear-gradient(180deg, #e79a55, #c4763a);
+  border-color: #8a4a1d;
+}
+
+.home-sign-inner {
+  background: repeating-linear-gradient(180deg, #fbe2a3 0 14px, #f6d996 14px 16px);
+  border-color: #b87a38;
+}
+
+.home-btn {
+  background: #fed883;
+  border-color: #b87a38;
+}
+.home-btn:hover {
+  background: #ffe9a8;
 }
