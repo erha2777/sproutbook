@@ -13,6 +13,7 @@ import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
 import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Db } from '../db/connection'
 import { backupsDir, dataDir, dbFilePath, getDb, imagesDir, makeManualBackup } from '../db'
 import { listBackups } from '../db/backup'
@@ -26,11 +27,12 @@ import {
   updateField
 } from '../db/repo/fields'
 import { archiveSpecies, familyStats, getSpecies, listSpecies, saveSpecies, verifySpeciesFields } from '../db/repo/species'
-import { archivePlant, listPlants, plantStats, savePlant, setPlantCover } from '../db/repo/plants'
+import { archivePlant, getPlant, listPlants, plantStats, savePlant, setPlantCover } from '../db/repo/plants'
 import {
   addImage,
   archiveEnvironment,
   deleteImage,
+  getImage,
   getSetting,
   listEnvironments,
   listImages,
@@ -442,6 +444,29 @@ function registerImageIpc(): void {
   handle('images:list', (owner: { plantId?: number; speciesId?: number }) => listImages(getDb(), owner))
 
   handle('images:search', (query: string) => searchWebImages(query, 12))
+
+  /*
+   * 把物种的图片复制一份给这株植物。
+   *
+   * 为什么是**复制文件**而不是共用同一行：图片删除时会连文件一起删，
+   * 两行指向同一个文件，删其中一个就把另一个弄坏了。
+   * 复制之后两者互不影响（同一张图在磁盘上多占一份，图片本身很小）。
+   */
+  handle('images:copyFromSpecies', (plantId: number, imageId: number) => {
+    const db = getDb()
+    const image = getImage(db, imageId)
+    const plant = getPlant(db, plantId)
+    if (!image || !plant) throw new Error('找不到图片或植株')
+    if (image.speciesId === null) throw new Error('这张图不属于任何物种')
+    if (plant.speciesId !== image.speciesId) throw new Error('这株不属于该物种，不能直接用它的图')
+    const file = importImage(join(imagesDir(), image.path))
+    return addImage(db, {
+      plantId,
+      path: file.fileName,
+      thumbPath: file.thumbName,
+      origin: 'species'
+    })
+  })
 
   /*
    * 从图片地址导入。

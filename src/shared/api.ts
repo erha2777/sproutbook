@@ -224,6 +224,8 @@ export interface SproutbookApi {
     importUrl(owner: { plantId?: number; speciesId?: number }, url: string): Promise<ImageRecord>
     /** 用必应图片搜索找候选图（缩略图是 data URL，受 CSP 限制） */
     search(query: string): Promise<WebImageCandidate[]>
+    /** 把物种图片复制一份给植株（复制文件，删一边不影响另一边） */
+    copyFromSpecies(plantId: number, imageId: number): Promise<ImageRecord>
     remove(id: number): Promise<ImageRecord | null>
   }
   materials: {

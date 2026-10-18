@@ -1613,6 +1613,33 @@ img {
   border-color: var(--leaf-dark);
 }
 
+/* 只给屏幕阅读器 / 自动化用的文字 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 物种图片：小一号，点一下复制到这株 */
+.image-thumb.species-pick {
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  cursor: pointer;
+}
+.image-thumb.species-pick img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .image-thumb img {
   width: 100%;
   height: 100%;

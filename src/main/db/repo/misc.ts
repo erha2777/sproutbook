@@ -190,6 +190,11 @@ export function addImage(
   return mapImage(row)
 }
 
+export function getImage(db: Db, id: number): ImageRecord | null {
+  const row = db.get<ImageRow>('SELECT * FROM images WHERE id = ?', id)
+  return row ? mapImage(row) : null
+}
+
 export function deleteImage(db: Db, id: number): ImageRecord | null {
   const row = db.get<ImageRow>('SELECT * FROM images WHERE id = ?', id)
   if (!row) return null
