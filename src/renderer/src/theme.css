@@ -1562,6 +1562,24 @@ img {
   background: var(--wood-panel-dark);
   overflow: hidden;
 }
+/* 封面选择：可点 + 选中的那张有绿框和角标 */
+.image-thumb.pickable {
+  cursor: pointer;
+}
+.image-thumb.is-cover {
+  border-color: var(--leaf-dark);
+  box-shadow: inset 0 0 0 2px var(--leaf-dark);
+}
+.image-cover-badge {
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  padding: 1px 5px;
+  font-size: 11px;
+  background: var(--leaf-dark);
+  color: #fff;
+  border: 1px solid var(--wood-outline);
+}
 
 .image-thumb img {
   width: 100%;

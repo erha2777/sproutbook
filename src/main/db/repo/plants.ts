@@ -16,6 +16,7 @@ export interface PlantRow {
   acquired_at: string | null
   pot_size: string | null
   substrate_recipe_id: number | null
+  cover_image_id: number | null
   attributes_json: string
   notes: string | null
   search_blob: string
@@ -62,7 +63,7 @@ function mapPlant(row: PlantRow): Plant {
     potSize: row.pot_size,
     attributes: jsonObject(row.attributes_json),
     notes: row.notes,
-    coverImageId: null,
+    coverImageId: row.cover_image_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     archivedAt: row.archived_at

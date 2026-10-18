@@ -39,6 +39,8 @@ export function PlantEditorModal({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [speciesQuery, setSpeciesQuery] = useState('')
   const [saving, setSaving] = useState(false)
+  /** 封面选哪张（null = 默认：最早导入的那张）；保存时一起提交 */
+  const [coverId, setCoverId] = useState<number | null>(plant?.coverImageId ?? null)
 
   /*
    * 图片区是否可用，取决于这株植物在库里有没有 id。
@@ -172,6 +174,18 @@ export function PlantEditorModal({
         toast.push('保存失败', 'error')
         return
       }
+      /*
+       * 封面在图片区里选，跟「保存」一起生效。
+       * 只在这株原本就存在、且选择确实变了时才写 ——
+       * 新建植株这时候还没有图片，coverId 必定是 null。
+       */
+      if (plant && coverId !== (plant.coverImageId ?? null)) {
+        try {
+          await window.api.plants.setCover(result.plant.id, coverId)
+        } catch (error) {
+          toast.push(`封面保存失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+        }
+      }
       toast.push('已保存', 'success')
       onSaved(result.plant.id)
     } catch (error) {
@@ -299,6 +313,8 @@ export function PlantEditorModal({
         <ImageStrip
           owner={savedId !== null ? { plantId: savedId } : {}}
           disabled={savedId === null}
+          coverId={savedId !== null ? coverId : undefined}
+          onSetCover={savedId !== null ? setCoverId : undefined}
           onChanged={() => undefined}
         />
       </div>

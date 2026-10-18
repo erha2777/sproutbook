@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { Environment, ImageRecord, PlantStatus, Species } from '@core/types'
+import type { Environment, PlantStatus, Species } from '@core/types'
 import type { CareTaskListItem, PlantListItem, PlantListItemStats, PlantPhaseInfo } from '@shared/api'
 import {
   GROWTH_SOURCE_LABELS,
@@ -65,8 +65,6 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
   const [view, setView] = useState<'scene' | 'list'>('scene')
   const [selected, setSelected] = useState<number | null>(null)
   const [editing, setEditing] = useState<PlantListItem | 'new' | null>(null)
-  /** 选中植株的照片：用来挑封面 */
-  const [plantImages, setPlantImages] = useState<ImageRecord[]>([])
 
   const debouncedQuery = useDebounced(query)
 
@@ -250,60 +248,6 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
       toast.push(`标记失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }
   }
-
-  /*
-   * 选中哪一株，就把它自己的照片取出来 —— 详情里用它们挑封面。
-   * 依赖 items：新增/删除照片后列表会刷新，这里跟着重取。
-   */
-  useEffect(() => {
-    if (selected === null) {
-      setPlantImages([])
-      return
-    }
-    let alive = true
-    void window.api.images
-      .list({ plantId: selected })
-      .then((list) => {
-        if (alive) setPlantImages(list)
-      })
-      .catch(() => {
-        if (alive) setPlantImages([])
-      })
-    return () => {
-      alive = false
-    }
-  }, [selected, items])
-
-  /** 指定封面（null = 回到默认：最早导入的那张） */
-  const chooseCover = async (imageId: number | null): Promise<void> => {
-    if (!selectedPlant) return
-    try {
-      await window.api.plants.setCover(selectedPlant.id, imageId)
-      await reload()
-      toast.push(imageId === null ? '已恢复默认封面' : '封面已更新', 'success')
-    } catch (error) {
-      toast.push(`设置封面失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
-    }
-  }
-
-  /** 给这株添加照片（加完可以直接点缩略图设成封面） */
-  const addPlantPhotos = async (): Promise<void> => {
-    if (!selectedPlant) return
-    try {
-      const res = await window.api.images.pick({ plantId: selectedPlant.id })
-      if (res.canceled) return
-      if (res.failures && res.failures.length > 0) {
-        toast.push(`有 ${res.failures.length} 张没能导入：${res.failures[0]}`, 'error')
-      }
-      if (res.imported.length > 0) {
-        await reload()
-        toast.push(`已添加 ${res.imported.length} 张照片，点缩略图可设成封面`, 'success')
-      }
-    } catch (error) {
-      toast.push(`添加照片失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
-    }
-  }
-
 
   const selectedPlant = gardenItems.find((p) => p.id === selected) ?? null
 
@@ -629,47 +573,9 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                       </div>
 
                       {/*
-                        封面选择。
-                        默认（没指定）用最早导入的那张；点缩略图就能指定用哪张。
-                        「🌱 默认」= 不用照片，回到程序生成的像素图。
+                        封面在「编辑这株」里设置（图片区点一张就设成封面）。
+                        这里只负责显示：有照片就显示照片，没有才显示像素图。
                       */}
-                      <div style={{ marginTop: 10 }}>
-                        <div className="small" style={{ marginBottom: 4 }}>
-                          封面：
-                          <span className="muted">
-                            {selectedPlant.coverThumb ? '用照片' : '默认（程序生成）'}
-                          </span>
-                        </div>
-                        <div className="cover-picker">
-                          <button
-                            type="button"
-                            className={`cover-thumb${selectedPlant.coverThumb ? '' : ' on'}`}
-                            title="不用照片，回到程序生成的像素图"
-                            onClick={() => void chooseCover(null)}
-                            style={{ width: 60, height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}
-                          >
-                            🌱
-                          </button>
-                          {plantImages.map((image) => {
-                            const thumb = image.thumbPath ?? image.path
-                            const on = selectedPlant.coverThumb === thumb
-                            return (
-                              <button
-                                key={image.id}
-                                type="button"
-                                className={`cover-thumb${on ? ' on' : ''}`}
-                                title={on ? '当前封面' : '用这张当封面'}
-                                onClick={() => void chooseCover(image.id)}
-                              >
-                                <img src={imageUrl(thumb) ?? ''} alt="" />
-                              </button>
-                            )
-                          })}
-                          <Button size="small" onClick={() => void addPlantPhotos()}>
-                            📷 添加照片
-                          </Button>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </Panel>

@@ -14,9 +14,15 @@ export interface ImageStripProps {
   disabled?: boolean
   /** 删除后回调，便于外层刷新封面 */
   onChanged?: () => void
+  /**
+   * 封面相关：传了 `onSetCover` 才启用。
+   * 点缩略图 = 设为封面（再点一次取消），选中的那张右下角有「封面」角标。
+   */
+  coverId?: number | null
+  onSetCover?: (imageId: number | null) => void
 }
 
-export function ImageStrip({ owner, disabled, onChanged }: ImageStripProps): ReactNode {
+export function ImageStrip({ owner, disabled, onChanged, coverId, onSetCover }: ImageStripProps): ReactNode {
   const toast = useToast()
   const [images, setImages] = useState<ImageRecord[]>([])
   const [loading, setLoading] = useState(false)
@@ -85,11 +91,18 @@ export function ImageStrip({ owner, disabled, onChanged }: ImageStripProps): Rea
     <div className="image-strip">
       {images.map((image) => {
         const url = imageUrl(image.thumbPath ?? image.path)
+        const isCover = onSetCover !== undefined && coverId === image.id
         return (
-          <div className="image-thumb" key={image.id}>
+          <div
+            className={`image-thumb${isCover ? ' is-cover' : ''}${onSetCover ? ' pickable' : ''}`}
+            key={image.id}
+            onClick={onSetCover ? () => onSetCover(isCover ? null : image.id) : undefined}
+            title={onSetCover ? (isCover ? '点一下取消封面，回到默认' : '点一下用这张当封面') : undefined}
+          >
             {url ? <img src={url} alt={image.caption ?? '植物图片'} /> : null}
+            {isCover ? <span className="image-cover-badge">封面</span> : null}
             {!disabled ? (
-              <button className="del" onClick={() => void remove(image)} disabled={busy} title="删除这张图片">
+              <button className="del" onClick={(event) => { event.stopPropagation(); void remove(image) }} disabled={busy} title="删除这张图片">
                 ✕
               </button>
             ) : null}
@@ -102,6 +115,19 @@ export function ImageStrip({ owner, disabled, onChanged }: ImageStripProps): Rea
           {busy ? <Spinner /> : <span style={{ fontSize: 24 }}>＋</span>}
           <span>添加图片</span>
         </button>
+      ) : null}
+
+      {onSetCover && images.length > 0 ? (
+        <div className="small muted" style={{ flexBasis: '100%' }}>
+          封面：{coverId ? '已选一张照片' : '默认（最早导入的一张）'}
+          {coverId ? (
+            <Button size="small" variant="ghost" onClick={() => onSetCover(null)}>
+              恢复默认
+            </Button>
+          ) : (
+            <span> · 点照片可设成封面</span>
+          )}
+        </div>
       ) : null}
 
       {images.length === 0 && disabled ? <span className="small muted">暂无图片</span> : null}
