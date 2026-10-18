@@ -381,11 +381,7 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
         ) : null}
       </Panel>
 
-      <Panel>
-        <SectionTitle>植物信息</SectionTitle>
-        <DynamicForm defs={defs} values={values} errors={errors} onChange={setValue} excludeKeys={['aliases_hint']} />
-      </Panel>
-
+      {/* 图片放在字段表单上面：先看长什么样，再逐项填信息 */}
       <Panel>
         <SectionTitle>图片</SectionTitle>
         <ImageStripWithHint
@@ -394,6 +390,11 @@ export function SpeciesEditor({ speciesId, onBack, onSaved }: SpeciesEditorProps
           searchHint={typeof values.common_name === 'string' ? values.common_name : undefined}
           hint={currentId === null ? '保存后即可添加图片。' : undefined}
         />
+      </Panel>
+
+      <Panel>
+        <SectionTitle>植物信息</SectionTitle>
+        <DynamicForm defs={defs} values={values} errors={errors} onChange={setValue} excludeKeys={['aliases_hint']} />
       </Panel>
 
       {currentId !== null ? (

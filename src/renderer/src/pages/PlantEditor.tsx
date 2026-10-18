@@ -310,20 +310,10 @@ export function PlantEditorModal({
           </Panel>
         ) : null}
 
-        <div className="section-title">本株信息</div>        {/*
-          只排除「昵称」—— 它在最上面单独渲染。
-          这里曾经还排除了 acquired_at，导致「入手 / 播种日期」在界面上
-          根本没有输入框（模板里有这个字段，但表单里永远看不到）。
-          模板字段就该怎么定义就怎么显示，不要在这里偷偷过滤。
+        {/*
+          图片放在字段表单**上面**：改植株时先看「长什么样」，
+          照片也是最先想改的东西；字段一多，图片压在最下面要滚很久。
         */}
-        <DynamicForm
-          defs={defs.filter((d) => d.key !== 'nickname')}
-          values={values}
-          errors={errors}
-          onChange={setValue}
-          context={fieldContext}
-        />
-
         <div className="section-title">
           图片
           {savedId === null ? <Badge tone="warn">保存后才能添加图片</Badge> : null}
@@ -336,6 +326,21 @@ export function PlantEditorModal({
           searchHint={plant?.species?.commonName ?? plant?.nickname}
           speciesId={speciesId}
           onChanged={() => undefined}
+        />
+
+        <div className="section-title">本株信息</div>
+        {/*
+          只排除「昵称」—— 它在最上面单独渲染。
+          这里曾经还排除了 acquired_at，导致「入手 / 播种日期」在界面上
+          根本没有输入框（模板里有这个字段，但表单里永远看不到）。
+          模板字段就该怎么定义就怎么显示，不要在这里偷偷过滤。
+        */}
+        <DynamicForm
+          defs={defs.filter((d) => d.key !== 'nickname')}
+          values={values}
+          errors={errors}
+          onChange={setValue}
+          context={fieldContext}
         />
       </div>
 
