@@ -87,6 +87,7 @@ import {
   describeSpeciesKeys,
   dueDescription,
   generateTasks,
+  groupTasksByRule,
   isCarePhase,
   monthsCovered,
   normalizePhases,
@@ -1275,6 +1276,32 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('窗口最后一天有特别提示', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-13') === '今天是最后一天')
       check('超过窗口才说已过期', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-15') === '已过期 2 天', dueDescription({ dueDate: '2026-06-10', windowDays: 3 }, '2026-06-15'))
       check('窗口未开始说还有几天', dueDescription({ dueDate: '2026-06-20', windowDays: 3 }, '2026-06-10').includes('还有 10 天'), dueDescription({ dueDate: '2026-06-20', windowDays: 3 }, '2026-06-10'))
+
+      // ---- 今日页：同规则同一天的任务合并成一行 ----
+      {
+        const mk = (id: number, ruleId: number | null, dueDate: string, title: string) => ({
+          id,
+          ruleId,
+          dueDate,
+          title
+        })
+        const grouped = groupTasksByRule([
+          mk(1, 7, '2026-10-01', '秋季补肥'),
+          mk(2, 7, '2026-10-01', '秋季补肥'),
+          mk(3, 8, '2026-10-01', '秋季补肥'),
+          mk(4, 7, '2026-11-01', '秋季补肥'),
+          mk(5, null, '2026-10-01', '手动加一条'),
+          mk(6, null, '2026-10-01', '手动加一条')
+        ])
+        check('同规则同一天合并成一组', grouped.length === 5 && grouped[0].length === 2, String(grouped.length))
+        check('不同规则不合并', grouped[1].length === 1, String(grouped[1].length))
+        check('同规则不同日期不合并', grouped[2][0].id === 4, String(grouped[2][0].id))
+        check(
+          '手动任务永远各自一组（标题相同也不合并）',
+          grouped[3].length === 1 && grouped[4].length === 1,
+          `${grouped[3].length}/${grouped[4].length}`
+        )
+      }
 
       // ---- 排序与统计 ----
       const sortable = [

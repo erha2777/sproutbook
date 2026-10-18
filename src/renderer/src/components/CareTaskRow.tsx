@@ -43,8 +43,7 @@ const URGENCY_TONE: Record<CareUrgency, BadgeTone> = {
  * 函数标识，React 认为子树换了类型就整个重挂载 —— 之前笔记输入框打不进字
  * 就是这个原因。这个组件目前只是静态展示，但同样的坑不该再踩第二次。
  */
-function TaskRecipe({
-  recipeId,
+export function TaskRecipe({  recipeId,
   recipes,
   materials
 }: {

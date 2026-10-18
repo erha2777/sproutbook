@@ -595,6 +595,29 @@ export function windowRange(task: Pick<CareTask, 'dueDate' | 'windowDays'>): Car
   return { from: task.dueDate, to: addDays(task.dueDate, w) }
 }
 
+/**
+ * 把**同一条规则、同一天、同一个标题**的任务合成一组。
+ *
+ * 一条「秋季补肥」规则管着七株时，今日页原来会列出七行只差植株名的卡片；
+ * 而实际动作是「今天把这几盆都补一遍」。合并后一行里挑植株即可。
+ *
+ * 手动任务没有 ruleId，永远各自一组（它们是各自独立的事）。
+ * 返回顺序沿用原列表的首次出现顺序，不重新排序 —— 调用方已经排好了。
+ */
+export function groupTasksByRule<
+  T extends { id: number; ruleId: number | null; dueDate: string; title: string }
+>(tasks: T[]): T[][] {
+  const groups = new Map<string, T[]>()
+  for (const task of tasks) {
+    const key =
+      task.ruleId === null ? `manual-${task.id}` : `rule-${task.ruleId}|${task.dueDate}|${task.title}`
+    const list = groups.get(key)
+    if (list) list.push(task)
+    else groups.set(key, [task])
+  }
+  return [...groups.values()]
+}
+
 /** 逾期判定留一点余量，避免「昨天该浇水」就被标红。 */
 const SOON_DAYS = 7
 

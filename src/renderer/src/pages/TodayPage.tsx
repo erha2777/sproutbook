@@ -20,11 +20,12 @@ import type { ReactNode } from 'react'
 import type { CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareTaskListItem, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
 import { suggestTask } from '@core/weather'
-import { addDays, pendingBuckets, todayIso } from '@core/care'
+import { addDays, groupTasksByRule, pendingBuckets, todayIso } from '@core/care'
 import { Button, EmptyState, Panel, SectionTitle, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
 import { CareTaskRow, TaskGroup } from '../components/CareTaskRow'
+import { MergedCareTaskRow } from '../components/MergedCareTaskRow'
 import { WeatherPanel, weatherTaskKey } from '../components/WeatherPanel'
 
 /**
@@ -69,6 +70,8 @@ export function TodayPage({
   const [weatherBusy, setWeatherBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<number | null>(null)
+  /** 合并行的批量完成 / 跳过正在进行中 */
+  const [bulkBusy, setBulkBusy] = useState(false)
   const [editing, setEditing] = useState<CareTask | null>(null)
 
   /**
@@ -258,6 +261,42 @@ export function TodayPage({
     }
   }
 
+  /**
+   * 批量完成 / 跳过（合并行用）。
+   *
+   * 每条任务仍然各自落库 —— 日志是按株记的，不能合并成一条。
+   * 这里逐条提交、汇总结果：一条失败不拖累其他条，但要如实报出失败数。
+   */
+  const bulkAct = async (tasks: CareTaskListItem[], action: 'complete' | 'skip', note?: string): Promise<void> => {
+    if (tasks.length === 0) return
+    setBulkBusy(true)
+    let ok = 0
+    const errors: string[] = []
+    for (const task of tasks) {
+      try {
+        const updated =
+          action === 'complete'
+            ? await window.api.care.completeTask(task.id, note?.trim() ? note : null)
+            : await window.api.care.skipTask(task.id)
+        if (updated) {
+          ok++
+          mergeDone(task, updated)
+        }
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : '未知错误')
+      }
+    }
+    setBulkBusy(false)
+    const verb = action === 'complete' ? '完成' : '跳过'
+    if (errors.length === 0) {
+      toast.push(`已${verb} ${ok} 条`, 'success')
+    } else {
+      toast.push(`${verb} ${ok} 条，${errors.length} 条失败：${errors[0]}`, 'error')
+    }
+    await reloadOpen()
+    onCareChanged?.()
+  }
+
   const removeTask = async (task: CareTaskListItem): Promise<void> => {
     if (!window.confirm(`确定删除任务「${task.title}」吗？`)) return
     try {
@@ -287,8 +326,29 @@ export function TodayPage({
     />
   )
 
-  const nothingToDo = groups.overdue.length === 0 && groups.due.length === 0
+  /**
+   * 一组任务 → 一行。
+   *
+   * 同一条规则 ≥2 株时用合并行（行里勾选植株、一次完成，见 MergedCareTaskRow）；
+   * 只有一条时仍用原来的单行（保留「完成前写一句备注」）。
+   */
+  const renderGroup = (list: CareTaskListItem[]): ReactNode =>
+    list.length > 1 ? (
+      <MergedCareTaskRow
+        key={`${list[0].ruleId}-${list[0].dueDate}-${list[0].title}`}
+        tasks={list}
+        today={today}
+        busy={bulkBusy}
+        recipes={recipes}
+        materials={materials}
+        onComplete={(selected, note) => void bulkAct(selected, 'complete', note)}
+        onSkip={(selected) => void bulkAct(selected, 'skip')}
+      />
+    ) : (
+      renderRow(list[0])
+    )
 
+  const nothingToDo = groups.overdue.length === 0 && groups.due.length === 0
   return (
     <div className="content-inner">
       {/*
@@ -376,10 +436,10 @@ export function TodayPage({
             ) : (
               <>
                 <TaskGroup title="已过期" count={groups.overdue.length} tone="safety">
-                  {groups.overdue.map(renderRow)}
+                  {groupTasksByRule(groups.overdue).map(renderGroup)}
                 </TaskGroup>
                 <TaskGroup title="今天该做" count={groups.due.length} tone="warn">
-                  {groups.due.map(renderRow)}
+                  {groupTasksByRule(groups.due).map(renderGroup)}
                 </TaskGroup>
                 {/*
                   「已经可以做」和「快到了」都**不列出来** ——
