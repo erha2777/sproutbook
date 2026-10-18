@@ -1173,11 +1173,19 @@ img {
   font-weight: 700;
 }
 
+/*
+ * 弹窗正文用「纸」色，不再继承外框的深木色。
+ *
+ * 外框 #a86a2d 是中等棕，字段说明用的 --ink-soft (#7a5533) 也是棕色 ——
+ * 两者叠在一起几乎读不出来（用户原话：「下面的样式看不清」）。
+ * 正文换成浅色，标签 / 说明 / 输入框的对比度才够。
+ */
 .modal-body {
   padding: 14px;
   overflow: auto;
   flex: 1;
   min-height: 0;
+  background: var(--wood-panel-light);
 }
 
 .modal-footer {
