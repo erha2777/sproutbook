@@ -38,7 +38,7 @@ import { flowerColorForSpecies } from '@core/sprite'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
 import { todayIso } from '@core/care'
 import { PlantSprite } from '../components/PlantSprite'
-import { Badge, Button, EmptyState, LoadFailure, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
+import { Badge, Button, EmptyState, LoadFailure, Modal, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 import { PlantEditorModal } from './PlantEditor'
 
 
@@ -372,7 +372,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                   <button
                     key={plant.id}
                     className={`garden-plot${selected === plant.id ? ' selected' : ''}`}
-                    onClick={() => setSelected(selected === plant.id ? null : plant.id)}
+                    onClick={() => setSelected(plant.id)}
                     title={`${plant.nickname} · ${GROWTH_STAGE_LABELS[result.stage]}`}
                   >
                     {/* 高度固定、底部对齐：格子整齐，尺寸又能读出大小差别 */}
@@ -407,7 +407,7 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                   key={plant.id}
                   plant={plant}
                   selected={selected === plant.id}
-                  onClick={() => setSelected(selected === plant.id ? null : plant.id)}
+                  onClick={() => setSelected(plant.id)}
                 />
               ))}
             </div>
@@ -415,11 +415,10 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
         )}
 
         {/*
-          选中某株后的详情：把「为什么是这个阶段、为什么画这么大」讲清楚。
-
-          **两种视图都有**：花园里点植株、列表里点卡片，选中的那一株都会在下面
-          展开这里 —— 生成计划、编辑这株、标记物候阶段、下一件要做的事都在这一块。
-          列表视图的编辑走卡片右上角的「编辑」，不跟「选中看详情」抢同一个点击。
+          点一株 = 弹出详情（模态框），**不再在页面下方展开**。
+          植株一多，下方那块会被挤到屏幕外，点谁都要先滚半天 ——
+          模态框把「看这一株」和「列表有多长」解耦。
+          生成计划 / 编辑这株 / 标记物候阶段 / 下一件事都在这里。
         */}
         {selectedPlant
           ? (() => {
@@ -437,31 +436,32 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
               })
               const task = nextTask[selectedPlant.id]
               return (
-                <Panel>
-                  <SectionTitle
-                    right={
-                      <>
-                        {/*
-                          按株生成计划就放在这一株的详情里。
-                          放在「养护计划」页时，用户要排这一株得先离开花园、
-                          再按一个会动到所有植株的按钮 —— 两件都不对。
-                        */}
-                        <Button
-                          size="small"
-                          disabled={generating === selectedPlant.id}
-                          title="按规则库为这一株排出全年该做的事（已打勾的不会被覆盖）"
-                          onClick={() => void generateForPlant(selectedPlant)}
-                        >
-                          {generating === selectedPlant.id ? '生成中…' : '生成计划'}
-                        </Button>
-                        <Button size="small" onClick={() => setEditing(selectedPlant)}>
-                          编辑这株
-                        </Button>
-                      </>
-                    }
-                  >
-                    {selectedPlant.nickname}
-                  </SectionTitle>
+                <Modal
+                  title={`${selectedPlant.nickname} · 植株详情`}
+                  onClose={() => setSelected(null)}
+                  headerExtra={
+                    <>
+                      {/*
+                        按株生成计划就放在这一株的详情里。
+                        放在「养护计划」页时，用户要排这一株得先离开花园、
+                        再按一个会动到所有植株的按钮 —— 两件都不对。
+                      */}
+                      <Button
+                        size="small"
+                        disabled={generating === selectedPlant.id}
+                        title="按规则库为这一株排出全年该做的事（已打勾的不会被覆盖）"
+                        onClick={() => void generateForPlant(selectedPlant)}
+                      >
+                        {generating === selectedPlant.id ? '生成中…' : '生成计划'}
+                      </Button>
+                      <Button size="small" onClick={() => setEditing(selectedPlant)}>
+                        编辑这株
+                      </Button>
+                    </>
+                  }
+                  footer={<Button onClick={() => setSelected(null)}>关闭</Button>}
+                >
+                  <div className="content-inner">
                   <div className="row" style={{ alignItems: 'flex-start' }}>
                     <div className="detail-sprite-area">
                       {selectedPlant.coverThumb ? (
@@ -578,7 +578,8 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
                       */}
                     </div>
                   </div>
-                </Panel>
+                  </div>
+                </Modal>
               )
             })()
           : null}
