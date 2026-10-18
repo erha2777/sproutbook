@@ -10,6 +10,7 @@
  */
 
 import type { ReactNode } from 'react'
+import { PixelIcon } from '../components/PixelIcon'
 
 export function HomePage({
   onGarden,
@@ -51,11 +52,11 @@ export function HomePage({
       <div className="home-menu">
         <button type="button" className="home-btn" onClick={onGarden}>
           <span>我的花园</span>
-          <b>🌿</b>
+          <b><PixelIcon name="garden" size={26} /></b>
         </button>
         <button type="button" className="home-btn" onClick={onSpecies}>
           <span>物种库</span>
-          <b>📖</b>
+          <b><PixelIcon name="species" size={26} /></b>
         </button>
         <button type="button" className="home-btn" onClick={onCare}>
           <span>
@@ -66,16 +67,16 @@ export function HomePage({
               </i>
             ) : null}
           </span>
-          <b>🌱</b>
+          <b><PixelIcon name="care" size={26} /></b>
         </button>
         <button type="button" className="home-btn" onClick={onQuit}>
           <span>退出</span>
-          <b>✕</b>
+          <b><PixelIcon name="exit" size={26} /></b>
         </button>
       </div>
 
-      <button type="button" className="home-gear" title="设置" onClick={onSettings}>
-        ⚙
+      <button type="button" className="home-gear" title="设置" aria-label="设置" onClick={onSettings}>
+        <PixelIcon name="gear" size={24} />
       </button>
       <button
         type="button"
@@ -84,7 +85,7 @@ export function HomePage({
         aria-label={soundOn ? '关闭音效' : '开启音效'}
         onClick={onToggleSound}
       >
-        {soundOn ? '🔊' : '🔇'}
+        <PixelIcon name={soundOn ? 'sound' : 'mute'} size={24} />
       </button>
       <div className="home-version">{version ? `v${version}` : ''}</div>
     </div>

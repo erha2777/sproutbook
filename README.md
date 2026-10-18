@@ -513,8 +513,11 @@ pnpm 默认的符号链接布局在 Windows 上会创建 junction，而 Node 的
 ## 许可
 
 代码：MIT（见 [LICENSE](LICENSE)）。
-本仓库**不包含**任何第三方游戏的美术资源；界面全部由 CSS 与系统字体绘制。
-将来引入的像素素材会逐个记录来源与许可见 `CREDITS.md`。
+
+界面**不包含**任何第三方游戏的美术资源：云、木牌、草地、图标都是 CSS / SVG / 字符网格画出来的。
+唯一的第三方素材是**像素字体 Fusion Pixel 12px**（OFL 1.1），文件在
+`src/renderer/src/assets/`，许可见同目录 `FUSION-PIXEL-OFL.txt`。
+来源与许可记录见 [CREDITS.md](CREDITS.md)。
 
 ---
 

@@ -135,12 +135,12 @@ export function TemplatesPage({
           <table className="pixel-table">
             <thead>
               <tr>
-                <th style={{ width: 88 }}>排序</th>
+                <th style={{ width: 72 }}>排序</th>
                 <th>字段</th>
-                <th style={{ width: 96 }}>类型</th>
-                <th style={{ width: 82 }}>分组</th>
-                <th style={{ width: 96 }}>已填记录</th>
-                <th style={{ width: 172 }}>操作</th>
+                <th style={{ width: 86 }}>类型</th>
+                <th style={{ width: 74 }}>分组</th>
+                <th style={{ width: 84 }}>已填记录</th>
+                <th style={{ width: 210 }}>操作</th>
               </tr>
             </thead>
             <tbody>
