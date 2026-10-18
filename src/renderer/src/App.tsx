@@ -264,8 +264,44 @@ function Shell(): ReactNode {
           </div>
         ) : null}
 
+        {/*
+          养护：四个 tab 放在**滚动区外面**，所以永远钉在顶部；
+          只有下面的页面内容滚。用 sticky 也能做，但滚动容器一有内边距
+          就会漏出一条「滚过去的内容」，结构上分开最稳。
+        */}
+        {route.name === 'care' ? (
+          <div className="care-hub">
+            <div className="care-tabs">
+              {CARE_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={cx('care-tab', route.tab === tab.key && 'on')}
+                  onClick={() => setRoute({ name: 'care', tab: tab.key })}
+                >
+                  {tab.icon} {tab.label}
+                </button>
+              ))}
+            </div>
+            <div className="content">
+              <PageErrorBoundary resetKey={`care:${route.tab}`}>
+                {route.tab === 'today' ? (
+                  <TodayPage
+                    onCareChanged={refreshCareBadge}
+                    onGoPlans={() => setRoute({ name: 'care', tab: 'plans' })}
+                  />
+                ) : null}
+                {route.tab === 'plans' ? (
+                  <CarePage onCareChanged={refreshCareBadge} onGoGarden={() => setRoute({ name: 'garden' })} />
+                ) : null}
+                {route.tab === 'logs' ? <LogsPage /> : null}
+                {route.tab === 'recipes' ? <RecipesPage /> : null}
+              </PageErrorBoundary>
+            </div>
+          </div>
+        ) : (
         <div className="content">
-          <PageErrorBoundary resetKey={`${route.name}:${route.name === 'care' ? route.tab : ''}`}>
+          <PageErrorBoundary resetKey={route.name}>
           {route.name === 'garden' ? (
             <GardenPage
               onGoSpecies={() => setRoute({ name: 'species' })}
@@ -296,40 +332,9 @@ function Shell(): ReactNode {
             />
           ) : null}
           {route.name === 'settings' ? <SettingsPage /> : null}
-
-          {/*
-            养护：今日 / 养护计划 / 养护日志 / 配方 收进一个分区，
-            页内用 tab 切 —— 首页只留「养护」一个入口。
-          */}
-          {route.name === 'care' ? (
-            <div className="care-hub">
-              <div className="care-tabs">
-                {CARE_TABS.map((tab) => (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    className={cx('care-tab', route.tab === tab.key && 'on')}
-                    onClick={() => setRoute({ name: 'care', tab: tab.key })}
-                  >
-                    {tab.icon} {tab.label}
-                  </button>
-                ))}
-              </div>
-              {route.tab === 'today' ? (
-                <TodayPage
-                  onCareChanged={refreshCareBadge}
-                  onGoPlans={() => setRoute({ name: 'care', tab: 'plans' })}
-                />
-              ) : null}
-              {route.tab === 'plans' ? (
-                <CarePage onCareChanged={refreshCareBadge} onGoGarden={() => setRoute({ name: 'garden' })} />
-              ) : null}
-              {route.tab === 'logs' ? <LogsPage /> : null}
-              {route.tab === 'recipes' ? <RecipesPage /> : null}
-            </div>
-          ) : null}
           </PageErrorBoundary>
         </div>
+        )}
       </main>
       {/* 分区页没有导航条：右下角「← 后退」回首页再换分区 */}
       <button type="button" className="back-btn" onClick={goBack} title="返回上一页 / 首页">

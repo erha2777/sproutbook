@@ -1062,11 +1062,32 @@ img {
 
 /* ---------- 养护：页内 tab ---------- */
 
+/*
+ * 养护：四个 tab 在滚动区**外面**，所以永远钉在顶部；
+ * 只有下面的 .content 滚。
+ */
+.care-hub {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  /*
+   * 窗口顶部有 28px 的透明拖拽带（fixed、盖在内容上方）。
+   * tab 是按钮，落在拖拽带里就点不动了，所以整体往下让开。
+   */
+  padding-top: 26px;
+}
 .care-tabs {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
   flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: 2px 0 10px;
+}
+.care-hub > .content {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
 }
 .care-tab {
   padding: 7px 16px;
