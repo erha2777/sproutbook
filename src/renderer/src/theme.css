@@ -79,34 +79,95 @@ img {
 .sky {
   position: fixed;
   inset: 0;
-  background: linear-gradient(
-    180deg,
-    var(--sky-1) 0%,
-    var(--sky-2) 26%,
-    var(--sky-3) 54%,
-    var(--sky-4) 78%,
-    var(--sky-5) 100%
-  );
+  background:
+    radial-gradient(900px 420px at 82% -12%, rgba(255, 240, 180, 0.5), transparent 62%),
+    linear-gradient(
+      180deg,
+      #17589f 0%,
+      var(--sky-1) 8%,
+      var(--sky-2) 28%,
+      var(--sky-3) 54%,
+      var(--sky-4) 78%,
+      var(--sky-5) 100%
+    );
   z-index: 0;
   overflow: hidden;
 }
 
+/* 太阳光晕：左上角外，给天空一点方向和温度 */
+.sky-sun {
+  position: absolute;
+  right: 4%;
+  top: -240px;
+  width: 460px;
+  height: 460px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 246, 205, 0.6) 0%,
+    rgba(255, 238, 175, 0.22) 40%,
+    rgba(255, 235, 160, 0) 70%
+  );
+  filter: blur(6px);
+  animation: sun-breathe 11s ease-in-out infinite;
+}
+
+/* 顶部一点点星屑，只有最上面能看到，白天也不突兀 */
+.sky-stars {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 30%;
+  opacity: 0.5;
+  background-image:
+    radial-gradient(2px 2px at 6% 28%, #fff, transparent),
+    radial-gradient(2px 2px at 17% 12%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 28% 38%, #fff, transparent),
+    radial-gradient(2px 2px at 39% 18%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 52% 34%, #fff, transparent),
+    radial-gradient(2px 2px at 63% 10%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 74% 30%, #fff, transparent),
+    radial-gradient(2px 2px at 86% 16%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 94% 36%, #fff, transparent);
+  animation: star-twinkle 6s ease-in-out infinite alternate;
+}
+
+@keyframes sun-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.06); opacity: 0.95; }
+}
+@keyframes star-twinkle {
+  from { opacity: 0.32; }
+  to { opacity: 0.6; }
+}
+
 .cloud {
   position: absolute;
-  background: #ffffff;
+  /* 上白下蓝的轻微渐变 + 底部投影，比纯白更像像素画的云 */
+  background: linear-gradient(180deg, #ffffff 0%, #f2f9ff 55%, #d6e9f7 100%);
   /* 用多边形裁出块状云朵，比圆角更接近像素画 */
   clip-path: polygon(
     18% 62%, 12% 62%, 12% 44%, 24% 44%, 24% 28%, 46% 28%, 46% 16%, 70% 16%,
     70% 28%, 82% 28%, 82% 44%, 92% 44%, 92% 62%, 88% 62%, 88% 74%, 18% 74%
   );
+  filter: drop-shadow(0 6px 0 rgba(24, 74, 116, 0.09));
+  will-change: transform;
+  animation: cloud-drift 60s ease-in-out infinite alternate;
+}
+
+@keyframes cloud-drift {
+  from { transform: translate3d(-2.2%, 0, 0); }
+  to { transform: translate3d(2.2%, 0, 0); }
 }
 
 /* 云只放在顶部一段，避免和内容卡片互相干扰；
    透明度压得很低，作用是「透出一点天空感」而不是抢戏。 */
-.cloud.c1 { width: 300px; height: 138px; left: 4%; top: -2%; opacity: 0.5; }
-.cloud.c2 { width: 190px; height: 88px; left: 58%; top: -1%; opacity: 0.38; }
-.cloud.c3 { width: 240px; height: 110px; left: 30%; top: 3%; opacity: 0.28; }
-.cloud.c4 { width: 170px; height: 78px; left: 84%; top: 4%; opacity: 0.3; }
+.cloud.c1 { width: 340px; height: 156px; left: 3%; top: -2%; opacity: 0.55; animation-duration: 96s; }
+.cloud.c2 { width: 200px; height: 92px; left: 56%; top: 0%; opacity: 0.42; animation-duration: 74s; animation-delay: -12s; }
+.cloud.c3 { width: 260px; height: 120px; left: 28%; top: 4%; opacity: 0.3; animation-duration: 110s; animation-delay: -30s; }
+.cloud.c4 { width: 180px; height: 82px; left: 82%; top: 5%; opacity: 0.34; animation-duration: 82s; animation-delay: -18s; }
+.cloud.c5 { width: 130px; height: 60px; left: 12%; top: 11%; opacity: 0.22; animation-duration: 130s; animation-delay: -40s; }
+.cloud.c6 { width: 150px; height: 68px; left: 44%; top: 12%; opacity: 0.2; animation-duration: 120s; animation-delay: -60s; }
+.cloud.c7 { width: 120px; height: 56px; left: 70%; top: 14%; opacity: 0.18; animation-duration: 140s; animation-delay: -25s; }
 
 /* ---------- 木质面板 ---------- */
 
@@ -2376,4 +2437,481 @@ img {
 .weather-advice.tone-warn {
   border-left-color: #d08a5a;
   background: #fbf0e2;
+}
+
+
+/* ==========================================================================
+   动效与质感增强（1.18.0）
+   --------------------------------------------------------------------------
+   目标：接近参考图的「木头 + 像素 + 轻微呼吸感」。
+   原则：
+   1. 只用 transform / opacity 做动画，保证不触发布局；
+   2. 动效幅度小（2~8px、1~3 度），像素风需要克制；
+   3. 统一尊重 prefers-reduced-motion。
+   ========================================================================== */
+
+/* ---------- 首页木牌：吊绳、铆钉、叶子、轻微摇摆 ---------- */
+
+.home-sign {
+  position: relative;
+  animation: sign-sway 7.5s ease-in-out infinite;
+  transform-origin: 50% -20%;
+  background-image:
+    radial-gradient(circle at 12px 12px, #ffd08a 0 3px, #6f4218 3px 5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 12px) 12px, #ffd08a 0 3px, #6f4218 3px 5px, transparent 5px),
+    radial-gradient(circle at 12px calc(100% - 12px), #ffd08a 0 3px, #6f4218 3px 5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #ffd08a 0 3px, #6f4218 3px 5px, transparent 5px);
+}
+
+/* 两根吊绳 */
+.home-sign::before,
+.home-sign::after {
+  content: '';
+  position: absolute;
+  top: -34px;
+  width: 5px;
+  height: 36px;
+  background: repeating-linear-gradient(180deg, #b5793a 0 4px, #8a5423 4px 8px);
+  box-shadow: 1px 0 0 rgba(255, 220, 160, 0.35);
+}
+.home-sign::before { left: 12%; }
+.home-sign::after { right: 12%; }
+
+.home-sign-inner {
+  position: relative;
+  overflow: hidden;
+}
+
+/* 木牌上沿的两片叶子（尖端在两侧，用不对称圆角画） */
+.home-sign-inner::before,
+.home-sign-inner::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  width: 30px;
+  height: 20px;
+  background: linear-gradient(135deg, #9ade6a 0%, #6cbf3f 45%, #3f8a22 100%);
+  border-radius: 0 100% 0 100%;
+  box-shadow: inset -2px -2px 0 rgba(31, 78, 16, 0.25);
+}
+.home-sign-inner::before {
+  left: 26px;
+  transform: rotate(-18deg);
+}
+.home-sign-inner::after {
+  right: 26px;
+  transform: rotate(162deg);
+}
+
+@keyframes sign-sway {
+  0%, 100% { transform: rotate(-0.5deg); }
+  50% { transform: rotate(0.5deg); }
+}
+
+/* 标题做成「刻进木头里」：实心木色 + 上亮下暗的阴影 */
+.home-title {
+  color: #b4551f;
+  font-size: clamp(40px, 3.8vw, 64px);
+  text-shadow:
+    0 2px 0 #f9e6c2,
+    0 -1px 0 rgba(90, 45, 12, 0.3),
+    0 4px 0 rgba(90, 45, 12, 0.28);
+}
+
+/* ---------- 首页按钮：高光扫过、图标跳动、按下回弹 ---------- */
+
+.home-btn {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.12s steps(2),
+    box-shadow 0.12s ease,
+    background-color 0.12s ease;
+}
+.home-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 34%, rgba(255, 255, 255, 0.55) 50%, transparent 66%);
+  transform: translateX(-130%);
+  transition: transform 0.45s ease;
+  pointer-events: none;
+}
+.home-btn:hover::after {
+  transform: translateX(130%);
+}
+.home-btn:hover b {
+  animation: icon-hop 0.45s ease;
+}
+.home-btn:active {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 3px 0 #fae8c8,
+    inset 0 -2px 0 #dcb87e,
+    0 1px 0 rgba(0, 0, 0, 0.22);
+}
+.home-btn:focus-visible,
+.home-gear:focus-visible,
+.back-btn:focus-visible {
+  outline: 3px solid #ffd166;
+  outline-offset: 2px;
+}
+
+@keyframes icon-hop {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-5px) rotate(-6deg); }
+  70% { transform: translateY(1px) rotate(3deg); }
+  100% { transform: translateY(0); }
+}
+
+/* ---------- 通用按钮 / 输入框：手感与焦点 ---------- */
+
+.pixel-btn {
+  transition:
+    transform 0.1s steps(2),
+    box-shadow 0.12s ease,
+    filter 0.12s ease;
+}
+.pixel-btn:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
+.pixel-btn:active {
+  transform: translateY(2px);
+  filter: brightness(0.97);
+}
+.pixel-btn:focus-visible {
+  outline: 3px solid #ffd166;
+  outline-offset: 2px;
+}
+
+.pixel-input,
+.pixel-select,
+.pixel-textarea {
+  transition:
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+.pixel-input:focus,
+.pixel-select:focus,
+.pixel-textarea:focus {
+  outline: none;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    0 0 0 3px rgba(255, 209, 102, 0.55);
+}
+
+/* ---------- 页面切换 / 面板入场：轻微上浮，带一点错峰 ---------- */
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.content > .content-inner {
+  animation: page-in 0.22s ease-out both;
+}
+
+@keyframes panel-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.content-inner > .pixel-panel,
+.content-inner > .pixel-card,
+.content-inner > .pixel-frame {
+  animation: panel-rise 0.26s ease-out both;
+}
+.content-inner > *:nth-child(2) { animation-delay: 0.03s; }
+.content-inner > *:nth-child(3) { animation-delay: 0.06s; }
+.content-inner > *:nth-child(4) { animation-delay: 0.09s; }
+.content-inner > *:nth-child(5) { animation-delay: 0.12s; }
+
+/* ---------- 卡片 / 花园地块：悬停抬起、缩略图轻推 ---------- */
+
+.pixel-card {
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.14s ease,
+    border-color 0.14s ease;
+}
+.pixel-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    inset 0 var(--step) 0 0 var(--wood-panel-light),
+    inset calc(var(--step) * -1) 0 0 0 var(--wood-panel-dark),
+    inset var(--step) 0 0 0 var(--wood-panel-light),
+    0 8px 0 0 rgba(0, 0, 0, 0.22);
+}
+.card-thumb img {
+  transition: transform 0.35s ease;
+}
+.pixel-card:hover .card-thumb img {
+  transform: scale(1.045);
+}
+
+.garden-plot {
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.garden-plot:hover {
+  transform: translateY(-3px);
+}
+/* 植物轻轻晃：用内层容器，避免覆盖组件自己的尺寸/翻转样式 */
+.plot-stage,
+.plot-stage-area,
+.detail-sprite-area {
+  animation: sprite-idle 6s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+@keyframes sprite-idle {
+  0%, 100% { transform: rotate(-0.8deg); }
+  50% { transform: rotate(0.8deg); }
+}
+
+/* ---------- 弹窗 / 提示 ---------- */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.modal-overlay { animation: fade-in 0.16s ease-out both; }
+.modal { animation: modal-in 0.22s cubic-bezier(0.2, 1.25, 0.4, 1) both; }
+.toast { animation: toast-in 0.28s cubic-bezier(0.2, 1.35, 0.4, 1) both; }
+
+/* ---------- 角标呼吸、标签页、后退按钮 ---------- */
+
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+.nav-badge,
+.home-badge {
+  animation: badge-pulse 2.6s ease-in-out infinite;
+}
+
+.care-tab,
+.tab,
+.view-tabs .pixel-btn {
+  transition:
+    transform 0.1s steps(2),
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+.care-tab:hover {
+  transform: translateY(-1px);
+  background: #fae8c8;
+}
+.care-tab:active {
+  transform: translateY(1px);
+}
+
+.back-btn {
+  transition:
+    transform 0.12s steps(2),
+    background-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.back-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 4px 0 #fae8c8,
+    inset 0 -4px 0 #dcb87e,
+    0 7px 0 rgba(0, 0, 0, 0.22);
+}
+
+.home-gear {
+  transition:
+    transform 0.3s ease,
+    background-color 0.12s ease;
+}
+.home-gear:hover {
+  transform: rotate(35deg);
+}
+
+/* ---------- 数据行 / 任务行悬停 ---------- */
+
+.task-row,
+.task-child,
+.log-item,
+.rule-row {
+  transition: background-color 0.12s ease;
+}
+.task-child:hover,
+.task-row:hover {
+  background-color: rgba(255, 240, 200, 0.55);
+}
+
+/* ---------- 尊重系统的「减少动态效果」 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* ---------- 木纹与文字质感 ---------- */
+
+/* 极淡的横向木纹：一整块纯色太「塑料」，有纹理才像木板 */
+.pixel-panel,
+.pixel-card {
+  background-image: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.16) 0 2px,
+    rgba(255, 255, 255, 0) 2px 7px,
+    rgba(120, 70, 20, 0.06) 7px 8px,
+    rgba(120, 70, 20, 0) 8px 14px
+  );
+}
+
+.section-title {
+  letter-spacing: 0.4px;
+  text-shadow: 0 1px 0 rgba(255, 248, 225, 0.8);
+}
+
+/* 主按钮的高光扫过，只在 hover 时出现一次 */
+.pixel-btn.primary {
+  position: relative;
+  overflow: hidden;
+}
+.pixel-btn.primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 38%, rgba(255, 255, 255, 0.5) 50%, transparent 62%);
+  transform: translateX(-130%);
+  transition: transform 0.5s ease;
+  pointer-events: none;
+}
+.pixel-btn.primary:hover:not(:disabled)::after {
+  transform: translateX(130%);
+}
+
+/* 统计小方块：轻微悬停反馈 */
+.stat-tile {
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.14s ease;
+}
+.stat-tile:hover {
+  transform: translateY(-2px);
+}
+
+/* 天空加一层很淡的暗角，画面不至于整片发亮 */
+.sky::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    120% 85% at 50% 18%,
+    rgba(0, 0, 0, 0) 52%,
+    rgba(8, 32, 60, 0.16) 100%
+  );
+}
+
+
+/* ---------- 场景感：底部草地 ---------- */
+
+/*
+ * 空着的下半屏一直是「预览窗」感觉。
+ * 加一条固定的草地（天空 → 草地），内容浮在上面，页面就有场景纵深了。
+ * 纯 CSS：上层草皮 + 锯齿草尖 + 几朵小花，没有图片资源。
+ */
+.ground {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 120px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, #a5e06a 0 4px, #7ec850 4px 10px, #5aa838 10px 26px, #4c8f2e 26px 100%);
+  box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.25);
+}
+/* 草尖：一排小方齿（像素草），用 mask 铺，别写巨长 polygon */
+.ground::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: #7ec850;
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 14px);
+  mask-image: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 14px);
+}
+/* 几朵像素小花，位置写死，别太抢 */
+.ground::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 26px;
+  height: 12px;
+  background-repeat: repeat-x;
+  background-size: 220px 12px;
+  background-image:
+    radial-gradient(3px 3px at 34px 6px, #ffd9e6 0 3px, transparent 3px),
+    radial-gradient(2px 2px at 37px 3px, #ff9fc0 0 2px, transparent 2px),
+    radial-gradient(3px 3px at 120px 8px, #ffe9a0 0 3px, transparent 3px),
+    radial-gradient(3px 3px at 186px 4px, #d8c7ff 0 3px, transparent 3px);
+}
+
+
+/* 首页左下角：设置齿轮 + 音效开关并排 */
+.home-sound {
+  left: 74px;
+  font-size: 18px;
+}
+
+
+/* ---------- 细节：滚动条、选中色、按下反馈 ---------- */
+
+/* 像素风滚动条（Windows 默认那根太像网页） */
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(111, 66, 24, 0.14);
+}
+::-webkit-scrollbar-thumb {
+  background: #c98a45;
+  border: 3px solid #f2d6a4;
+  box-shadow: inset 0 2px 0 #e0ab63, inset 0 -2px 0 #8a5423;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d99a52;
+}
+
+::selection {
+  background: #bce08a;
+  color: #17340a;
+}
+
+.pixel-card:active {
+  transform: translateY(0) scale(0.996);
+}
+.garden-plot:active {
+  transform: translateY(0) scale(0.99);
+}
+
+/* 卡片是整块可点的，鼠标要有提示 */
+.pixel-card,
+.garden-plot {
+  cursor: pointer;
 }

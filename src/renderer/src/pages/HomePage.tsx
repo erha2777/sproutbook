@@ -18,7 +18,9 @@ export function HomePage({
   onQuit,
   onSettings,
   carePending,
-  version
+  version,
+  soundOn,
+  onToggleSound
 }: {
   onGarden: () => void
   onSpecies: () => void
@@ -28,6 +30,9 @@ export function HomePage({
   /** 养护里「逾期 + 该做」的数量，挂在「养护」按钮上 */
   carePending: number
   version: string | null
+  /** 界面音效开关（存 localStorage） */
+  soundOn: boolean
+  onToggleSound: () => void
 }): ReactNode {
   return (
     <div className="home">
@@ -66,6 +71,15 @@ export function HomePage({
 
       <button type="button" className="home-gear" title="设置" onClick={onSettings}>
         ⚙
+      </button>
+      <button
+        type="button"
+        className="home-gear home-sound"
+        title={soundOn ? '关闭音效' : '开启音效'}
+        aria-label={soundOn ? '关闭音效' : '开启音效'}
+        onClick={onToggleSound}
+      >
+        {soundOn ? '🔊' : '🔇'}
       </button>
       <div className="home-version">{version ? `v${version}` : ''}</div>
     </div>

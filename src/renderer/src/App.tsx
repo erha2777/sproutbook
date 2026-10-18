@@ -12,6 +12,7 @@ import { CarePage } from './pages/CarePage'
 import { TodayPage } from './pages/TodayPage'
 import { LogsPage } from './pages/LogsPage'
 import { HomePage } from './pages/HomePage'
+import { isSfxOn, setSfx, sfx } from './lib/sfx'
 import { pendingBuckets, todayIso } from '@core/care'
 
 type CareTab = 'today' | 'plans' | 'logs' | 'recipes'
@@ -83,10 +84,16 @@ export default function App(): ReactNode {
 function Sky(): ReactNode {
   return (
     <div className="sky" aria-hidden>
+      <div className="sky-sun" />
+      <div className="sky-stars" />
       <div className="cloud c1" />
       <div className="cloud c2" />
       <div className="cloud c3" />
       <div className="cloud c4" />
+      <div className="cloud c5" />
+      <div className="cloud c6" />
+      <div className="cloud c7" />
+      <div className="ground" />
     </div>
   )
 }
@@ -94,6 +101,8 @@ function Sky(): ReactNode {
 function Shell(): ReactNode {
   const toast = useToast()
   const [route, setRoute] = useState<Route>(routeFromHash)
+  /** 界面音效开关：默认开，首页喇叭图标可关 */
+  const [soundOn, setSoundOn] = useState(isSfxOn)
   /**
    * 兼容模式首启提示。
    *
@@ -171,6 +180,24 @@ function Shell(): ReactNode {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
+  /*
+   * 全局点击音效。
+   * 捕获阶段监听，按钮自己的 onClick 改了什么状态都不影响判断；
+   * 只对 <button> 生效，输入框、下拉、卡片不响。
+   */
+  useEffect(() => {
+    const onClick = (event: MouseEvent): void => {
+      const target = event.target as HTMLElement | null
+      const button = target?.closest('button')
+      if (!button || button.disabled) return
+      const label = button.textContent?.trim() ?? ''
+      if (label === '完成') sfx('success')
+      else sfx('click')
+    }
+    document.addEventListener('click', onClick, true)
+    return () => document.removeEventListener('click', onClick, true)
+  }, [])
+
   // 首次进入时做一次环境自检，把明显的问题尽早告诉用户
   useEffect(() => {
     void (async () => {
@@ -202,6 +229,13 @@ function Shell(): ReactNode {
           onCare={() => setRoute({ name: 'care', tab: 'today' })}
           onQuit={() => void window.api.app.quit()}
           onSettings={() => setRoute({ name: 'settings' })}
+          soundOn={soundOn}
+          onToggleSound={() => {
+            const next = !soundOn
+            setSoundOn(next)
+            setSfx(next)
+            if (next) sfx('success')
+          }}
         />
       </div>
     )
