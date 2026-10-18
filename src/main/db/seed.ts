@@ -206,7 +206,8 @@ export function seedCareRules(db: Db): number {
         r.to,
         r.repeatDays ?? null,
         r.rotation ? JSON.stringify(r.rotation) : null,
-        r.sameDay ? 1 : 0,
+        // 默认同一天：种子规则也不再按植株错开（用户要的是规律）
+        r.sameDay === false ? 0 : 1,
         r.action,
         r.title,
         r.detail,

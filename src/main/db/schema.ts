@@ -512,6 +512,20 @@ const V12_RULE_SAME_DAY = /* sql */ `
 ALTER TABLE care_rules ADD COLUMN same_day INTEGER NOT NULL DEFAULT 0;
 `
 
+/**
+ * 「同一天」改成默认。
+ *
+ * 用户看完 1.8.5 的反馈：「所有规则都不用错开，我就是要规律的，
+ * 你错开就变成不规律的了」。说得对 —— 同一个规则在月历上散成好几天，
+ * 看起来就像随手排的，而不是「这个月该做的事」。
+ *
+ * 所以老数据一次性切过来：所有规则改成同一天。
+ * 仍然保留 `same_day` 这一列，想给某条规则恢复「按植株错开」时可以关掉。
+ */
+const V13_SAME_DAY_DEFAULT = /* sql */ `
+UPDATE care_rules SET same_day = 1;
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -524,7 +538,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 9, name: 'task_rule_recipe', sql: V9_TASK_RULE_AND_RECIPE },
   { version: 10, name: 'log_recipe', sql: V10_LOG_RECIPE },
   { version: 11, name: 'env_district', sql: V11_ENV_DISTRICT },
-  { version: 12, name: 'rule_same_day', sql: V12_RULE_SAME_DAY }
+  { version: 12, name: 'rule_same_day', sql: V12_RULE_SAME_DAY },
+  { version: 13, name: 'same_day_default', sql: V13_SAME_DAY_DEFAULT }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

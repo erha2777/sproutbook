@@ -409,7 +409,18 @@ export function generateTasks(
   const seen = new Set<string>()
 
   const push = (dueDate: string, rule: CareRule, title: string, windowDays: number): void => {
-    const signature = `${dueDate}|${rule.actionType}|${title}`
+    /*
+     * 去重键。
+     *
+     * 按月 / 整段一次：**同一个月 + 同动作 + 同标题就算同一条** ——
+     * 通用规则和物种专属规则写重了，只该留一条。
+     * 这里不能带具体日期：默认「同日」是按**规则 id**取锚点，两条规则会算出
+     * 两个不同的日子，带日期就永远去不了重（原来按植株错开时，两份规则
+     * 恰好落在同一天，所以这个坑没露出来）。
+     * 按天重复必须带日期，否则「每 N 天一轮」会被压成一条。
+     */
+    const period = rule.repeatDays && rule.repeatDays > 0 ? dueDate : dueDate.slice(0, 7)
+    const signature = `${period}|${rule.actionType}|${title}`
     if (seen.has(signature)) return
     seen.add(signature)
     out.push({
@@ -433,12 +444,11 @@ export function generateTasks(
     /*
      * 锚点种子。
      *
-     * 默认用调用方传进来的（植株 id）—— 同一条规则下不同植株错开几天，
-     * 日常浇水不至于全挤在一天。
-     * 但规则打开了 sameDay 时改用**规则 id**：同一条规则的所有植株算出同一天。
-     * 「秋埋底肥」这种一年一次、要一次把几盆都处理掉的事就该是这样。
+     * **默认用规则 id**：同一条规则的所有植株落在同一天，而且每个月是同一个日期
+     * （用户要的是规律 —— 一条规则在月历上散成好几天，看起来就像随手排的）。
+     * 只有规则显式关掉 `sameDay`（false）时才用调用方传进来的植株 id 错开。
      */
-    const anchorSeed = rule.sameDay === true && rule.id > 0 ? rule.id : seed
+    const anchorSeed = rule.sameDay !== false && rule.id > 0 ? rule.id : seed
 
     // ---- 按天重复 ----
     if (rule.repeatDays !== null && rule.repeatDays !== undefined && rule.repeatDays > 0) {

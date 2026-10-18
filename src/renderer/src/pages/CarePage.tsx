@@ -598,7 +598,13 @@ export function CarePage({
         />
       ) : null}
 
-      {showRules ? <CareRuleManager speciesNames={speciesNames} onClose={() => setShowRules(false)} /> : null}
+      {showRules ? (
+        <CareRuleManager
+          speciesNames={speciesNames}
+          onClose={() => setShowRules(false)}
+          onChanged={() => void reload()}
+        />
+      ) : null}
 
       {/*
         统计弹窗。

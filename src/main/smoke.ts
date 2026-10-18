@@ -950,15 +950,15 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('任务日期落在正确的月和年', gen.every((t) => t.dueDate.startsWith('2026-')))
       check('专属规则只生成一条（单月）', gen.filter((t) => t.title === '专属重剪').length === 1)
 
-      // 锚点日按植株错开：否则七株的任务全挤在 1 号，月历上「1 号 8 项、其余全空」
+      // 锚点日：默认按规则 id（所有植株同一天）；关掉 sameDay 才按植株错开
       check('锚点日落在当月天数内', spreadDay(2026, 2, 9) <= 28, String(spreadDay(2026, 2, 9)))
       check('锚点日不超过 31', [1, 2, 3, 4, 5, 6, 7, 8].every((s) => spreadDay(2026, 1, s) <= 31))
       check('2 月不会给出 30 号', spreadDay(2026, 2, 5) <= 29, String(spreadDay(2026, 2, 5)))
       {
         const days = new Set([1, 2, 3, 4, 5, 6, 7].map((s) => spreadDay(2026, 6, s)))
-        check('不同植株的锚点日确实分散开', days.size >= 4, [...days].join(','))
+        check('spreadDay 本身能把种子摊到不同日期', days.size >= 4, [...days].join(','))
         const spread = generateTasks(testRules, '照护月季', 2026, { spreadSeed: 3 })
-        check('生成任务用了错开后的日期', spread.every((t) => !t.dueDate.endsWith('-01')), spread[0]?.dueDate)
+        check('生成任务没有全落在 1 号', spread.every((t) => !t.dueDate.endsWith('-01')), spread[0]?.dueDate)
       }
 
       // 同名规则去重：通用与专属写了同一件事时不该出现两条
@@ -1027,10 +1027,10 @@ export async function runSmoke(outFile: string): Promise<number> {
         generateTasks([{ ...cycleRule, repeatDays: 1, monthFrom: 3, monthTo: 3 }], null, 2026).length <= 400
       )
       check(
-        '周期规则的起始日按植株错开',
-        generateTasks([cycleRule], null, 2026, { spreadSeed: 3 })[0].dueDate !==
-          generateTasks([cycleRule], null, 2026, { spreadSeed: 0 })[0].dueDate,
-        `${generateTasks([cycleRule], null, 2026, { spreadSeed: 3 })[0].dueDate} vs ${generateTasks([cycleRule], null, 2026, { spreadSeed: 0 })[0].dueDate}`
+        '显式关掉同日：周期规则的起始日按植株错开',
+        generateTasks([{ ...cycleRule, sameDay: false }], null, 2026, { spreadSeed: 3 })[0].dueDate !==
+          generateTasks([{ ...cycleRule, sameDay: false }], null, 2026, { spreadSeed: 0 })[0].dueDate,
+        `${generateTasks([{ ...cycleRule, sameDay: false }], null, 2026, { spreadSeed: 3 })[0].dueDate} vs ${generateTasks([{ ...cycleRule, sameDay: false }], null, 2026, { spreadSeed: 0 })[0].dueDate}`
       )
       check(
         '跨年周期规则两段都在当年内',
@@ -1043,8 +1043,9 @@ export async function runSmoke(outFile: string): Promise<number> {
        * ---- 同日规则 ----
        *
        * 用户看月历发现的：「底肥（换盆/秋埋）」在 10 月散落在好几天 ——
-       * 因为默认按植株错开锚点日。但秋埋底肥这种一年一次的事，
-       * 本来就是挑一个周末把所有盆一起处理掉。
+       * 因为原来按植株错开锚点日。后来他的结论更直接：
+       * 「所有规则都不用错开，我就是要规律的」→ 现在**默认就是同一天**，
+       * 按植株错开变成需要显式关掉的可选项。
        */
       {
         const monthlyRule = {
@@ -1069,7 +1070,11 @@ export async function runSmoke(outFile: string): Promise<number> {
         }
         const p1 = generateTasks([monthlyRule], null, 2026, { spreadSeed: 1 })[0].dueDate
         const p2 = generateTasks([monthlyRule], null, 2026, { spreadSeed: 2 })[0].dueDate
-        check('默认：不同植株的锚点日错开', p1 !== p2, `${p1} vs ${p2}`)
+        check('默认：不同植株落在同一天', p1 === p2, `${p1} vs ${p2}`)
+
+        const off1 = generateTasks([{ ...monthlyRule, sameDay: false }], null, 2026, { spreadSeed: 1 })[0].dueDate
+        const off2 = generateTasks([{ ...monthlyRule, sameDay: false }], null, 2026, { spreadSeed: 2 })[0].dueDate
+        check('显式关掉同日：不同植株错开', off1 !== off2, `${off1} vs ${off2}`)
 
         const together1 = generateTasks([{ ...monthlyRule, sameDay: true }], null, 2026, { spreadSeed: 1 })[0]
           .dueDate
@@ -1082,6 +1087,15 @@ export async function runSmoke(outFile: string): Promise<number> {
         const other = { ...monthlyRule, id: 78, title: '换盆' }
         const otherDay = generateTasks([{ ...other, sameDay: true }], null, 2026, { spreadSeed: 1 })[0].dueDate
         check('同日规则之间按规则 id 区分', otherDay !== together1, `${otherDay} vs ${together1}`)
+
+        // 每个月的日期要一样，否则「规律」无从谈起
+        const mar = generateTasks([{ ...monthlyRule, monthFrom: 3, monthTo: 3 }], null, 2026)[0].dueDate
+        const apr = generateTasks([{ ...monthlyRule, monthFrom: 4, monthTo: 4 }], null, 2026)[0].dueDate
+        check(
+          '同一条规则每个月都是同一个日期',
+          mar.slice(8) === apr.slice(8),
+          `${mar} vs ${apr}`
+        )
       }
 
       // 顺带确认这一列真的存得进去、读得回来
@@ -1107,17 +1121,25 @@ export async function runSmoke(outFile: string): Promise<number> {
         check('规则可以保存「同一天」', saved.sameDay === true, String(saved.sameDay))
         const reread = listCareRules(db, { speciesKey: '*' }).find((r) => r.id === saved.id)
         check('重新读出来仍然是同一天', reread?.sameDay === true, String(reread?.sameDay))
-        const plain = saveCareRule(db, { ...sameDayInput, title: '自检：普通规则' })
-        check('没勾选的规则不是同一天', plain.sameDay === false, String(plain.sameDay))
+        // 不传就是默认值：同一天（用户要的是规律，不是每株一个日子）
+        const plain = saveCareRule(db, { ...sameDayInput, title: '自检：默认规则' })
+        check('默认就是同一天', plain.sameDay === true, String(plain.sameDay))
+        // 显式关掉才恢复按植株错开
+        const spread = saveCareRule(db, { ...sameDayInput, title: '自检：错开规则', sameDay: false })
+        check('显式关掉才按植株错开', spread.sameDay === false, String(spread.sameDay))
 
         /*
-         * 用完就删：这两条规则会留在同一个自检库里，后面「种子规则都是人工来源」
-         * 「概览规则数」这类断言是数着条数比的，多两条就会假红。
+         * 用完就删：这些规则会留在同一个自检库里，后面「种子规则都是人工来源」
+         * 「概览规则数」这类断言是数着条数比的，多几条就会假红。
          * 自检造的数据必须自己收拾干净。
          */
         deleteCareRule(db, saved.id)
         deleteCareRule(db, plain.id)
-        check('自检造的规则已清理', listCareRules(db).every((r) => r.id !== saved.id && r.id !== plain.id))
+        deleteCareRule(db, spread.id)
+        check(
+          '自检造的规则已清理',
+          listCareRules(db).every((r) => ![saved.id, plain.id, spread.id].includes(r.id))
+        )
       }
 
       // ---- 时间窗与紧急度 ----
@@ -1587,12 +1609,24 @@ export async function runSmoke(outFile: string): Promise<number> {
         const both = generateTasks([{ ...once, oncePerWindow: true, repeatDays: 10 }], null, 2026)
         check('按天重复优先于窗口内一次', both.length > 2, String(both.length))
 
-        // 不同植株错开，但都还在窗口开头
-        const days = [0, 1, 2, 3, 4].map(
+        // 窗口内一次：默认所有植株同一天；显式关掉才按植株错开
+        const togetherDays = [0, 1, 2, 3, 4].map(
           (seed) => generateTasks([{ ...once, oncePerWindow: true }], null, 2026, { spreadSeed: seed })[0].dueDate
         )
-        check('不同植株仍然错开', new Set(days).size > 1, days.join(' '))
-        check('错开后仍都在 10 月上旬', days.every((d) => d.startsWith('2026-10') && Number(d.slice(8, 10)) <= 7), days.join(' '))
+        check('窗口内一次默认所有植株同一天', new Set(togetherDays).size === 1, togetherDays.join(' '))
+        check('而且仍在 10 月上旬', togetherDays.every((d) => d.startsWith('2026-10') && Number(d.slice(8, 10)) <= 7), togetherDays.join(' '))
+
+        const spreadDays = [0, 1, 2, 3, 4].map(
+          (seed) =>
+            generateTasks([{ ...once, oncePerWindow: true, sameDay: false }], null, 2026, { spreadSeed: seed })[0]
+              .dueDate
+        )
+        check('显式关掉同日才会错开', new Set(spreadDays).size > 1, spreadDays.join(' '))
+        check(
+          '错开后仍都在 10 月上旬',
+          spreadDays.every((d) => d.startsWith('2026-10') && Number(d.slice(8, 10)) <= 7),
+          spreadDays.join(' ')
+        )
       }
 
       // ---- 规则绑定配方：存取往返 ----

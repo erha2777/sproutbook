@@ -156,8 +156,11 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
    * 免得库里存着一个自相矛盾的组合。
    */
   const oncePerWindow = repeatDays === null && input.oncePerWindow === true
-  // 「同一天」只在按月 / 整段一次时才有意义；按天重复的节奏不受它影响
-  const sameDay = input.sameDay === true
+  /*
+   * 「同一天」现在是**默认**：用户要的是规律 —— 同一条规则下所有植株同一天做。
+   * 只有显式传 false 才恢复「按植株错开」（日常浇水想摊开时可以用）。
+   */
+  const sameDay = input.sameDay !== false
 
   if (input.id) {
     db.run(

@@ -37,10 +37,10 @@ interface Draft {
    */
   oncePerWindow: boolean
   /**
-   * 同一条规则的所有植株在同一天做。
+   * 同一条规则的所有植株在同一天做（默认开）。
    *
-   * 默认按植株错开锚点日（日常养护别全挤一天）；
-   * 秋埋底肥这类「挑个周末一次把几盆都弄完」的要关掉错开。
+   * 用户要的是规律：同一条规则在月历上散成好几天，看起来就像随手排的。
+   * 关掉后恢复「按植株错开」—— 只有想让日常浇水摊开时才需要。
    */
   sameDay: boolean
   /** 绑定的配方 id（字符串形式便于 select），空＝没有材料清单 */
@@ -62,7 +62,7 @@ const BLANK: Draft = {
   monthTo: '',
   repeatDays: '',
   oncePerWindow: false,
-  sameDay: false,
+  sameDay: true,
   recipeId: '',
   rotationText: '',
   phases: [],
@@ -75,16 +75,21 @@ const BLANK: Draft = {
 
 export function CareRuleManager({
   speciesNames,
-  onClose
+  onClose,
+  onChanged
 }: {
   speciesNames: string[]
   onClose: () => void
+  /** 重新生成之后通知外面刷新（计划页的月历要跟着变） */
+  onChanged?: () => void
 }): ReactNode {
   const toast = useToast()
   const [rules, setRules] = useState<CareRule[]>([])
   const [loading, setLoading] = useState(true)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
+  /** 「按规则重新生成全部计划」正在进行中 */
+  const [regenerating, setRegenerating] = useState(false)
   /** 手填的物种名（库里还没有的那些） */
   const [newSpecies, setNewSpecies] = useState('')
   /**
@@ -186,7 +191,7 @@ export function CareRuleManager({
     monthTo: rule.monthTo === null ? '' : String(rule.monthTo),
     repeatDays: rule.repeatDays === null ? '' : String(rule.repeatDays),
     oncePerWindow: rule.oncePerWindow,
-    sameDay: rule.sameDay === true,
+    sameDay: rule.sameDay !== false,
     recipeId: rule.recipeId === null ? '' : String(rule.recipeId),
     rotationText: (rule.rotation ?? []).join('\n'),
     phases: rule.activePhases ?? [],
@@ -431,12 +436,12 @@ export function CareRuleManager({
           ) : null}
           <Field
             label="植株之间"
-            help="默认按植株错开锚点日，免得七八盆全挤在同一天。秋埋底肥、换盆这类「一次把几盆都处理掉」的事可以勾上，让所有植株同一天做。"
+            help="默认所有植株同一天做 —— 同一条规则在月历上就是同一个日期，好记也好一起动手。取消勾选才会按植株错开（日常浇水想摊开时用）。"
           >
             <Checkbox
               checked={draft.sameDay}
               onChange={(v) => setDraft({ ...draft, sameDay: v })}
-              label="所有植株同一天做（不按植株错开）"
+              label="所有植株同一天做（推荐）"
             />
           </Field>
           <Field
@@ -477,6 +482,38 @@ export function CareRuleManager({
     )
   }
 
+  /**
+   * 按当前规则把所有植株今年的计划重排一遍。
+   *
+   * 为什么这里需要「全部」：规则一改（比如从「按植株错开」改成「同一天」），
+   * 已经生成的任务不会自己搬家，必须重新生成才生效 ——
+   * 逐株去花园点一遍太麻烦。代价要当面说清：
+   * 未完成的旧任务会被删掉替换，已完成 / 已跳过的记录不动。
+   */
+  const regenerateAll = async (): Promise<void> => {
+    const year = new Date().getFullYear()
+    const ok = window.confirm(
+      `按当前 ${rules.length} 条规则，重新生成所有植株 ${year} 年的计划？\n\n` +
+        '未完成的旧任务会被删掉、换成按新规则算出的日期；已完成 / 已跳过的记录保留。'
+    )
+    if (!ok) return
+    setRegenerating(true)
+    try {
+      const r = await window.api.care.generateAll(year)
+      toast.push(
+        r.created + r.removed > 0
+          ? `已重排 ${r.plants} 株：新增 ${r.created} 项，替换掉 ${r.removed} 项（保留 ${r.kept} 项）`
+          : `计划已是最新：${r.plants} 株，${r.kept} 项无需变动`,
+        'success'
+      )
+      onChanged?.()
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : '生成失败', 'error')
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
   return (
     <Modal
       title="养护规则库"
@@ -485,6 +522,13 @@ export function CareRuleManager({
         <>
           <span className="small muted">共 {rules.length} 条规则</span>
           <span className="spacer" />
+          <Button
+            disabled={regenerating}
+            title="按当前规则重排所有植株今年的计划：旧的未完成任务会被替换，已完成保留"
+            onClick={() => void regenerateAll()}
+          >
+            {regenerating ? '重新生成中…' : '按规则重新生成全部计划'}
+          </Button>
           <Button variant="primary" onClick={onClose}>
             完成
           </Button>
@@ -563,11 +607,15 @@ export function CareRuleManager({
                             整段只做一次
                           </div>
                         ) : null}
-                        {rule.sameDay ? (
+                        {rule.sameDay !== false ? (
                           <div className="muted" title="同一条规则下所有植株排在同一天">
                             同日做
                           </div>
-                        ) : null}
+                        ) : (
+                          <div className="muted" title="按植株错开锚点日">
+                            按植株错开
+                          </div>
+                        )}
                         {rule.recipeId ? (
                           <div className="muted" title="生成的任务会直接列出这份配方">
                             📋 {recipes.find((r) => r.id === rule.recipeId)?.name ?? `配方 #${rule.recipeId}`}
