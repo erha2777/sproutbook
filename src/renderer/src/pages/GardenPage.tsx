@@ -404,7 +404,13 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
             <SectionTitle right={<span className="small muted">共 {items.length} 株</span>}>我的植物</SectionTitle>
             <div className="card-grid">
               {items.map((plant) => (
-                <PlantCard key={plant.id} plant={plant} onClick={() => setEditing(plant)} />
+                <PlantCard
+                  key={plant.id}
+                  plant={plant}
+                  selected={selected === plant.id}
+                  onClick={() => setSelected(selected === plant.id ? null : plant.id)}
+                  onEdit={() => setEditing(plant)}
+                />
               ))}
             </div>
           </>
@@ -413,11 +419,11 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
         {/*
           选中某株后的详情：把「为什么是这个阶段、为什么画这么大」讲清楚。
 
-          只在**花园视图**里显示。之前在列表视图下也挂着 ——
-          切过去以后底下留着一个花园的详情面板，看着像没切干净。
-          列表视图里点卡片是打开编辑器，本来就不该有这一块。
+          **两种视图都有**：花园里点植株、列表里点卡片，选中的那一株都会在下面
+          展开这里 —— 生成计划、编辑这株、标记物候阶段、下一件要做的事都在这一块。
+          列表视图的编辑走卡片右上角的「编辑」，不跟「选中看详情」抢同一个点击。
         */}
-        {view === 'scene' && selectedPlant
+        {selectedPlant
           ? (() => {
               const g = growthOf(selectedPlant)
               const info = phases[selectedPlant.id]
@@ -581,11 +587,35 @@ export function GardenPage({ onGoSpecies }: { onGoSpecies: () => void }): ReactN
   )
 }
 
-function PlantCard({ plant, onClick }: { plant: PlantListItem; onClick: () => void }): ReactNode {
+function PlantCard({
+  plant,
+  onClick,
+  onEdit,
+  selected = false
+}: {
+  plant: PlantListItem
+  onClick: () => void
+  /** 右上角的编辑入口；不传就不显示（其他页面复用卡片时不需要） */
+  onEdit?: () => void
+  selected?: boolean
+}): ReactNode {
   const url = imageUrl(plant.coverThumb)
   const speciesName = plant.species?.commonName ?? '未关联物种'
   return (
-    <div className="pixel-card" onClick={onClick} title="点击编辑">
+    <div className={`pixel-card${selected ? ' selected' : ''}`} onClick={onClick} title="点击看这株的详情">
+      {onEdit ? (
+        <button
+          type="button"
+          className="card-edit"
+          title="编辑这株"
+          onClick={(event) => {
+            event.stopPropagation()
+            onEdit()
+          }}
+        >
+          编辑
+        </button>
+      ) : null}
       <div className="card-thumb">
         {url ? <img src={url} alt={plant.nickname} /> : <span className="placeholder">{PLANT_STATUS_ICONS[plant.status]}</span>}
       </div>
