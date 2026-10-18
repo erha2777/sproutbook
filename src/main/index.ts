@@ -352,15 +352,25 @@ function createWindow(): void {
               /*
                * `.cal-cell` 也进选择器：月历的整格是可点的（点某天看当天计划），
                * 它不是 button，不列进来的话「点日期」这条路在自检里根本点不到。
+               *
+               * **要轮询等待，不能只找一次**：did-finish-load 只代表 HTML 加载完，
+               * React 还没把列表渲染出来。之前找了立刻返回 false，
+               * 脚本照样报「已保存」—— 截出来的是上一屏，验证等于没做。
                */
               const clicked = await mainWindow?.webContents.executeJavaScript(
-                `(() => {
+                `(async () => {
                    const target = ${JSON.stringify(text)};
-                   const nodes = Array.from(document.querySelectorAll('button, .pixel-card, .nav-item, .cal-cell'));
-                   const hit = nodes.find((n) => (n.textContent || '').includes(target));
-                   if (!hit) return false;
-                   hit.click();
-                   return true;
+                   const deadline = Date.now() + 8000;
+                   while (Date.now() < deadline) {
+                     const nodes = Array.from(document.querySelectorAll('button, .pixel-card, .nav-item, .cal-cell'));
+                     const hit = nodes.find((n) => (n.textContent || '').includes(target));
+                     if (hit) {
+                       hit.click();
+                       return true;
+                     }
+                     await new Promise((r) => setTimeout(r, 200));
+                   }
+                   return false;
                  })()`
               )
               logStartup('界面自检：点击元素', { text, clicked })

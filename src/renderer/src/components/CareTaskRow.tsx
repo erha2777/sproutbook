@@ -118,10 +118,16 @@ export function CareTaskRow({
   const closed = task.status !== 'pending'
   const urgency = urgencyOf(task, today)
   /*
+   * 时间窗已经开了、但**到期日还没到** —— 这不是「该做了」，是「可以提前做」。
+   * 不区分的话，今天看一条 11 月 2 日的任务，徽章会写「该做了」，
+   * 看起来像是在说今天必须做。
+   */
+  const early = !closed && urgency === 'due' && task.dueDate > today
+  /*
    * dueDescription 在逾期时本身就以「已过期」开头，再拼一次标签就成了
    * 「已过期 · 已过期 26 天」。只有两者不重复时才拼。
    */
-  const urgencyLabel = CARE_URGENCY_LABELS[urgency]
+  const urgencyLabel = early ? '可以提前做' : CARE_URGENCY_LABELS[urgency]
   const dueText = dueDescription(task, today)
   const badgeText = dueText.startsWith(urgencyLabel) ? dueText : `${urgencyLabel} · ${dueText}`
 

@@ -91,6 +91,7 @@ import {
   monthsCovered,
   normalizePhases,
   parseSpeciesKeys,
+  pendingBuckets,
   phaseAgeDays,
   ruleMatchesSpecies,
   serializeSpeciesKeys,
@@ -1051,6 +1052,59 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('远期任务算「还早」', urgencyOf(task('2026-09-01'), '2026-06-10') === 'later')
       check('已完成不再判紧急度', urgencyOf(task('2026-06-10', 'done'), '2026-07-01') === 'closed')
       check('已跳过同样算关闭', urgencyOf(task('2026-06-10', 'skipped'), '2026-07-01') === 'closed')
+
+      /*
+       * 分桶：把「窗口开了但还没到期」和「今天该做」分开。
+       *
+       * 这是用户报过的一个真实问题：11 月 2 日的任务，时间窗从 10 月 18 日就开，
+       * 于是它出现在「今日 · 今天该做」里 —— 用户的反应是
+       * 「今日要做怎么会有大于今天的计划」。所以这里要把边界钉死。
+       */
+      const bucketTask = (dueDate: string, priority = 2) =>
+        ({ dueDate, windowDays: 3, status: 'pending', priority }) as Pick<
+          CareTask,
+          'dueDate' | 'windowDays' | 'status' | 'priority'
+        >
+      const buckets = pendingBuckets(
+        [
+          bucketTask('2026-06-01'), // 窗口 5/29~6/4，今天 6/10 → 逾期
+          bucketTask('2026-06-08'), // 窗口到 6/11，到期日已过 → 该做
+          bucketTask('2026-06-10'), // 今天到期 → 该做
+          bucketTask('2026-06-12'), // 窗口 6/9 已开，到期日还没到 → 可以提前做
+          bucketTask('2026-06-18'), // 窗口 6/15 才开，5 天后 → 快到了
+          bucketTask('2026-09-01') // 远 → 还早
+        ],
+        '2026-06-10'
+      )
+      check(
+        '分桶：逾期只收窗口已过的',
+        buckets.overdue.length === 1 && buckets.overdue[0].dueDate === '2026-06-01',
+        `overdue=${buckets.overdue.length}`
+      )
+      check(
+        '分桶：今天该做只收到期日 ≤ 今天',
+        buckets.due.length === 2 && buckets.due.every((t) => t.dueDate <= '2026-06-10'),
+        `due=${buckets.due.map((t) => t.dueDate).join(',')}`
+      )
+      check(
+        '分桶：窗口已开但到期日在未来 → 可以提前做，不算今天该做',
+        buckets.early.length === 1 && buckets.early[0].dueDate === '2026-06-12',
+        `early=${buckets.early.length}`
+      )
+      check(
+        '分桶：未来日期的任务绝不会进「今天该做」',
+        buckets.due.every((t) => t.dueDate <= '2026-06-10') && buckets.early.every((t) => t.dueDate > '2026-06-10')
+      )
+      check(
+        '分桶：快到了与还早各归各位',
+        buckets.soon.length === 1 && buckets.later.length === 1,
+        `soon=${buckets.soon.length} later=${buckets.later.length}`
+      )
+      check(
+        '分桶：同桶内按到期日升序',
+        buckets.due[0].dueDate < buckets.due[1].dueDate,
+        buckets.due.map((t) => t.dueDate).join(' < ')
+      )
 
       // 描述必须基于时间窗：写着 6/10、窗口 ±3 天，那 6/12 仍是「窗口内」，
       // 说成「已过 2 天」会让人误以为逾期

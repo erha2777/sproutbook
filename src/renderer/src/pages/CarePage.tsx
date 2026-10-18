@@ -299,9 +299,9 @@ export function CarePage({
    */
   const groups = useMemo(() => pendingBuckets(allOpen, today), [allOpen, today])
 
-  /** 全部未完成（含逾期），统计里的「未完成」用的就是它 */
+  /** 全部未完成（含逾期与「已进入时间窗」），统计里的「未完成」用的就是它 */
   const openRows = useMemo(
-    () => [...groups.overdue, ...groups.due, ...groups.soon, ...groups.later],
+    () => [...groups.overdue, ...groups.due, ...groups.early, ...groups.soon, ...groups.later],
     [groups]
   )
 

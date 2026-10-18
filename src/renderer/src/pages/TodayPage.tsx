@@ -365,9 +365,11 @@ export function TodayPage({
                 icon="🌿"
                 title={doneToday.length > 0 ? '今天的事都做完了' : '今天没有要做的事'}
                 hint={
-                  groups.soon.length > 0
-                    ? `有 ${groups.soon.length} 项在 7 天内到期，可以在「完整养护计划」里提前处理。`
-                    : '规则生成的任务会按时间窗落到这里；也可以到养护计划里手动加一条。'
+                  groups.early.length > 0
+                    ? `已有 ${groups.early.length} 项进入时间窗（最早 ${groups.early[0].dueDate.slice(5)}），还没到期，可以提前做。`
+                    : groups.soon.length > 0
+                      ? `有 ${groups.soon.length} 项在 7 天内进入时间窗，可以到「养护计划」里提前处理。`
+                      : '规则生成的任务会按时间窗落到这里；也可以到养护计划里手动加一条。'
                 }
                 action={<Button onClick={onGoPlans}>去看完整养护计划</Button>}
               />
@@ -380,13 +382,21 @@ export function TodayPage({
                   {groups.due.map(renderRow)}
                 </TaskGroup>
                 {/*
-                  快到了的**不列出来**（那是养护计划的月度视图要干的事），
-                  但要留一句数量 —— 否则用户会以为本周没事，
-                  而那正是最容易漏掉的一类。
+                  「已经可以做」和「快到了」都**不列出来** ——
+                  今日页只列今天（含逾期）真正该做的。但两条数量都要给：
+                  一条都不提的话，用户会以为接下来一周没事。
                 */}
-                {groups.soon.length > 0 ? (
-                  <div className="row tight" style={{ alignItems: 'center' }}>
-                    <span className="small muted">另有 {groups.soon.length} 项在 7 天内到期。</span>
+                {groups.early.length > 0 || groups.soon.length > 0 ? (
+                  <div className="row tight" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                    {groups.early.length > 0 ? (
+                      <span className="small muted">
+                        另有 {groups.early.length} 项已进入时间窗（最早 {groups.early[0].dueDate.slice(5)}），
+                        还没到期，可以提前做。
+                      </span>
+                    ) : null}
+                    {groups.soon.length > 0 ? (
+                      <span className="small muted">还有 {groups.soon.length} 项 7 天内进入时间窗。</span>
+                    ) : null}
                     <Button size="small" variant="ghost" onClick={onGoPlans}>
                       去养护计划看
                     </Button>

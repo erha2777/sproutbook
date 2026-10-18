@@ -537,22 +537,43 @@ export const CARE_URGENCY_LABELS: Record<CareUrgency, string> = {
  *
  * 所以口径只留一处：**全部未完成任务都进桶，不分月份**。
  * 月份只影响月历上画在哪个格子。
+ *
+ * ⚠️ `due` 和 `early` 的分界（1.8.4 加的）：
+ * 时间窗一开就算「该做了」的话，11 月 2 日的任务在 10 月 18 日就进了
+ * 「今天该做」——用户的原话是「今日要做怎么会有大于今天的计划」。
+ * 所以窗口内再按**到期日**分一次：
+ *   - `due`  ：到期日 ≤ 今天（真该做了，含时间窗内的「补做」）
+ *   - `early`：到期日 > 今天（窗口开了，可以提前做，但不叫今天该做）
+ * 今日页只列 `due`，`early` 只给一行数量 + 入口；养护计划的「该做」也只看 `due`。
  */
 export function pendingBuckets<T extends Pick<CareTask, 'status' | 'dueDate' | 'windowDays' | 'priority'>>(
   tasks: T[],
   today: string = todayIso()
-): { overdue: T[]; due: T[]; soon: T[]; later: T[] } {
-  const buckets = { overdue: [] as T[], due: [] as T[], soon: [] as T[], later: [] as T[] }
+): { overdue: T[]; due: T[]; early: T[]; soon: T[]; later: T[] } {
+  const buckets = {
+    overdue: [] as T[],
+    due: [] as T[],
+    early: [] as T[],
+    soon: [] as T[],
+    later: [] as T[]
+  }
   for (const task of tasks) {
     if (task.status !== 'pending') continue
     const urgency = urgencyOf(task, today)
     if (urgency === 'closed') continue
+    if (urgency === 'due') {
+      // 窗口内：到期日还没到 → 「可以提前做」，不算今天该做
+      if (task.dueDate > today) buckets.early.push(task)
+      else buckets.due.push(task)
+      continue
+    }
     buckets[urgency].push(task)
   }
   // 同紧急度里：先按日期，再按优先级。两页的顺序也就不用各写一遍。
   const order = (a: T, b: T): number => a.dueDate.localeCompare(b.dueDate) || a.priority - b.priority
   buckets.overdue.sort(order)
   buckets.due.sort(order)
+  buckets.early.sort(order)
   buckets.soon.sort(order)
   buckets.later.sort(order)
   return buckets
