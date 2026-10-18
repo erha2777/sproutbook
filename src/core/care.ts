@@ -449,6 +449,18 @@ export function generateTasks(
      * 只有规则显式关掉 `sameDay`（false）时才用调用方传进来的植株 id 错开。
      */
     const anchorSeed = rule.sameDay !== false && rule.id > 0 ? rule.id : seed
+    /**
+     * 「每月几号」：规则自己指定了就用它，否则按上面的种子算一个固定日。
+     * 同一件事拆成几条规则时（通用底肥 + 按物种配比的底肥组合），
+     * 只有手动填同一个号，它们才会落在同一天。
+     */
+    const anchorDay =
+      typeof rule.anchorDay === 'number' && Number.isFinite(rule.anchorDay)
+        ? Math.min(28, Math.max(1, Math.trunc(rule.anchorDay)))
+        : null
+    /** 某个月的锚点日（YYYY-MM-DD） */
+    const anchorDate = (month: number): string =>
+      `${year}-${String(month).padStart(2, '0')}-${String(anchorDay ?? spreadDay(year, month, anchorSeed)).padStart(2, '0')}`
 
     // ---- 按天重复 ----
     if (rule.repeatDays !== null && rule.repeatDays !== undefined && rule.repeatDays > 0) {
@@ -458,9 +470,12 @@ export function generateTasks(
       let index = 0
 
       for (const span of spans) {
-        // 起始日按植株错开，避免所有植物同一天施肥
-        const offset = Math.max(0, spreadDay(year, Number(span.from.slice(5, 7)), anchorSeed) - 1)
-        let cursor = addDays(span.from, offset)
+        const month = Number(span.from.slice(5, 7))
+        // 起始日：指定了「每月几号」就从那号开始，否则按种子错开
+        let cursor =
+          anchorDay !== null
+            ? anchorDate(month)
+            : addDays(span.from, Math.max(0, spreadDay(year, month, anchorSeed) - 1))
         // 上限保护：即使 repeatDays 被填成 1，也不会无限循环
         for (let guard = 0; guard < 400 && cursor <= span.to; guard++) {
           const label = rotation.length > 0 ? ` · ${rotation[index % rotation.length]}` : ''
@@ -482,13 +497,16 @@ export function generateTasks(
      * 而跨年写法（11,12,1,2）会断开成两段 —— 那本来就该是两个窗口。
      *
      * 日期落在窗口**开头**：底肥这类事早做比晚做好，入冬前要留出扎根时间。
-     * 用 spreadDay 错开几天免得所有植物挤在同一天，但最多推 6 天，别推到窗口中间。
+     * 没指定「每月几号」时最多推 6 天，别推到窗口中间。
      */
     if (rule.oncePerWindow) {
       for (const span of spans) {
         const month = Number(span.from.slice(5, 7))
-        const offset = Math.min(Math.max(0, spreadDay(year, month, anchorSeed) - 1), 6)
-        push(addDays(span.from, offset), rule, rule.title, defaultWindow)
+        const dueDate =
+          anchorDay !== null
+            ? anchorDate(month)
+            : addDays(span.from, Math.min(Math.max(0, spreadDay(year, month, anchorSeed) - 1), 6))
+        push(dueDate, rule, rule.title, defaultWindow)
       }
       continue
     }
@@ -497,8 +515,7 @@ export function generateTasks(
     // 注意：这里必须按**月份**迭代而不是 spans —— 3~4 月是连续的两个月，
     // dateSpansFor 会把它们合成一个 span，按 span 走只会产出一条任务。
     for (const month of monthsCovered(rule)) {
-      const day = spreadDay(year, month, anchorSeed)
-      push(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`, rule, rule.title, defaultWindow)
+      push(anchorDate(month), rule, rule.title, defaultWindow)
     }
   }
 

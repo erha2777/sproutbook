@@ -56,6 +56,7 @@ interface CareRuleRow {
   active_phases: string | null
   once_per_window: number
   same_day: number
+  anchor_day: number | null
   recipe_id: number | null
   action_type: string
   title: string
@@ -77,6 +78,7 @@ function mapRule(row: CareRuleRow): CareRule {
     repeatDays: row.repeat_days,
     oncePerWindow: row.once_per_window === 1,
     sameDay: row.same_day === 1,
+    anchorDay: row.anchor_day ?? null,
     recipeId: row.recipe_id ?? null,
     rotation: parseRotation(row.rotation_json),
     activePhases: parsePhases(row.active_phases),
@@ -161,11 +163,19 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
    * 只有显式传 false 才恢复「按植株错开」（日常浇水想摊开时可以用）。
    */
   const sameDay = input.sameDay !== false
+  /*
+   * 「每月几号」。超过 28 的一律夹住 —— 2 月和 4 月没有 30 / 31 号，
+   * 存 31 会生成一个不存在的日期。
+   */
+  const anchorDay =
+    typeof input.anchorDay === 'number' && Number.isFinite(input.anchorDay)
+      ? Math.min(28, Math.max(1, Math.trunc(input.anchorDay)))
+      : null
 
   if (input.id) {
     db.run(
       `UPDATE care_rules SET species_key=?, hemisphere=?, climate_zone=?, month_from=?, month_to=?,
-         repeat_days=?, once_per_window=?, same_day=?, recipe_id=?, rotation_json=?, active_phases=?,
+         repeat_days=?, once_per_window=?, same_day=?, anchor_day=?, recipe_id=?, rotation_json=?, active_phases=?,
          action_type=?, title=?, detail=?, priority=?,
          source=?, verified=?
        WHERE id=?`,
@@ -177,6 +187,7 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
       repeatDays,
       oncePerWindow ? 1 : 0,
       sameDay ? 1 : 0,
+      anchorDay,
       input.recipeId ?? null,
       rotationJson,
       phasesJson,
@@ -195,9 +206,9 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
 
   const r = db.run(
     `INSERT INTO care_rules (species_key, hemisphere, climate_zone, month_from, month_to,
-       repeat_days, once_per_window, same_day, recipe_id, rotation_json, active_phases,
+       repeat_days, once_per_window, same_day, anchor_day, recipe_id, rotation_json, active_phases,
        action_type, title, detail, priority, source, verified)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     serializeSpeciesKeys(input.speciesKeys),
     input.hemisphere,
     input.climateZone,
@@ -206,6 +217,7 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
     repeatDays,
     oncePerWindow ? 1 : 0,
     sameDay ? 1 : 0,
+    anchorDay,
     input.recipeId ?? null,
     rotationJson,
     phasesJson,

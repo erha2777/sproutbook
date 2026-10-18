@@ -1096,6 +1096,47 @@ export async function runSmoke(outFile: string): Promise<number> {
           mar.slice(8) === apr.slice(8),
           `${mar} vs ${apr}`
         )
+
+        /*
+         * 指定「每月几号」。
+         *
+         * 用户把秋埋底肥拆成了 4 条规则（通用 + 3 条按物种配比），
+         * 「同日做」只管得住单条规则，跨规则就各算各的日子。
+         * 填同一个号才能把同一件事对齐到一天。
+         */
+        const anchored = { ...monthlyRule, anchorDay: 6 }
+        const a1 = generateTasks([anchored], null, 2026, { spreadSeed: 1 })[0].dueDate
+        const a2 = generateTasks([anchored], null, 2026, { spreadSeed: 2 })[0].dueDate
+        check('指定日期：落在 6 号', a1 === '2026-10-06', a1)
+        check('指定日期：不同植株仍在同一天', a1 === a2, `${a1} vs ${a2}`)
+
+        const another = { ...monthlyRule, id: 90, title: '另一件事', anchorDay: 6 }
+        const aligned = generateTasks([anchored, another], null, 2026)
+        check(
+          '两条不同的规则填同一个号 → 对齐到同一天',
+          aligned.length === 2 && aligned.every((t) => t.dueDate === '2026-10-06'),
+          aligned.map((t) => t.dueDate).join(' ')
+        )
+
+        check(
+          '超过 28 的号会被夹到 28（小月不存在 29~31）',
+          generateTasks([{ ...monthlyRule, anchorDay: 31 }], null, 2026)[0].dueDate === '2026-10-28'
+        )
+
+        const onceAnchored = generateTasks(
+          [{ ...monthlyRule, monthFrom: 10, monthTo: 11, oncePerWindow: true, anchorDay: 6 }],
+          null,
+          2026
+        )
+        check(
+          '窗口内一次也认指定日期',
+          onceAnchored.length === 1 && onceAnchored[0].dueDate === '2026-10-06',
+          onceAnchored.map((t) => t.dueDate).join(' ')
+        )
+
+        const cycleAnchored = generateTasks([{ ...monthlyRule, repeatDays: 7, anchorDay: 6 }], null, 2026)
+        check('按天重复从指定日期开始', cycleAnchored[0].dueDate === '2026-10-06', cycleAnchored[0].dueDate)
+        check('按天重复仍在同一条规则内保持间隔', Boolean(cycleAnchored[1]?.dueDate), cycleAnchored[1]?.dueDate)
       }
 
       // 顺带确认这一列真的存得进去、读得回来
@@ -1117,10 +1158,12 @@ export async function runSmoke(outFile: string): Promise<number> {
           source: 'manual' as const,
           verified: true
         }
-        const saved = saveCareRule(db, { ...sameDayInput, title: '自检：同日底肥', sameDay: true })
+        const saved = saveCareRule(db, { ...sameDayInput, title: '自检：同日底肥', sameDay: true, anchorDay: 6 })
         check('规则可以保存「同一天」', saved.sameDay === true, String(saved.sameDay))
+        check('规则可以保存「每月几号」', saved.anchorDay === 6, String(saved.anchorDay))
         const reread = listCareRules(db, { speciesKey: '*' }).find((r) => r.id === saved.id)
         check('重新读出来仍然是同一天', reread?.sameDay === true, String(reread?.sameDay))
+        check('重新读出来仍然是 6 号', reread?.anchorDay === 6, String(reread?.anchorDay))
         // 不传就是默认值：同一天（用户要的是规律，不是每株一个日子）
         const plain = saveCareRule(db, { ...sameDayInput, title: '自检：默认规则' })
         check('默认就是同一天', plain.sameDay === true, String(plain.sameDay))

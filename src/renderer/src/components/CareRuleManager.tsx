@@ -43,6 +43,8 @@ interface Draft {
    * 关掉后恢复「按植株错开」—— 只有想让日常浇水摊开时才需要。
    */
   sameDay: boolean
+  /** 每月几号（1~28）。空＝自动按规则算 */
+  anchorDay: string
   /** 绑定的配方 id（字符串形式便于 select），空＝没有材料清单 */
   recipeId: string
   /** 每行一个轮换步骤 */
@@ -63,6 +65,7 @@ const BLANK: Draft = {
   repeatDays: '',
   oncePerWindow: false,
   sameDay: true,
+  anchorDay: '',
   recipeId: '',
   rotationText: '',
   phases: [],
@@ -152,6 +155,7 @@ export function CareRuleManager({
         repeatDays: draft.repeatDays.trim() ? Number(draft.repeatDays) : null,
         oncePerWindow: draft.oncePerWindow,
         sameDay: draft.sameDay,
+        anchorDay: draft.anchorDay.trim() ? Number(draft.anchorDay) : null,
         recipeId: draft.recipeId ? Number(draft.recipeId) : null,
         rotation: rotation.length > 0 ? rotation : null,
         activePhases: draft.phases.length > 0 ? draft.phases : null,
@@ -192,6 +196,7 @@ export function CareRuleManager({
     repeatDays: rule.repeatDays === null ? '' : String(rule.repeatDays),
     oncePerWindow: rule.oncePerWindow,
     sameDay: rule.sameDay !== false,
+    anchorDay: rule.anchorDay === null || rule.anchorDay === undefined ? '' : String(rule.anchorDay),
     recipeId: rule.recipeId === null ? '' : String(rule.recipeId),
     rotationText: (rule.rotation ?? []).join('\n'),
     phases: rule.activePhases ?? [],
@@ -444,6 +449,20 @@ export function CareRuleManager({
               label="所有植株同一天做（推荐）"
             />
           </Field>
+          {/*
+            同一件事被拆成几条规则时（通用底肥 + 各物种的底肥组合），
+            「同日做」只管得住单条规则；要对齐就得指定同一个日期。
+          */}
+          <Field
+            label="每月几号"
+            help="留空＝自动算一个固定日。同一件事写在几条规则里时，给它们填同一个号，才会落在同一天。1~28（29~31 在小月不存在，会按 28 算）。"
+          >
+            <TextInput
+              value={draft.anchorDay}
+              onChange={(v) => setDraft({ ...draft, anchorDay: v })}
+              placeholder="自动"
+            />
+          </Field>
           <Field
             label="绑定配方"
             help={
@@ -605,6 +624,11 @@ export function CareRuleManager({
                         ) : rule.oncePerWindow ? (
                           <div className="muted" title="跨月区间只生成一条任务，落在窗口开头">
                             整段只做一次
+                          </div>
+                        ) : null}
+                        {rule.anchorDay !== null && rule.anchorDay !== undefined ? (
+                          <div className="muted" title="规则里指定了每月的哪一天">
+                            每月 {rule.anchorDay} 号
                           </div>
                         ) : null}
                         {rule.sameDay !== false ? (

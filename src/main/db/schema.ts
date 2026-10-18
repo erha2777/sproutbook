@@ -526,6 +526,20 @@ const V13_SAME_DAY_DEFAULT = /* sql */ `
 UPDATE care_rules SET same_day = 1;
 `
 
+/**
+ * 规则可以指定「每月几号」。
+ *
+ * 起因：用户把「秋埋底肥」拆成了 4 条规则（1 条通用 + 3 条按物种配比），
+ * 「同日做」只保证**同一条规则内**的植株同一天 —— 跨规则就对不上了
+ * （通用规则 6 号、绣球系 21 号、月季系 27 号）。
+ * 同一件事既然写在几条规则里，就该能指定同一个日期。
+ *
+ * 1~28 有效（29~31 在小月不存在，统一夹到 28）。
+ */
+const V14_RULE_ANCHOR_DAY = /* sql */ `
+ALTER TABLE care_rules ADD COLUMN anchor_day INTEGER;
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -539,7 +553,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 10, name: 'log_recipe', sql: V10_LOG_RECIPE },
   { version: 11, name: 'env_district', sql: V11_ENV_DISTRICT },
   { version: 12, name: 'rule_same_day', sql: V12_RULE_SAME_DAY },
-  { version: 13, name: 'same_day_default', sql: V13_SAME_DAY_DEFAULT }
+  { version: 13, name: 'same_day_default', sql: V13_SAME_DAY_DEFAULT },
+  { version: 14, name: 'rule_anchor_day', sql: V14_RULE_ANCHOR_DAY }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */
