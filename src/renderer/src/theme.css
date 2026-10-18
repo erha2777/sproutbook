@@ -1132,6 +1132,10 @@ img {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  /* 和内容同宽：宽屏下不要把 tab 拉到屏幕两端 */
+  max-width: 1240px;
+  width: 100%;
+  margin: 0 auto;
   /* 顶部让位交给 .main（那里留了 38px），这里不再重复 */
   padding-top: 0;
 }
@@ -1140,13 +1144,14 @@ img {
   gap: 8px;
   flex-wrap: wrap;
   flex-shrink: 0;
-  padding: 2px 0 10px;
+  /* 14px：和下面滚动区预留的 scrollbar-gutter 对齐 */
+  padding: 2px 14px 10px;
 }
 .care-hub > .content {
   flex: 1;
   min-height: 0;
-  /* 和其他页面一致：左右/下留边（顶部由 .content-inner 补） */
-  padding: 0 14px 14px;
+  padding: 0;
+  scrollbar-gutter: stable both-edges;
 }
 .care-tab {
   padding: 7px 16px;
@@ -1373,7 +1378,9 @@ img {
   overflow-y: auto;
   overflow-x: hidden;
   /* 不给上内边距：滚动区起点就是裁剪边缘，内容不会从工具条上方漏出 */
-  padding: 0 14px 14px;
+  padding: 0 28px 24px;
+  /* 滚动条常驻占位，左右留白对称，内容不会因滚动条出现而左右跳 */
+  scrollbar-gutter: stable both-edges;
 }
 
 /*
@@ -1385,22 +1392,26 @@ img {
   top: 0;
   z-index: 4;
 }
-/* 铺满整宽，内容仍对齐 */
+/* 工具条跟内容同宽即可（已在 1280 内），不再向两侧铺满 */
 .content > .content-inner > .sticky-head {
-  margin: 0 -14px;
-  padding-left: 14px;
-  padding-right: 14px;
+  margin: 0;
 }
 
 .content-inner {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
 }
 
-/* 页面级内容补回被 .content 去掉的上内边距（随内容一起滚走） */
+/*
+ * 页面级内容：补回上内边距，并**限制最大宽度居中** ——
+ * 宽屏下（2K/4K）一行拉到 2000px 会非常难读，也显得「塞满」。
+ */
 .content > .content-inner {
-  padding-top: 14px;
+  padding-top: 20px;
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 /*
