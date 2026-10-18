@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Sproutbook 进程结构",
+    "locale": "zh-CN",
+    "output": ".archify/architecture-sproutbook-20261017-205145/sproutbook.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:erha2777/sproutbook.git",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "f342ee0ecf2db1a6eec174aed759cbc52cb3ca38"
+    }
+  },
+  "components": [
+    {
+      "id": "users",
+      "type": "external",
+      "label": "用户",
+      "sublabel": "本机桌面",
+      "pos": [40, 150],
+      "size": [110, 66]
+    },
+    {
+      "id": "renderer",
+      "type": "frontend",
+      "label": "渲染进程",
+      "sublabel": "React 19 · 8 个页面",
+      "pos": [200, 140],
+      "size": [190, 86],
+      "sources": [
+        { "path": "src/renderer/src/App.tsx", "line": 11, "end_line": 24, "label": "路由与导航" }
+      ]
+    },
+    {
+      "id": "preload",
+      "type": "security",
+      "label": "preload 桥",
+      "sublabel": "contextBridge 白名单",
+      "tag": "window.api",
+      "pos": [520, 140],
+      "size": [170, 86],
+      "sources": [
+        { "path": "src/preload/index.ts", "line": 137, "label": "exposeInMainWorld" },
+        { "path": "src/preload/index.ts", "line": 14, "end_line": 23, "label": "invoke 封装" }
+      ]
+    },
+    {
+      "id": "ipc",
+      "type": "backend",
+      "label": "IPC 注册",
+      "sublabel": "71 个通道",
+      "pos": [520, 380],
+      "size": [170, 74],
+      "sources": [
+        { "path": "src/main/ipc/index.ts", "line": 160, "label": "registerIpc" },
+        { "path": "src/main/ipc/index.ts", "line": 144, "end_line": 151, "label": "handle 封装" }
+      ]
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "数据仓库",
+      "sublabel": "db/repo 业务读写",
+      "pos": [250, 380],
+      "size": [190, 74],
+      "sources": [
+        { "path": "src/main/db/repo/plants.ts", "label": "仓储模块" },
+        { "path": "src/main/ipc/index.ts", "line": 412, "label": "ipc 调用仓储" }
+      ]
+    },
+    {
+      "id": "services",
+      "type": "backend",
+      "label": "服务层",
+      "sublabel": "AI · 天气 · 图片 · 密钥",
+      "pos": [780, 380],
+      "size": [190, 74],
+      "sources": [
+        { "path": "src/main/services/ai/client.ts", "line": 125, "label": "模型调用" },
+        { "path": "src/main/services/weather-providers.ts", "line": 668, "label": "天气请求" },
+        { "path": "src/main/services/images.ts", "line": 18, "label": "图片目录" }
+      ]
+    },
+    {
+      "id": "sqlite",
+      "type": "database",
+      "label": "SQLite",
+      "sublabel": "node:sqlite · 进程内",
+      "tag": "15 张表",
+      "pos": [250, 510],
+      "size": [190, 74],
+      "sources": [
+        { "path": "src/main/db/connection.ts", "line": 12, "label": "DatabaseSync" },
+        { "path": "src/main/db/schema.ts", "line": 26, "label": "建表" }
+      ]
+    },
+    {
+      "id": "disk",
+      "type": "database",
+      "label": "本地文件",
+      "sublabel": "图片 · 密钥 · 备份",
+      "pos": [780, 560],
+      "size": [190, 74],
+      "sources": [
+        { "path": "src/main/services/images.ts", "line": 69, "label": "写缩略图" },
+        { "path": "src/main/services/secrets.ts", "line": 49, "label": "写密钥" },
+        { "path": "src/main/db/index.ts", "line": 29, "label": "备份目录" }
+      ]
+    },
+    {
+      "id": "ai",
+      "type": "external",
+      "label": "模型 API",
+      "sublabel": "OpenAI 兼容端点",
+      "pos": [1040, 330],
+      "size": [150, 66],
+      "sources": [
+        { "path": "src/main/services/ai/client.ts", "line": 60, "label": "默认 base URL" },
+        { "path": "src/main/services/ai/client.ts", "line": 288, "label": "模型探测" }
+      ]
+    },
+    {
+      "id": "weather",
+      "type": "external",
+      "label": "天气 API",
+      "sublabel": "Open-Meteo · 和风",
+      "pos": [1040, 430],
+      "size": [150, 66],
+      "sources": [
+        { "path": "src/main/services/weather-providers.ts", "line": 448, "end_line": 450, "label": "地理编码" },
+        { "path": "src/main/services/weather-providers.ts", "line": 630, "end_line": 632, "label": "天气预报" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "渲染进程 · Chromium",
+      "wraps": ["renderer", "preload"]
+    },
+    {
+      "kind": "region",
+      "label": "主进程 · Node 运行时",
+      "wraps": ["ipc", "repo", "services"]
+    }
+  ],
+  "connections": [
+    { "id": "users-to-renderer", "from": "users", "to": "renderer" },
+    { "id": "renderer-to-preload", "from": "renderer", "to": "preload", "label": "window.api", "variant": "emphasis" },
+    { "id": "preload-to-ipc", "from": "preload", "to": "ipc", "label": "ipcRenderer.invoke", "variant": "emphasis", "fromSide": "bottom", "toSide": "top" },
+    { "id": "ipc-to-repo", "from": "ipc", "to": "repo", "label": "仓储调用", "fromSide": "left", "toSide": "right" },
+    { "id": "repo-to-sqlite", "from": "repo", "to": "sqlite", "label": "SQL", "fromSide": "bottom", "toSide": "top" },
+    { "id": "ipc-to-services", "from": "ipc", "to": "services", "label": "服务调用", "fromSide": "right", "toSide": "left" },
+    { "id": "services-to-ai", "from": "services", "to": "ai", "label": "HTTPS", "variant": "dashed", "fromSide": "right", "toSide": "left" },
+    { "id": "services-to-weather", "from": "services", "to": "weather", "label": "HTTPS", "variant": "dashed", "fromSide": "right", "toSide": "left" },
+    { "id": "services-to-disk", "from": "services", "to": "disk", "label": "图片 / 密钥", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "进程隔离",
+      "items": [
+        "contextIsolation 开启、nodeIntegration 关闭",
+        "preload 只暴露白名单方法，不交出 ipcRenderer",
+        "主进程把错误转成异常，渲染层可直接 try/catch"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "共享内核",
+      "items": [
+        "core/ 是纯函数，两端各自打包一份",
+        "不 import electron、不碰数据库与文件",
+        "所以渲染层能直接算紧急度，不必多跑一次 IPC"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "旁路写入",
+      "items": [
+        "AI 调用直连 ai_runs 审计表，绕过仓储层",
+        "密钥文件以 0600 权限落盘",
+        "图片与缩略图由服务层写入 images/"
+      ]
+    }
+  ]
+}

@@ -2,6 +2,62 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.7.4] - 2026-10-18
+
+### 修复：应用启动即退出（Chromium 单实例锁依赖符号链接）
+
+用户报告「Sproutbook.exe 运行不了了」。查下来**不是应用代码坏了**，
+是环境和 Windows 单实例锁机制的冲突。
+
+#### 根因（有实测证据）
+
+Chromium 在 Windows 上把单实例锁实现成**符号链接**：
+`userData\SingletonLock` → `"主机名-进程号"`。而创建符号链接需要
+**管理员权限或开发者模式**。实测这台机器：
+
+```
+New-Item SymbolicLink  →  UnauthorizedAccessException: 此操作需要管理员权限
+开发者模式              →  未开启
+whoami /groups          →  BUILTIN\Administrators: Group used for deny only
+Mandatory Label         →  Medium Mandatory Level
+```
+
+用户**在管理员组里，但被 UAC 过滤成 Medium 完整性**（这也是「以管理员
+身份运行」仍可提权的原因）。于是 Chromium 报：
+
+```
+process_singleton_win.cc:457] Lock file can not be created! Error code: 5
+```
+
+`requestSingleInstanceLock()` **恒返回 false** —— 应用每次启动都以为
+「已有另一个实例在运行」，于是自己退出。用户看到的就是「打不开」，
+而且日志里没有任何应用层错误：它在 JS 之前就失败了。
+
+**时间点对得上**：Windows 在 **2026-10-16** 装了 3 个更新
+（KB5127648 / KB5127647 / KB5127690），10-15 还能正常运行。
+
+#### 修法：原生锁拿不到就降级到自建文件锁
+
+- 先试 `app.requestSingleInstanceLock()`（它还能带来 `second-instance`
+  的「把已有窗口提到前台」）
+- 失败时降级：`userData\.instance-lock` 里存 `进程号:时间戳`，
+  靠**进程存活检查**判断是否真有实例在跑 —— 不需要任何特权
+- 残留锁（上个进程被强杀）自动接管；超过 24 小时的锁一律当残留，
+  防 Windows 复用进程号导致误判「已有实例」
+- 连自建锁都写不进去时**继续启动**（多开由 SQLite 自己兜）
+  —— 宁可多开，也别把用户拦在门外
+- 锁类型写进日志，以后诊断一眼能看到走的是哪条路
+
+#### 没能做到的事（诚实记录）
+
+改完后我**无法在当前环境里端到端验证**：Electron 二进制在这个
+DSH 会话里被限制了文件写入（实测 `electron.exe` 以 Node 模式运行时
+连 `%TEMP%` 都写不进去，而真正的 `node.exe` 写同样的文件正常），
+所以启动只会一路撞在 `unable to open database file` 上。
+
+已验证的部分：类型检查通过、自检 746 项通过、修复代码确认打进了
+`app.asar`。**真机启动验收需要用户完成。**
+
 ### 关于版本号与 tag
 
 **1.7.0 之后，每个真正打包交付的版本都有对应的 git tag**：

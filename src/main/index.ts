@@ -10,7 +10,7 @@
  */
 
 import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
-import { writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { closeDatabase, dataDir, dbFilePath, getLastReport, imagesDir, initDatabase } from './db'
 import { registerIpc } from './ipc'
@@ -108,14 +108,111 @@ registerImageScheme()
  * 只调用 `app.quit()` 是不够的 —— 它是异步的，`app.whenReady()` 依然会触发，
  * 于是第二个实例照样去打开同一个数据库文件，用户看到的就是
  * 「数据库初始化失败：unable to open database file」。
+ *
+ * ## 为什么要自己实现一份（2026-10-18 的真实事故）
+ *
+ * Chromium 在 Windows 上把单实例锁实现成**符号链接**：
+ * `userData\SingletonLock` → `"主机名-进程号"`。而创建符号链接需要
+ * **管理员权限或开发者模式**。
+ *
+ * 2026-10-16 的 Windows 安全更新之后，这台机器上（非管理员用户、
+ * 开发者模式未开）创建符号链接被拒，Chromium 报：
+ *
+ *     process_singleton_win.cc:457] Lock file can not be created! Error code: 5
+ *
+ * 于是 `requestSingleInstanceLock()` **恒返回 false** —— 应用每次启动都以为
+ * 「已有另一个实例在运行」，然后自己退出。用户看到的就是「双击打不开」，
+ * 而且日志里没有任何应用层错误，因为它在 JS 之前就失败了。
+ *
+ * 所以：**先试原生的**（它还能带给我们 second-instance 的「把已有窗口提到前台」），
+ * **失败就降级到自建文件锁** —— 只用普通文件 + 进程存活检查，不需要任何特权。
  */
-const hasSingleInstanceLock = isSmoke ? true : app.requestSingleInstanceLock()
+interface HeldLock {
+  ok: boolean
+  /** native = Electron 原生锁（可收到 second-instance）；file = 自建降级锁 */
+  kind: 'native' | 'file'
+  release: () => void
+}
 
-if (!hasSingleInstanceLock) {
+/** 进程是否还活着。EPERM 说明进程存在但没权限访问，也算活着。 */
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/**
+ * 自建文件锁：`userData\.instance-lock` 里存 `进程号:时间戳`。
+ *
+ * 残留的锁文件（上个进程被强杀、没机会清理）靠**进程存活检查**判断：
+ * 那个 pid 已经不在了就接管，不需要用户手动删文件。
+ *
+ * 为什么还要看时间戳：Windows 会复用进程号。如果只信「pid 还活着」，
+ * 一个恰好复用到同号的无辜进程就会让我们误判「已有实例」，
+ * 用户表现是「双击打不开」。超过 24 小时的锁一律当作残留。
+ */
+function acquireFileLock(dir: string): HeldLock {
+  const lockFile = join(dir, '.instance-lock')
+  const LOCK_MAX_AGE_MS = 24 * 60 * 60 * 1000
+  try {
+    mkdirSync(dir, { recursive: true })
+    if (existsSync(lockFile)) {
+      const [pidText, tsText] = readFileSync(lockFile, 'utf-8').trim().split(':')
+      const pid = Number(pidText)
+      const ts = Number(tsText)
+      const stale = !Number.isFinite(ts) || Date.now() - ts > LOCK_MAX_AGE_MS
+      if (!stale && isProcessAlive(pid) && pid !== process.pid) {
+        return { ok: false, kind: 'file', release: () => {} }
+      }
+    }
+    writeFileSync(lockFile, `${process.pid}:${Date.now()}`, 'utf-8')
+    return {
+      ok: true,
+      kind: 'file',
+      release: () => {
+        try {
+          rmSync(lockFile, { force: true })
+        } catch {
+          // 退出阶段，尽力而为
+        }
+      }
+    }
+  } catch (error) {
+    // 连自建锁都写不进去：宁可启动，也别把用户拦在门外（多开由 SQLite 自己兜）
+    logStartup('自建单实例锁失败（继续启动，可能允许多开）', { error: String(error) })
+    return { ok: true, kind: 'file', release: () => {} }
+  }
+}
+
+const instanceLock: HeldLock = isSmoke
+  ? { ok: true, kind: 'native', release: () => {} }
+  : ((): HeldLock => {
+      let nativeOk = false
+      try {
+        nativeOk = app.requestSingleInstanceLock()
+      } catch (error) {
+        logStartup('原生单实例锁抛错，将降级为自建文件锁', { error: String(error) })
+      }
+      if (nativeOk) return { ok: true, kind: 'native', release: () => {} }
+      logStartup('原生单实例锁不可用（Chromium 的 SingletonLock 符号链接被拒），改用自建文件锁', {
+        userData: app.getPath('userData')
+      })
+      return acquireFileLock(app.getPath('userData'))
+    })()
+
+if (!instanceLock.ok) {
   // 记一笔：否则这次启动在用户眼里就是「闪退」，日志是唯一的线索
-  logStartup('未取得单实例锁：已有另一个 Sproutbook 在运行，本实例退出')
+  logStartup('未取得单实例锁：已有另一个 Sproutbook 在运行，本实例退出', { kind: instanceLock.kind })
   app.quit()
 } else {
+  // 自建锁收不到 second-instance（那是 Chromium 的机制），退出时自己清理
+  if (instanceLock.kind === 'file') {
+    app.on('will-quit', () => instanceLock.release())
+  }
   app.on('second-instance', () => {
     const [win] = BrowserWindow.getAllWindows()
     if (win) {
@@ -343,8 +440,8 @@ app.whenReady().then(async () => {
   // 没抢到单实例锁：直接退出，绝不碰数据库。
   // 否则会和已经运行的实例抢同一个 SQLite 文件，用户看到的是
   // 「unable to open database file」这种极具误导性的报错。
-  if (!hasSingleInstanceLock) {
-    console.log('[app] 已有另一个 Sproutbook 实例在运行，本实例退出。')
+  if (!instanceLock.ok) {
+    console.log(`[app] 已有另一个 Sproutbook 实例在运行，本实例退出。（锁类型：${instanceLock.kind}）`)
     app.exit(0)
     return
   }

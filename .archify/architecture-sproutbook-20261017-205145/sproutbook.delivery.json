@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "812f71fd-af41-4e7b-88e2-a1ebeca8a794",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\admin\\Desktop\\ai开发\\stardew valley\\.archify\\architecture-sproutbook-20261017-205145\\candidate.json",
+  "output": "C:\\Users\\admin\\Desktop\\ai开发\\stardew valley\\.archify\\architecture-sproutbook-20261017-205145\\sproutbook.html",
+  "specification": {
+    "sha256": "7d59af1aa39296bf78567bf2c1da5d21cb3288287ff271d54b75c63b70593899",
+    "bytes": 6618
+  },
+  "artifact": {
+    "sha256": "9af3d83f80bce6110ba1f762dfc69a2933ae80309262170bb5dc8b8138326898",
+    "bytes": 765591
+  }
+}
