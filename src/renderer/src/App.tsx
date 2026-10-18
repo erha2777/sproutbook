@@ -8,12 +8,14 @@ import { TemplatesPage } from './pages/TemplatesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { RecipesPage } from './pages/RecipesPage'
 import { CarePage } from './pages/CarePage'
+import { TodayPage } from './pages/TodayPage'
 
 type Route =
   | { name: 'garden' }
   | { name: 'species' }
   | { name: 'species-edit'; id: number | null }
   | { name: 'recipes' }
+  | { name: 'today' }
   | { name: 'plans' }
   | { name: 'templates' }
   | { name: 'settings' }
@@ -21,6 +23,7 @@ type Route =
 const NAV: Array<{ key: Route['name']; icon: string; label: string }> = [
   { key: 'garden', icon: '🪴', label: '我的花园' },
   { key: 'species', icon: '📖', label: '物种库' },
+  { key: 'today', icon: '🌤️', label: '今日' },
   { key: 'plans', icon: '📅', label: '养护计划' },
   { key: 'recipes', icon: '🧪', label: '配方' },
   { key: 'templates', icon: '🧩', label: '信息模板' },
@@ -30,6 +33,7 @@ const NAV: Array<{ key: Route['name']; icon: string; label: string }> = [
 const HASH_TO_ROUTE: Record<string, Route['name']> = {
   garden: 'garden',
   species: 'species',
+  today: 'today',
   plans: 'plans',
   recipes: 'recipes',
   templates: 'templates',
@@ -300,6 +304,15 @@ function Shell(): ReactNode {
           {route.name === 'settings' ? <SettingsPage /> : null}
 
           {route.name === 'plans' ? <CarePage onCareChanged={refreshCareBadge} /> : null}
+
+          {/*
+            今日页：当天待办 + 天气预警。
+            这两块原来挤在养护计划顶部，翻月、统计、月历都在抢同一屏，
+            「今天该干什么」反而要翻半天才看见。
+          */}
+          {route.name === 'today' ? (
+            <TodayPage onCareChanged={refreshCareBadge} onGoPlans={() => setRoute({ name: 'plans' })} />
+          ) : null}
 
           {route.name === 'recipes' ? <RecipesPage /> : null}
           </PageErrorBoundary>

@@ -1,6 +1,6 @@
 # Sproutbook 架构说明
 
-> 描述 **v1.7.3 的当前实现**。历史设计推演（为什么这么定、放弃了什么）见 [需求分析与技术方案.md](./需求分析与技术方案.md)。
+> 描述 **v1.8.0 的当前实现**。历史设计推演（为什么这么定、放弃了什么）见 [需求分析与技术方案.md](./需求分析与技术方案.md)。
 > 图使用 Mermaid，GitHub、VS Code、Obsidian 均可直接渲染。
 
 ---
@@ -25,8 +25,8 @@
 ```mermaid
 flowchart TB
     subgraph R["渲染进程 · React 19"]
-        PAGES["pages/<br/>Care · Garden · Species · Recipes<br/>Settings · Templates · PlantEditor · SpeciesEditor"]
-        COMP["components/<br/>ui · DynamicForm · CareRuleManager<br/>CareCalendar · ImageStrip · TransferPanel<br/>AiDraftDialog · PlantSprite · WeatherIcon"]
+        PAGES["pages/<br/>Garden · Today · Care · Species · Recipes<br/>Settings · Templates · PlantEditor · SpeciesEditor"]
+        COMP["components/<br/>ui · DynamicForm · CareRuleManager · CareTaskRow<br/>CareCalendar · ImageStrip · TransferPanel · WeatherPanel<br/>AiDraftDialog · PlantSprite · WeatherIcon"]
     end
 
     API["shared/api.ts<br/>SproutbookApi 类型契约"]
@@ -73,6 +73,17 @@ flowchart TB
 | `src/renderer/` | React 页面与组件 | 只能通过 `window.api` 访问主进程 |
 
 路径别名在三份构建配置里一致（`electron.vite.config.ts`）：`@core` → `src/core`，`@shared` → `src/shared`，`@` → `src/renderer/src`。
+
+### 「今日」与「养护计划」的分工（v1.8.0）
+
+两块界面面对的是**同一批养护任务**（`care:tasks`），只是口径不同：
+
+| 页面 | 口径 | 谁在用 |
+|---|---|---|
+| **今日** | 全部未完成任务里 `urgencyOf` = `overdue` / `due`（跨月、跨年）；勾完成、跳过、撤销；天气预警 | 每天打开看「今天该干什么」 |
+| **养护计划** | 选中月份的整月任务 + 全年统计 + 月历 + 养护日志 | 排计划、翻月份、清理、查历史 |
+
+任务行（`components/CareTaskRow.tsx`）和天气面板（`components/WeatherPanel.tsx`）都是**共享组件**，不各自复制一份 —— 这个仓库为「双份实现」付过代价（`suggestTask` 的副本少了一个「前」字，而自检测的是没人用的那份）。
 
 ---
 
@@ -263,8 +274,8 @@ src/
 │   ├── db/            连接、迁移、schema、种子、备份、repo
 │   └── services/      ai / weather / images / secrets / transfer
 └── renderer/
-    ├── src/pages/     8 个页面
-    └── src/components/ 14 个组件
+    ├── src/pages/     9 个页面（Garden · Today · Care · Species · Recipes · Settings · Templates · PlantEditor · SpeciesEditor）
+    └── src/components/ 16 个组件（含 CareTaskRow · WeatherPanel）
 ```
 
 ---
