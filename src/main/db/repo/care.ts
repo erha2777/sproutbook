@@ -938,6 +938,65 @@ export function addCareLog(
   return log
 }
 
+export function updateCareLog(
+  db: Db,
+  id: number,
+  patch: {
+    content?: string | null
+    kind?: string
+    logDate?: string
+    /** 新加的照片（已导入 images 表） */
+    addImageIds?: number[]
+    /** 要摘掉的照片 id（文件由 IPC 层清理） */
+    removeImageIds?: number[]
+  }
+): CareLog | null {
+  const row = db.get<CareLogRow>('SELECT * FROM care_logs WHERE id = ?', id)
+  if (!row) return null
+
+  const sets: string[] = []
+  const params: Array<string | number | null> = []
+  if (patch.content !== undefined) {
+    sets.push('content = ?')
+    params.push(patch.content)
+  }
+  if (patch.kind !== undefined) {
+    sets.push('kind = ?')
+    params.push(patch.kind)
+  }
+  if (patch.logDate !== undefined) {
+    sets.push('log_date = ?')
+    params.push(patch.logDate)
+  }
+  if (sets.length > 0) {
+    db.run(`UPDATE care_logs SET ${sets.join(', ')} WHERE id = ?`, ...params, id)
+  }
+
+  const removeIds = (patch.removeImageIds ?? []).filter((v) => Number.isFinite(v))
+  if (removeIds.length > 0) {
+    const placeholders = removeIds.map(() => '?').join(',')
+    // 限定 log_id：不让人通过日志编辑删掉别的记录上的照片
+    db.run(`DELETE FROM images WHERE log_id = ? AND id IN (${placeholders})`, id, ...removeIds)
+  }
+
+  const addIds = (patch.addImageIds ?? []).filter((v) => Number.isFinite(v))
+  if (addIds.length > 0) {
+    const placeholders = addIds.map(() => '?').join(',')
+    db.run(
+      `UPDATE images SET log_id = ?, plant_id = COALESCE(plant_id, ?) WHERE id IN (${placeholders})`,
+      id,
+      row.plant_id,
+      ...addIds
+    )
+  }
+
+  const updated = db.get<CareLogRow>('SELECT * FROM care_logs WHERE id = ?', id)
+  if (!updated) return null
+  const log = mapLog(updated)
+  log.images = listLogImages(db, id)
+  return log
+}
+
 export function deleteCareLog(db: Db, id: number): boolean {
   // 先删照片记录；文件由 IPC 层在拿到文件名后清理（repo 不碰文件系统）
   db.run('DELETE FROM images WHERE log_id = ?', id)

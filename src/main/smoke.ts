@@ -122,6 +122,7 @@ import {
   saveCareRule,
   setPlantPhase,
   skipCareTask,
+  updateCareLog,
   updateCareTask
 } from './db/repo/care'
 import { seedCareRules } from './db/seed'
@@ -1524,6 +1525,46 @@ export async function runSmoke(outFile: string): Promise<number> {
         check('照片挂到了植株上', listImages(db, { plantId: carePlantId }).length >= 2)
         check('删除带照片的日志', deleteCareLog(db, withPhotos.id) === true)
         check('删日志会一起删掉照片记录', listLogImages(db, withPhotos.id).length === 0)
+      }
+
+      /*
+       * 编辑日志：正文 / 类型 / 日期 + 照片增删。
+       *
+       * 照片删除分两层：这里只验证**记录**被删掉；文件由 IPC 层清（smoke 不碰文件）。
+       */
+      {
+        const a = addImage(db, { plantId: carePlantId, path: 'smoke-edit-a.png' })
+        const b = addImage(db, { plantId: carePlantId, path: 'smoke-edit-b.png' })
+        const original = addCareLog(db, {
+          plantId: carePlantId,
+          content: '原始内容',
+          kind: 'note',
+          logDate: '2026-05-02',
+          imageIds: [a.id]
+        })
+        const edited = updateCareLog(db, original.id, {
+          content: '改过的内容',
+          kind: 'water',
+          logDate: '2026-05-01',
+          addImageIds: [b.id],
+          removeImageIds: [a.id]
+        })
+        check(
+          '编辑日志：正文 / 类型 / 日期都能改',
+          edited?.content === '改过的内容' && edited.kind === 'water' && edited.logDate === '2026-05-01',
+          `${edited?.content} / ${edited?.kind} / ${edited?.logDate}`
+        )
+        check(
+          '编辑日志：能加照片、能摘旧照片',
+          edited?.images.length === 1 && edited.images[0].path === 'smoke-edit-b.png',
+          edited?.images.map((i) => i.path).join(',')
+        )
+        check('编辑日志：旧照片的记录确实没了', listLogImages(db, original.id).length === 1)
+        check(
+          '编辑不存在的日志返回 null',
+          updateCareLog(db, 9_999_999, { content: 'x' }) === null
+        )
+        deleteCareLog(db, original.id)
       }
 
       // ---- 概览 ----

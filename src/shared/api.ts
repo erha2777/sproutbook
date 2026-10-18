@@ -296,8 +296,24 @@ export interface SproutbookApi {
       /** 先从 images.pick 导入，再把 id 传进来；保存时挂到这条日志上 */
       imageIds?: number[]
     }): Promise<CareLog>
+    /**
+     * 改一条已有的记录：正文 / 类型 / 日期，以及照片的增删。
+     *
+     * 照片分两个方向：`addImageIds` 是先用 images.pick 导入的新图，
+     * `removeImageIds` 是要摘掉的旧图（文件由主进程一并删除）。
+     */
+    updateLog(id: number, patch: CareLogPatch): Promise<CareLog | null>
     removeLog(id: number): Promise<boolean>
   }
+}
+
+export interface CareLogPatch {
+  content?: string | null
+  kind?: string
+  /** YYYY-MM-DD */
+  logDate?: string
+  addImageIds?: number[]
+  removeImageIds?: number[]
 }
 
 // ---------------------------------------------------------------------------

@@ -125,6 +125,7 @@ const api: SproutbookApi = {
 
     logs: (plantId, limit) => call('care:logs', plantId, limit),
     addLog: (input) => call('care:log.add', input),
+    updateLog: (id, patch) => call('care:log.update', id, patch),
     removeLog: (id) => call('care:log.delete', id)
   },
   transfer: {

@@ -72,9 +72,10 @@ import {
   saveCareRule,
   setPlantPhase,
   skipCareTask,
+  updateCareLog,
   updateCareTask
 } from '../db/repo/care'
-import type { CareTaskPatch, CareTaskQuery } from '../../shared/api'
+import type { CareLogPatch, CareTaskPatch, CareTaskQuery } from '../../shared/api'
 import type { CareHemisphere, CarePhase, CareRuleInput, CareTaskInput } from '../../core/types'
 import {
   applyImport,
@@ -563,6 +564,26 @@ function registerImageIpc(): void {
 
   handle('care:logs', (plantId?: number, limit?: number) => listCareLogs(getDb(), { plantId, limit }))
   handle('care:log.add', (input: Parameters<typeof addCareLog>[1]) => addCareLog(getDb(), input))
+  handle('care:log.update', (id: number, patch: CareLogPatch) => {
+    /*
+     * 先记下要摘掉的照片文件名，改完再把文件删掉 ——
+     * 记录删掉之后就查不到 path 了。
+     */
+    const removeIds = (patch.removeImageIds ?? []).filter((v) => Number.isFinite(v))
+    const files =
+      removeIds.length > 0
+        ? getDb()
+            .all<{ path: string; thumb_path: string | null }>(
+              `SELECT path, thumb_path FROM images WHERE log_id = ? AND id IN (${removeIds.map(() => '?').join(',')})`,
+              id,
+              ...removeIds
+            )
+            .flatMap((row) => [row.path, row.thumb_path])
+        : []
+    const updated = updateCareLog(getDb(), id, patch)
+    if (updated) removeImageFiles(files)
+    return updated
+  })
   handle('care:log.delete', (id: number) => {
     /*
      * 先取文件名再删记录 —— 删完就查不到 path 了。

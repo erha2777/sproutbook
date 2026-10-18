@@ -43,6 +43,13 @@ export function LogsPage(): ReactNode {
   const [picked, setPicked] = useState<ImageRecord[]>([])
   /** 预览大图 */
   const [preview, setPreview] = useState<CareLogImage | null>(null)
+  /** 正在编辑的日志 id（null = 没有在编辑） */
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editKind, setEditKind] = useState('note')
+  const [editDate, setEditDate] = useState('')
+  const [editText, setEditText] = useState('')
+  const [editAdd, setEditAdd] = useState<ImageRecord[]>([])
+  const [editRemove, setEditRemove] = useState<number[]>([])
 
   useEffect(() => {
     void (async () => {
@@ -147,6 +154,66 @@ export function LogsPage(): ReactNode {
     }
   }
 
+  /*
+   * 编辑一条已有记录。
+   *
+   * 照片分两条路：编辑期间新选的（editAdd，先导入、保存时挂上），
+   * 以及标记要摘掉的旧照片（editRemove，保存时才真正删除文件）。
+   * 取消编辑要把 editAdd 里的文件清掉，不然会攒孤儿。
+   */
+  const startEdit = (log: CareLog): void => {
+    setEditingId(log.id)
+    setEditKind(log.kind)
+    setEditDate(log.logDate)
+    setEditText(log.content ?? '')
+    setEditAdd([])
+    setEditRemove([])
+  }
+
+  const cancelEdit = (): void => {
+    for (const image of editAdd) void window.api.images.remove(image.id).catch(() => undefined)
+    setEditingId(null)
+    setEditAdd([])
+    setEditRemove([])
+  }
+
+  const pickEditPhotos = async (): Promise<void> => {
+    try {
+      const res = await window.api.images.pick({})
+      if (res.canceled) return
+      if (res.failures && res.failures.length > 0) {
+        toast.push(`有 ${res.failures.length} 张没能导入：${res.failures[0]}`, 'error')
+      }
+      if (res.imported.length > 0) setEditAdd((prev) => [...prev, ...res.imported])
+    } catch (error) {
+      toast.push(`选照片失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    }
+  }
+
+  const saveEdit = async (): Promise<void> => {
+    if (editingId === null) return
+    try {
+      const updated = await window.api.care.updateLog(editingId, {
+        kind: editKind,
+        logDate: editDate,
+        content: editText.trim() ? editText.trim() : null,
+        addImageIds: editAdd.map((i) => i.id),
+        removeImageIds: editRemove
+      })
+      if (!updated) {
+        toast.push('这条日志已经不在了，可能已在别处删过', 'error')
+      } else {
+        toast.push('已保存', 'success')
+      }
+      setEditingId(null)
+      setEditAdd([])
+      setEditRemove([])
+      await load(plantId)
+    } catch (error) {
+      toast.push(`保存失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    }
+  }
+
   return (
     <div className="content-inner">
       <Panel>
@@ -226,46 +293,134 @@ export function LogsPage(): ReactNode {
           <div className="log-timeline">
             {logs.map((log) => {
               const plant = plants.find((p) => p.id === log.plantId)
+              const editing = editingId === log.id
               return (
                 <div key={log.id} className="log-item">
-                  <div className="log-date">{log.logDate}</div>
+                  <div className="log-date">{editing ? editDate || log.logDate : log.logDate}</div>
                   <div style={{ flex: 1 }}>
-                    <div>
-                      {/*
-                        走 logKindLabel 而不是 CARE_ACTION_LABELS[kind] ?? kind ——
-                        后者在遇到 'note'（后端没给 kind 时的默认值）时
-                        **会把英文键名直接显示出来**，用户截图里的 note 就是这么来的。
-                      */}
-                      <Badge tone="info">{logKindLabel(log.kind)}</Badge>
-                      {plant ? <span className="small muted">{plant.label}</span> : null}
-                    </div>
-                    {log.content ? <div className="small">{log.content}</div> : null}
-                    {log.images.length > 0 ? (
-                      <div className="log-images">
-                        {log.images.map((image) => (
-                          <button
-                            key={image.id}
-                            type="button"
-                            className="log-image-cell"
-                            title="点开看大图"
-                            onClick={() => setPreview(image)}
-                          >
-                            <img className="log-image" src={imageSrc(image)} alt="" />
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
+                    {editing ? (
+                      <>
+                        <div className="row tight" style={{ marginBottom: 6 }}>
+                          <div style={{ width: 140 }}>
+                            <SelectInput
+                              value={editKind}
+                              onChange={setEditKind}
+                              options={[
+                                ...CARE_ACTION_OPTIONS.map((o) => ({ value: String(o.value), label: o.label })),
+                                { value: 'note', label: '📝 记录' }
+                              ]}
+                            />
+                          </div>
+                          <div style={{ width: 140 }}>
+                            <TextInput value={editDate} onChange={setEditDate} placeholder="2026-10-18" />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <TextInput
+                              value={editText}
+                              onChange={setEditText}
+                              placeholder="这条记录写了什么（可留空）"
+                            />
+                          </div>
+                          <Button size="small" onClick={() => void pickEditPhotos()}>
+                            📷 照片
+                          </Button>
+                          <Button size="small" variant="primary" onClick={() => void saveEdit()}>
+                            保存
+                          </Button>
+                          <Button size="small" variant="ghost" onClick={cancelEdit}>
+                            取消
+                          </Button>
+                        </div>
+
+                        {/*
+                          照片编辑：
+                          - 原图里没被标记删除的照常显示，点 × 只是**标记**，保存后才真删
+                          - 编辑期间新选的直接显示，点 × 会连文件一起删
+                        */}
+                        {(() => {
+                          const kept = log.images.filter((img) => !editRemove.includes(img.id))
+                          if (kept.length === 0 && editAdd.length === 0) return null
+                          return (
+                            <div className="log-images">
+                              {kept.map((image) => (
+                                <div key={image.id} className="log-image-cell">
+                                  <img className="log-image" src={imageSrc(image)} alt="" />
+                                  <button
+                                    type="button"
+                                    className="log-image-remove"
+                                    title="保存后删掉这张照片"
+                                    onClick={() => setEditRemove((prev) => [...prev, image.id])}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                              {editAdd.map((image) => (
+                                <div key={`add-${image.id}`} className="log-image-cell">
+                                  <img className="log-image" src={imageSrc(image)} alt="" />
+                                  <button
+                                    type="button"
+                                    className="log-image-remove"
+                                    title="不添加这张（文件会一起删掉）"
+                                    onClick={() => {
+                                      setEditAdd((prev) => prev.filter((i) => i.id !== image.id))
+                                      void window.api.images.remove(image.id).catch(() => undefined)
+                                    }}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                              <span className="small muted">保存后生效</span>
+                            </div>
+                          )
+                        })()}
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          {/*
+                            走 logKindLabel 而不是 CARE_ACTION_LABELS[kind] ?? kind ——
+                            后者在遇到 'note'（后端没给 kind 时的默认值）时
+                            **会把英文键名直接显示出来**，用户截图里的 note 就是这么来的。
+                          */}
+                          <Badge tone="info">{logKindLabel(log.kind)}</Badge>
+                          {plant ? <span className="small muted">{plant.label}</span> : null}
+                        </div>
+                        {log.content ? <div className="small">{log.content}</div> : null}
+                        {log.images.length > 0 ? (
+                          <div className="log-images">
+                            {log.images.map((image) => (
+                              <button
+                                key={image.id}
+                                type="button"
+                                className="log-image-cell"
+                                title="点开看大图"
+                                onClick={() => setPreview(image)}
+                              >
+                                <img className="log-image" src={imageSrc(image)} alt="" />
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                   {/*
                     删除按钮：不用 ghost —— ghost 无背景无边框，
                     在浅米色的日志行上「删除」两个字太淡了，看不见。
                     外面包一层是为了让它垂直居中（.log-item 是 align-items:flex-start）
                   */}
-                  <div style={{ alignSelf: 'center' }}>
-                    <Button size="small" title="删除这条日志（不可恢复）" onClick={() => void removeLog(log)}>
-                      删除
-                    </Button>
-                  </div>
+                  {editing ? null : (
+                    <div className="row tight" style={{ alignSelf: 'center' }}>
+                      <Button size="small" title="编辑这条记录" onClick={() => startEdit(log)}>
+                        编辑
+                      </Button>
+                      <Button size="small" title="删除这条日志（不可恢复）" onClick={() => void removeLog(log)}>
+                        删除
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )
             })}
