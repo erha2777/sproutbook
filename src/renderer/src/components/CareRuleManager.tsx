@@ -19,7 +19,7 @@ import {
   isUniversalRule,
   monthsCovered
 } from '@core/care'
-import { Badge, Button, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextArea, TextInput, useToast } from './ui'
+import { Badge, Button, Checkbox, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextArea, TextInput, useToast } from './ui'
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `${i + 1} 月` }))
 
@@ -36,6 +36,13 @@ interface Draft {
    * 那时只能把区间收窄到单月绕过，规则本身表达不了「这个窗口里做一次就够」。
    */
   oncePerWindow: boolean
+  /**
+   * 同一条规则的所有植株在同一天做。
+   *
+   * 默认按植株错开锚点日（日常养护别全挤一天）；
+   * 秋埋底肥这类「挑个周末一次把几盆都弄完」的要关掉错开。
+   */
+  sameDay: boolean
   /** 绑定的配方 id（字符串形式便于 select），空＝没有材料清单 */
   recipeId: string
   /** 每行一个轮换步骤 */
@@ -55,6 +62,7 @@ const BLANK: Draft = {
   monthTo: '',
   repeatDays: '',
   oncePerWindow: false,
+  sameDay: false,
   recipeId: '',
   rotationText: '',
   phases: [],
@@ -138,6 +146,7 @@ export function CareRuleManager({
         monthTo: draft.monthTo ? Number(draft.monthTo) : null,
         repeatDays: draft.repeatDays.trim() ? Number(draft.repeatDays) : null,
         oncePerWindow: draft.oncePerWindow,
+        sameDay: draft.sameDay,
         recipeId: draft.recipeId ? Number(draft.recipeId) : null,
         rotation: rotation.length > 0 ? rotation : null,
         activePhases: draft.phases.length > 0 ? draft.phases : null,
@@ -177,6 +186,7 @@ export function CareRuleManager({
     monthTo: rule.monthTo === null ? '' : String(rule.monthTo),
     repeatDays: rule.repeatDays === null ? '' : String(rule.repeatDays),
     oncePerWindow: rule.oncePerWindow,
+    sameDay: rule.sameDay === true,
     recipeId: rule.recipeId === null ? '' : String(rule.recipeId),
     rotationText: (rule.rotation ?? []).join('\n'),
     phases: rule.activePhases ?? [],
@@ -420,6 +430,16 @@ export function CareRuleManager({
             </Field>
           ) : null}
           <Field
+            label="植株之间"
+            help="默认按植株错开锚点日，免得七八盆全挤在同一天。秋埋底肥、换盆这类「一次把几盆都处理掉」的事可以勾上，让所有植株同一天做。"
+          >
+            <Checkbox
+              checked={draft.sameDay}
+              onChange={(v) => setDraft({ ...draft, sameDay: v })}
+              label="所有植株同一天做（不按植株错开）"
+            />
+          </Field>
+          <Field
             label="绑定配方"
             help={
               recipes.length === 0
@@ -541,6 +561,11 @@ export function CareRuleManager({
                         ) : rule.oncePerWindow ? (
                           <div className="muted" title="跨月区间只生成一条任务，落在窗口开头">
                             整段只做一次
+                          </div>
+                        ) : null}
+                        {rule.sameDay ? (
+                          <div className="muted" title="同一条规则下所有植株排在同一天">
+                            同日做
                           </div>
                         ) : null}
                         {rule.recipeId ? (

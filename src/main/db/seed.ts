@@ -141,6 +141,8 @@ export function seedCareRules(db: Db): number {
     repeatDays?: number
     /** 轮换步骤，生成时按顺序循环 */
     rotation?: string[]
+    /** 所有植株同一天做（不按植株错开） */
+    sameDay?: boolean
   }
 
   const rows: SeedRule[] = [
@@ -180,7 +182,8 @@ export function seedCareRules(db: Db): number {
     // ---- 月季 ----
     { species: '月季', from: 2, to: null, action: 'prune', title: '冬季重剪', detail: '落叶后重剪，保留 3~5 个主枝，剪口留在饱满芽上方。', priority: 1 },
     { species: '月季', from: 4, to: 6, action: 'pest', title: '月季防黑斑病', detail: '雨季前预防性喷药，发现病叶立即摘除并清理落叶。', priority: 2 },
-    { species: '月季', from: 11, to: null, action: 'fertilize', title: '秋埋底肥', detail: '羊粪为主 + 缓释肥 + 少量骨粉，沿盆边埋入。', priority: 2 },
+    // 秋埋底肥是一年一次、要一次把几盆都处理掉的事 → 所有植株同一天
+    { species: '月季', from: 11, to: null, action: 'fertilize', title: '秋埋底肥', detail: '羊粪为主 + 缓释肥 + 少量骨粉，沿盆边埋入。', priority: 2, sameDay: true },
 
     // ---- 多肉 ----
     { species: '玉露', from: 7, to: 8, action: 'protect', title: '多肉度夏', detail: '高温休眠，严格控水、遮阴、加强通风，闷热比干旱更致命。', priority: 1 },
@@ -196,13 +199,14 @@ export function seedCareRules(db: Db): number {
     for (const r of rows) {
       db.run(
         `INSERT INTO care_rules (species_key, hemisphere, month_from, month_to,
-           repeat_days, rotation_json, action_type, title, detail, priority, source, verified)
-         VALUES (?, 'N', ?, ?, ?, ?, ?, ?, ?, ?, 'seed', 1)`,
+           repeat_days, rotation_json, same_day, action_type, title, detail, priority, source, verified)
+         VALUES (?, 'N', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'seed', 1)`,
         r.species,
         r.from,
         r.to,
         r.repeatDays ?? null,
         r.rotation ? JSON.stringify(r.rotation) : null,
+        r.sameDay ? 1 : 0,
         r.action,
         r.title,
         r.detail,

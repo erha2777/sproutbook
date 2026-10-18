@@ -53,11 +53,21 @@ function step(label, args) {
   }
 }
 
-/** 打包前清 release：Electron 进程退出后文件锁不是立刻释放的，留着必然 EPERM/EBUSY。 */
+/**
+ * 打包前清 release：Electron 进程退出后文件锁不是立刻释放的，留着必然 EPERM/EBUSY。
+ *
+ * ⚠️ `rmSync` 的 `force: true` **不会**吞掉 EPERM（文件被占用时就是它）——
+ * 之前这里没有 try/catch，于是整个脚本直接崩在删除上，
+ * 重试循环一次都没跑到。表现是「打包偶发失败、重跑就好」。
+ */
 function clearRelease() {
   const dir = join(root, 'release')
   for (let i = 1; i <= 8; i++) {
-    rmSync(dir, { recursive: true, force: true })
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 300 })
+    } catch {
+      // 文件被占用（刚退出的 Electron、杀毒扫描）→ 等一会儿再试
+    }
     if (!existsSync(dir)) return true
     // 同步等待：这里是脚本，没必要引异步
     spawnSync(node, ['-e', 'setTimeout(()=>{},5000)'], { stdio: 'ignore' })

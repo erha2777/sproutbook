@@ -430,6 +430,15 @@ export function generateTasks(
     if (spans.length === 0) continue
 
     const rotation = (rule.rotation ?? []).map((s) => s.trim()).filter(Boolean)
+    /*
+     * 锚点种子。
+     *
+     * 默认用调用方传进来的（植株 id）—— 同一条规则下不同植株错开几天，
+     * 日常浇水不至于全挤在一天。
+     * 但规则打开了 sameDay 时改用**规则 id**：同一条规则的所有植株算出同一天。
+     * 「秋埋底肥」这种一年一次、要一次把几盆都处理掉的事就该是这样。
+     */
+    const anchorSeed = rule.sameDay === true && rule.id > 0 ? rule.id : seed
 
     // ---- 按天重复 ----
     if (rule.repeatDays !== null && rule.repeatDays !== undefined && rule.repeatDays > 0) {
@@ -440,7 +449,7 @@ export function generateTasks(
 
       for (const span of spans) {
         // 起始日按植株错开，避免所有植物同一天施肥
-        const offset = Math.max(0, spreadDay(year, Number(span.from.slice(5, 7)), seed) - 1)
+        const offset = Math.max(0, spreadDay(year, Number(span.from.slice(5, 7)), anchorSeed) - 1)
         let cursor = addDays(span.from, offset)
         // 上限保护：即使 repeatDays 被填成 1，也不会无限循环
         for (let guard = 0; guard < 400 && cursor <= span.to; guard++) {
@@ -468,7 +477,7 @@ export function generateTasks(
     if (rule.oncePerWindow) {
       for (const span of spans) {
         const month = Number(span.from.slice(5, 7))
-        const offset = Math.min(Math.max(0, spreadDay(year, month, seed) - 1), 6)
+        const offset = Math.min(Math.max(0, spreadDay(year, month, anchorSeed) - 1), 6)
         push(addDays(span.from, offset), rule, rule.title, defaultWindow)
       }
       continue
@@ -478,7 +487,7 @@ export function generateTasks(
     // 注意：这里必须按**月份**迭代而不是 spans —— 3~4 月是连续的两个月，
     // dateSpansFor 会把它们合成一个 span，按 span 走只会产出一条任务。
     for (const month of monthsCovered(rule)) {
-      const day = spreadDay(year, month, seed)
+      const day = spreadDay(year, month, anchorSeed)
       push(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`, rule, rule.title, defaultWindow)
     }
   }

@@ -498,6 +498,20 @@ const V11_ENV_DISTRICT = /* sql */ `
 ALTER TABLE environments ADD COLUMN district TEXT;
 `
 
+/**
+ * 规则可以要求「所有植株同一天做」。
+ *
+ * 起因是用户看月历：一条「底肥（换盆/秋埋）」规则，10 月里散落在 2/9/15/22/23 号。
+ * 因为任务默认**按植株错开锚点日** —— 那是为了日常浇水别全挤在一天，
+ * 但秋埋底肥这种一年一次的事，本来就是挑一个周末把所有盆一起处理掉。
+ *
+ * 打开这个开关后，生成任务时不再用植株 id 当种子，改用规则 id：
+ * 同一条规则下所有植株算出同一天（不同规则之间仍然错开）。
+ */
+const V12_RULE_SAME_DAY = /* sql */ `
+ALTER TABLE care_rules ADD COLUMN same_day INTEGER NOT NULL DEFAULT 0;
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -509,7 +523,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 8, name: 'rule_frequency_recipe', sql: V8_RULE_FREQUENCY_AND_RECIPE },
   { version: 9, name: 'task_rule_recipe', sql: V9_TASK_RULE_AND_RECIPE },
   { version: 10, name: 'log_recipe', sql: V10_LOG_RECIPE },
-  { version: 11, name: 'env_district', sql: V11_ENV_DISTRICT }
+  { version: 11, name: 'env_district', sql: V11_ENV_DISTRICT },
+  { version: 12, name: 'rule_same_day', sql: V12_RULE_SAME_DAY }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

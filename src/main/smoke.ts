@@ -1039,6 +1039,87 @@ export async function runSmoke(outFile: string): Promise<number> {
         )
       )
 
+      /*
+       * ---- 同日规则 ----
+       *
+       * 用户看月历发现的：「底肥（换盆/秋埋）」在 10 月散落在好几天 ——
+       * 因为默认按植株错开锚点日。但秋埋底肥这种一年一次的事，
+       * 本来就是挑一个周末把所有盆一起处理掉。
+       */
+      {
+        const monthlyRule = {
+          id: 77,
+          speciesKeys: ['*'],
+          hemisphere: 'N' as const,
+          climateZone: null,
+          monthFrom: 10,
+          monthTo: 10,
+          repeatDays: null,
+          rotation: null,
+          activePhases: null,
+          oncePerWindow: false,
+          recipeId: null,
+          actionType: 'fertilize' as const,
+          title: '底肥（换盆/秋埋）',
+          detail: null,
+          priority: 2,
+          source: 'manual' as const,
+          verified: true,
+          createdAt: ''
+        }
+        const p1 = generateTasks([monthlyRule], null, 2026, { spreadSeed: 1 })[0].dueDate
+        const p2 = generateTasks([monthlyRule], null, 2026, { spreadSeed: 2 })[0].dueDate
+        check('默认：不同植株的锚点日错开', p1 !== p2, `${p1} vs ${p2}`)
+
+        const together1 = generateTasks([{ ...monthlyRule, sameDay: true }], null, 2026, { spreadSeed: 1 })[0]
+          .dueDate
+        const together2 = generateTasks([{ ...monthlyRule, sameDay: true }], null, 2026, { spreadSeed: 2 })[0]
+          .dueDate
+        check('同日规则：两株算出同一天', together1 === together2, `${together1} vs ${together2}`)
+        check('同日规则仍然落在 10 月内', together1.startsWith('2026-10'), together1)
+
+        // 不同规则之间仍然错开（否则所有规则会撞到同一天）
+        const other = { ...monthlyRule, id: 78, title: '换盆' }
+        const otherDay = generateTasks([{ ...other, sameDay: true }], null, 2026, { spreadSeed: 1 })[0].dueDate
+        check('同日规则之间按规则 id 区分', otherDay !== together1, `${otherDay} vs ${together1}`)
+      }
+
+      // 顺带确认这一列真的存得进去、读得回来
+      {
+        const sameDayInput = {
+          speciesKeys: ['*'],
+          hemisphere: 'N' as const,
+          climateZone: null,
+          monthFrom: 10,
+          monthTo: 10,
+          repeatDays: null,
+          oncePerWindow: false,
+          recipeId: null,
+          rotation: null,
+          activePhases: null,
+          actionType: 'fertilize' as const,
+          detail: null,
+          priority: 2,
+          source: 'manual' as const,
+          verified: true
+        }
+        const saved = saveCareRule(db, { ...sameDayInput, title: '自检：同日底肥', sameDay: true })
+        check('规则可以保存「同一天」', saved.sameDay === true, String(saved.sameDay))
+        const reread = listCareRules(db, { speciesKey: '*' }).find((r) => r.id === saved.id)
+        check('重新读出来仍然是同一天', reread?.sameDay === true, String(reread?.sameDay))
+        const plain = saveCareRule(db, { ...sameDayInput, title: '自检：普通规则' })
+        check('没勾选的规则不是同一天', plain.sameDay === false, String(plain.sameDay))
+
+        /*
+         * 用完就删：这两条规则会留在同一个自检库里，后面「种子规则都是人工来源」
+         * 「概览规则数」这类断言是数着条数比的，多两条就会假红。
+         * 自检造的数据必须自己收拾干净。
+         */
+        deleteCareRule(db, saved.id)
+        deleteCareRule(db, plain.id)
+        check('自检造的规则已清理', listCareRules(db).every((r) => r.id !== saved.id && r.id !== plain.id))
+      }
+
       // ---- 时间窗与紧急度 ----
       const task = (dueDate: string, status: CareTaskStatus = 'pending', windowDays = 3) =>
         ({ dueDate, windowDays, status }) as Pick<CareTask, 'dueDate' | 'windowDays' | 'status'>

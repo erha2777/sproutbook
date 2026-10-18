@@ -341,6 +341,16 @@ export interface CareRule {
    * 与 repeatDays 同时打开时以 repeatDays 为准。
    */
   oncePerWindow: boolean
+  /**
+   * 同一条规则下所有植株在同一天做。
+   *
+   * 默认是**按植株错开**锚点日的（日常浇水不该全挤一天）；
+   * 但秋埋底肥这类「一年一次、要一次把几盆都处理掉」的事，
+   * 错开反而和实际做法相反 —— 打开后同一规则的所有植株用同一个锚点日。
+   *
+   * 旧数据没有这一列时按 false 处理（迁移里加了默认 0）。
+   */
+  sameDay?: boolean
   /** 绑定的配方。为空表示这条规则没有材料清单 */
   recipeId: number | null
   /**

@@ -55,6 +55,7 @@ interface CareRuleRow {
   rotation_json: string | null
   active_phases: string | null
   once_per_window: number
+  same_day: number
   recipe_id: number | null
   action_type: string
   title: string
@@ -75,6 +76,7 @@ function mapRule(row: CareRuleRow): CareRule {
     monthTo: row.month_to,
     repeatDays: row.repeat_days,
     oncePerWindow: row.once_per_window === 1,
+    sameDay: row.same_day === 1,
     recipeId: row.recipe_id ?? null,
     rotation: parseRotation(row.rotation_json),
     activePhases: parsePhases(row.active_phases),
@@ -154,11 +156,13 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
    * 免得库里存着一个自相矛盾的组合。
    */
   const oncePerWindow = repeatDays === null && input.oncePerWindow === true
+  // 「同一天」只在按月 / 整段一次时才有意义；按天重复的节奏不受它影响
+  const sameDay = input.sameDay === true
 
   if (input.id) {
     db.run(
       `UPDATE care_rules SET species_key=?, hemisphere=?, climate_zone=?, month_from=?, month_to=?,
-         repeat_days=?, once_per_window=?, recipe_id=?, rotation_json=?, active_phases=?,
+         repeat_days=?, once_per_window=?, same_day=?, recipe_id=?, rotation_json=?, active_phases=?,
          action_type=?, title=?, detail=?, priority=?,
          source=?, verified=?
        WHERE id=?`,
@@ -169,6 +173,7 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
       input.monthTo,
       repeatDays,
       oncePerWindow ? 1 : 0,
+      sameDay ? 1 : 0,
       input.recipeId ?? null,
       rotationJson,
       phasesJson,
@@ -187,9 +192,9 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
 
   const r = db.run(
     `INSERT INTO care_rules (species_key, hemisphere, climate_zone, month_from, month_to,
-       repeat_days, once_per_window, recipe_id, rotation_json, active_phases,
+       repeat_days, once_per_window, same_day, recipe_id, rotation_json, active_phases,
        action_type, title, detail, priority, source, verified)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     serializeSpeciesKeys(input.speciesKeys),
     input.hemisphere,
     input.climateZone,
@@ -197,6 +202,7 @@ export function saveCareRule(db: Db, input: CareRuleInput): CareRule {
     input.monthTo,
     repeatDays,
     oncePerWindow ? 1 : 0,
+    sameDay ? 1 : 0,
     input.recipeId ?? null,
     rotationJson,
     phasesJson,
