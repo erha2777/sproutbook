@@ -551,7 +551,7 @@ node scripts/install-textures.mjs D:\素材 --data-dir=D:\sproutbook-data
 ```
 
 - `file` 相对 textures 目录；`crop` 是源图像素坐标；`slice` 是九宫格边距
-- `backgrounds` 决定首页巡视的图片（最多 8 张）
+- `backgrounds` 决定巡视背景的图片（最多 8 张），**所有页面共用**
 - 没有 theme.json 时退回「sign.png / home-bg.png …」的约定文件名
 
 除上面五个固定名字外，**其余图片**会当成首页背景：铺满窗口、镜头缓慢平移巡视

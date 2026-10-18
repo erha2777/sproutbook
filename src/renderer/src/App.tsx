@@ -2,6 +2,7 @@ import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, ToastProvider, cx, useToast } from './components/ui'
 import { TitleBar } from './components/TitleBar'
+import { Backdrop } from './components/Backdrop'
 import { GardenPage } from './pages/GardenPage'
 import { SpeciesPage } from './pages/SpeciesPage'
 import { SpeciesEditor } from './pages/SpeciesEditor'
@@ -257,6 +258,11 @@ function Shell(): ReactNode {
     }
   }
 
+  // 首页/内页用不同的背景压暗程度
+  useEffect(() => {
+    document.documentElement.classList.toggle('is-home', route.name === 'home')
+  }, [route.name])
+
   /*
    * 私有素材（可选）：<userData>/textures 里有图片就套上。
    * 星露谷 wiki 的图是版权素材，不能随仓库分发 —— 只在本机生效。
@@ -378,6 +384,7 @@ function Shell(): ReactNode {
   if (route.name === 'home') {
     return (
       <div className="app-frame">
+        <Backdrop images={backdrops} />
         <TitleBar />
         <HomePage
           version={appVersion}
@@ -387,7 +394,6 @@ function Shell(): ReactNode {
           onCare={() => setRoute({ name: 'care', tab: 'today' })}
           onQuit={() => void window.api.app.quit()}
           onSettings={() => setRoute({ name: 'settings' })}
-          backdrops={backdrops}
           musicName={musicName}
           musicPlaying={musicPlaying}
           soundOn={soundOn}
@@ -417,6 +423,8 @@ function Shell(): ReactNode {
 
   return (
     <div className="app-frame">
+      {/* 所有页面共用同一层私有背景（巡视地图） */}
+      <Backdrop images={backdrops} />
       {/* 无边框窗口的自制标题栏：拖动 + 最小化 / 最大化 / 关闭 */}
       <TitleBar />
       <div className="page-shell">

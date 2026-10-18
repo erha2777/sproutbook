@@ -3215,3 +3215,26 @@ html.tex-panel.tex-panel-slice .pixel-panel {
   box-shadow: none;
   padding: calc(var(--tex-panel-slice, 14) * 1px + 8px);
 }
+
+
+/* ---------- 全局背景层（所有页面共用） ---------- */
+
+.app-backdrops {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  /* 内页默认压暗多一点，保证面板/文字清楚 */
+  background: rgba(8, 26, 48, 0.3);
+}
+.is-home .app-backdrops {
+  background: rgba(8, 26, 48, 0.1);
+}
+
+/* 内容浮在背景之上 */
+.page-shell,
+.home {
+  position: relative;
+  z-index: 1;
+}
