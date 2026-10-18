@@ -24,7 +24,8 @@ import {
   pendingBuckets,
   summarizeTasks,
   todayIso,
-  weekdayLabel
+  weekdayLabel,
+  windowRange
 } from '@core/care'
 import { Badge, Button, EmptyState, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
@@ -132,11 +133,32 @@ export function CarePage({
   const dayInMonth =
     day !== null && day.startsWith(`${year}-${String(month).padStart(2, '0')}-`) ? day : null
 
-  /** 当天的全部计划：待办 / 已完成 / 已跳过都在里面 —— 「当天所有计划」 */
-  const dayTasks = useMemo(
+  /**
+   * 这一天的计划。**按时间窗算，而不只是「到期日正好是这天」**。
+   *
+   * 两类：
+   *  1. **当天到期的**（含已完成 / 已跳过）—— 这一天到底排了什么；
+   *  2. **时间窗还开着、到期日在更早**的待办 —— 现在仍然能做。
+   *
+   * 用户的原话：「不是得按计划的时间范围显示吗，现在不能显示在时间范围内的计划」。
+   * 10/1 的任务窗口开到 10/31，点 10/18 就该看见它，
+   * 而不是一句「这一天还没有安排」。
+   */
+  const dayDue = useMemo(
     () => (dayInMonth ? tasks.filter((t) => t.dueDate === dayInMonth) : []),
     [tasks, dayInMonth]
   )
+  const dayCarried = useMemo(
+    () =>
+      dayInMonth
+        ? tasks.filter(
+            (t) => t.status === 'pending' && t.dueDate < dayInMonth && windowRange(t).to >= dayInMonth
+          )
+        : [],
+    [tasks, dayInMonth]
+  )
+  /** 当天的全部计划：当天到期的 + 时间窗内可以补做的 */
+  const dayTasks = useMemo(() => [...dayDue, ...dayCarried], [dayDue, dayCarried])
 
   /** 翻月：清掉日期选择，免得显示上个月的那一天 */
   const shiftMonth = (delta: number): void => {
@@ -555,7 +577,14 @@ export function CarePage({
           */}
           <Panel className="plan-day">
             <SectionTitle
-              right={dayInMonth ? <span className="small muted">共 {dayTasks.length} 项</span> : null}
+              right={
+                dayInMonth ? (
+                  <span className="small muted">
+                    共 {dayTasks.length} 项
+                    {dayCarried.length > 0 ? ` · 其中 ${dayCarried.length} 项时间窗内可做` : ''}
+                  </span>
+                ) : null
+              }
             >
               {dayInMonth
                 ? `${Number(dayInMonth.slice(5, 7))} 月 ${Number(dayInMonth.slice(8))} 日 · ${weekdayLabel(dayInMonth)}`
@@ -585,6 +614,11 @@ export function CarePage({
               />
             ) : (
               <>
+                {dayCarried.length > 0 ? (
+                  <div className="small muted" style={{ marginBottom: 8 }}>
+                    下面有 {dayCarried.length} 项到期日更早、但时间窗还没结束 —— 现在仍然可以做。
+                  </div>
+                ) : null}
                 {groupTasksByRule(dayTasks).map(renderGroup)}
                 <div className="row tight" style={{ marginTop: 8 }}>
                   <Button
