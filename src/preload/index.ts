@@ -66,6 +66,7 @@ const api: SproutbookApi = {
   plants: {
     list: (options) => call('plants:list', options ?? {}),
     save: (payload) => call('plants:save', payload),
+    setCover: (plantId, imageId) => call('plants:cover', plantId, imageId ?? null),
     remove: (id) => call('plants:delete', id),
     stats: (month) => call('plants:stats', month)
   },

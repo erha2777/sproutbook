@@ -38,7 +38,14 @@ const SELECT_BASE = `
     s.scientific_name AS species_scientific,
     s.family          AS species_family,
     e.name            AS env_name,
-    (SELECT thumb_path FROM images WHERE plant_id = p.id ORDER BY sort_order, id LIMIT 1) AS cover_thumb
+    /*
+     * 封面：优先用用户指定的那张（plants.cover_image_id），
+     * 没指定就退回到最早导入的一张 —— 老数据没有指定过封面，行为不变。
+     */
+    COALESCE(
+      (SELECT thumb_path FROM images WHERE id = p.cover_image_id),
+      (SELECT thumb_path FROM images WHERE plant_id = p.id ORDER BY sort_order, id LIMIT 1)
+    ) AS cover_thumb
   FROM plants p
   LEFT JOIN species s      ON s.id = p.species_id
   LEFT JOIN environments e ON e.id = p.env_id
@@ -149,6 +156,22 @@ export interface SavePlantInput {
 export interface SavePlantResult {
   plant: PlantListItem | null
   errors: Record<string, string>
+}
+
+/**
+ * 指定封面：用哪张照片当这一株的封面。传 null 表示回到默认（最早那张）。
+ *
+ * 只接受**属于这株**的图片；否则一张别的植株的照片可能被设成封面。
+ */
+export function setPlantCover(db: Db, plantId: number, imageId: number | null): boolean {
+  if (imageId === null) {
+    const r = db.run('UPDATE plants SET cover_image_id = NULL, updated_at = ? WHERE id = ?', new Date().toISOString(), plantId)
+    return Number(r.changes) > 0
+  }
+  const belongs = db.get<{ id: number }>('SELECT id FROM images WHERE id = ? AND plant_id = ?', imageId, plantId)
+  if (!belongs) throw new Error('这张图片不属于这株植物')
+  const r = db.run('UPDATE plants SET cover_image_id = ?, updated_at = ? WHERE id = ?', imageId, new Date().toISOString(), plantId)
+  return Number(r.changes) > 0
 }
 
 export function savePlant(db: Db, input: SavePlantInput): SavePlantResult {

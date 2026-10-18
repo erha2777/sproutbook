@@ -26,7 +26,7 @@ import {
   updateField
 } from '../db/repo/fields'
 import { archiveSpecies, familyStats, getSpecies, listSpecies, saveSpecies, verifySpeciesFields } from '../db/repo/species'
-import { archivePlant, listPlants, plantStats, savePlant } from '../db/repo/plants'
+import { archivePlant, listPlants, plantStats, savePlant, setPlantCover } from '../db/repo/plants'
 import {
   addImage,
   archiveEnvironment,
@@ -415,6 +415,7 @@ function registerPlantIpc(): void {
 
 
   handle('plants:save', (payload: Parameters<typeof savePlant>[1]) => savePlant(getDb(), payload))
+  handle('plants:cover', (plantId: number, imageId: number | null) => setPlantCover(getDb(), plantId, imageId))
 
   handle('plants:delete', (id: number) => archivePlant(getDb(), id))
 

@@ -33,7 +33,7 @@ import { buildIdentifyMessages, parseIdentifyResponse } from './services/ai/iden
 import { chat } from './services/ai/client'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
-import { archivePlant, listPlants, plantStats, savePlant } from './db/repo/plants'
+import { archivePlant, listPlants, plantStats, savePlant, setPlantCover } from './db/repo/plants'
 import { addImage, archiveEnvironment, getEnvironment, getSetting, listCorruptSettings, listEnvironments, listImages, saveEnvironment, setSetting } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
@@ -440,6 +440,35 @@ export async function runSmoke(outFile: string): Promise<number> {
 
     const plantSearch = listPlants(db, { query: '月季' })
     check('植株可按物种名搜索', plantSearch.items.some((p) => p.id === plantId))
+
+    /*
+     * 封面：默认用最早导入的一张；可以指定用哪张照片；传 null 回到默认。
+     * 只接受属于这株的图片 —— 否则一张别的植株的照片会被设成封面。
+     */
+    {
+      const first = addImage(db, { plantId, path: 'cover-1.jpg', thumbPath: 'cover-1-thumb.jpg' })
+      addImage(db, { plantId, path: 'cover-2.jpg', thumbPath: 'cover-2-thumb.jpg' })
+      const beforePick = listPlants(db, {}).items.find((p) => p.id === plantId)
+      check('没指定封面时用最早导入的那张', beforePick?.coverThumb === 'cover-1-thumb.jpg', String(beforePick?.coverThumb))
+
+      const second = listImages(db, { plantId }).find((img) => img.path === 'cover-2.jpg')
+      check('指定封面成功', setPlantCover(db, plantId, second?.id ?? 0) === true)
+      const afterPick = listPlants(db, {}).items.find((p) => p.id === plantId)
+      check('指定封面后用那张的缩略图', afterPick?.coverThumb === 'cover-2-thumb.jpg', String(afterPick?.coverThumb))
+
+      setPlantCover(db, plantId, null)
+      const afterReset = listPlants(db, {}).items.find((p) => p.id === plantId)
+      check('恢复默认后又回到最早那张', afterReset?.coverThumb === 'cover-1-thumb.jpg', String(afterReset?.coverThumb))
+
+      const foreign = addImage(db, { path: 'cover-foreign.jpg', thumbPath: 'cover-foreign-thumb.jpg' })
+      let rejected = false
+      try {
+        setPlantCover(db, plantId, foreign.id)
+      } catch {
+        rejected = true
+      }
+      check('不能拿别的植株的照片当封面', rejected && first.id > 0)
+    }
 
     const stats = plantStats(db, 6)
     check('统计：总数正确', stats.total >= 1, `total=${stats.total}`)

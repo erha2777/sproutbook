@@ -202,6 +202,8 @@ export interface SproutbookApi {
     }): Promise<SavePlantResponse>
     remove(id: number): Promise<boolean>
     stats(month?: number): Promise<PlantListItemStats>
+    /** 指定封面用哪张照片；传 null 回到默认（最早导入的那张） */
+    setCover(plantId: number, imageId: number | null): Promise<boolean>
   }
   env: {
     list(includeArchived?: boolean): Promise<Environment[]>
