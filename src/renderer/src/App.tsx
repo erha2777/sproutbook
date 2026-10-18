@@ -198,6 +198,34 @@ function Shell(): ReactNode {
     return () => document.removeEventListener('click', onClick, true)
   }, [])
 
+  /*
+   * 私有字体（可选）：<userData>/fonts 里放了字体就换成它。
+   *
+   * 为什么不打包进 assets：HZK / IPix 这类字体的字模版权不清晰，
+   * 放进公开仓库有风险。放 userData 只有本机生效，仓库与 CI 都不受影响。
+   */
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const { custom } = await window.api.app.fonts()
+        if (!custom || cancelled) return
+        const face = new FontFace('Sproutbook Custom', `url(${custom})`)
+        await face.load()
+        document.fonts.add(face)
+        document.documentElement.style.setProperty(
+          '--ui-font',
+          `'Sproutbook Custom', 'Fusion Pixel', 'Microsoft YaHei', 'PingFang SC', sans-serif`
+        )
+      } catch {
+        // 字体坏了就当没装，继续用默认像素字体
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   // 首次进入时做一次环境自检，把明显的问题尽早告诉用户
   useEffect(() => {
     void (async () => {

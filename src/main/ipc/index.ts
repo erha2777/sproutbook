@@ -12,7 +12,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electro
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
 import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Db } from '../db/connection'
 import { backupsDir, dataDir, dbFilePath, getDb, imagesDir, makeManualBackup } from '../db'
@@ -231,6 +231,37 @@ function registerAppIpc(): void {
   handle('app:backups', () => listBackups(backupsDir()))
 
   handle('app:backupNow', () => makeManualBackup())
+
+  /*
+   * 私有字体：放在 <userData>/fonts/ 下的 woff2/ttf/otf 会被加载成界面字体。
+   *
+   * 为什么走运行时而不是打包进 assets：
+   * - 某些像素字体（如 HZK / IPix 系）字模版权不清晰，不能进公开仓库；
+   * - 放 userData 后，只有本机装了字体的人才用得上，仓库和 CI 都不受影响。
+   */
+  handle('app:fonts', () => {
+    const dir = join(app.getPath('userData'), 'fonts')
+    if (!existsSync(dir)) return { custom: null }
+    let names: string[] = []
+    try {
+      names = readdirSync(dir).filter((n) => /\.(woff2|woff|ttf|otf)$/i.test(n))
+    } catch {
+      return { custom: null }
+    }
+    if (names.length === 0) return { custom: null }
+    const file = join(dir, names.sort()[0])
+    try {
+      const stat = statSync(file)
+      if (stat.size > 12 * 1024 * 1024) return { custom: null }
+      const ext = file.slice(file.lastIndexOf('.') + 1).toLowerCase()
+      const mime =
+        ext === 'woff2' ? 'font/woff2' : ext === 'woff' ? 'font/woff' : ext === 'ttf' ? 'font/ttf' : 'font/otf'
+      const base64 = readFileSync(file).toString('base64')
+      return { custom: `data:${mime};base64,${base64}` }
+    } catch {
+      return { custom: null }
+    }
+  })
 
   /** 首页的「退出」按钮 */
   handle('app:quit', () => {

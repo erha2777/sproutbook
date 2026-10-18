@@ -78,7 +78,8 @@ body,
 }
 
 body {
-  font-family: 'Fusion Pixel', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+  /* --ui-font 在运行时被私有字体替换；没装就还是 Fusion Pixel */
+  font-family: var(--ui-font, 'Fusion Pixel', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif);
   font-size: 14px;
   line-height: 1.6;
   color: var(--ink);

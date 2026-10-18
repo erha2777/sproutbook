@@ -132,6 +132,8 @@ export interface SproutbookApi {
     openImagesDir(): Promise<boolean>
     /** 退出应用（首页的「退出」按钮） */
     quit(): Promise<boolean>
+    /** 私有字体：<userData>/fonts 里放了字体就返回 data URL（不打包进仓库） */
+    fonts(): Promise<{ custom: string | null }>
   }
   /**
    * 沙箱兜底。

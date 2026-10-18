@@ -510,6 +510,24 @@ pnpm 默认的符号链接布局在 Windows 上会创建 junction，而 Node 的
 
 ---
 
+## 私有字体（可选，不随仓库分发）
+
+界面默认用 **Fusion Pixel**（OFL）。如果你本机想换成别的点阵字体（例如 HZK / IPix 系），
+不用改代码，把字体文件放进应用数据目录即可：
+
+```powershell
+node scripts/install-font.mjs D:\fonts\你的字体.woff2
+# 便携模式 / 指定数据目录：
+node scripts/install-font.mjs D:\fonts\你的字体.woff2 --data-dir=D:\sproutbook-data
+```
+
+- 目录：`<应用数据目录>/fonts/`（Windows 默认 `%APPDATA%\Sproutbook\fonts`）
+- 应用启动时读取其中的字体，注册为 `Sproutbook Custom`；加载失败就继续用 Fusion Pixel
+- **这类字体不会进仓库、也不会进安装包** —— HZK / IPix 的字模版权状态不清晰，
+  只适合本机私有使用
+
+---
+
 ## 许可
 
 代码：MIT（见 [LICENSE](LICENSE)）。

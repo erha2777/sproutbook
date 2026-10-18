@@ -2,6 +2,36 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.21.0] - 2026-10-18
+
+### 私有字体：本机可换 HZK / IPix，仓库和安装包都不带
+
+用户：「我私有使用」。
+
+#### 做法：运行时加载，不打包
+
+- 应用启动时读 **`<userData>/fonts/`** 里第一个字体文件（woff2 / woff / ttf / otf）
+  - 主进程读成 data URL 交给渲染层（`app:fonts`）
+  - 渲染层用 `FontFace` 注册成 **`Sproutbook Custom`**，再写 CSS 变量 `--ui-font`
+  - 加载失败 / 没放字体：照旧用 Fusion Pixel，界面不受影响
+- 字体文件**不进仓库、不进安装包** —— 公开 MIT 仓库与 CI 都不会碰到版权问题
+- 新增 `scripts/install-font.mjs`：
+
+  ```powershell
+  node scripts/install-font.mjs D:\fonts\你的字体.woff2
+  node scripts/install-font.mjs D:\fonts\你的字体.woff2 --data-dir=D:\sproutbook-data
+  ```
+
+- 本机已经装好 HZK 12px（`%APPDATA%\Sproutbook\fonts\hzk-12px.woff2`），
+  重启即生效；实测截图里表格、按钮、标题都换成了 HZK 的字形
+
+#### 为什么不是直接把 IPix 放进去
+
+IPix 的 itch 包需要走 itch 的下载流程，且它与 HZK 同源（HZK16 字模）。
+本机装的是 `hzk-pixel-font` 的 12px 构建，字形与 IPix 基本一致。
+两者字模都出自 DOS 时代的 UCDOS / Compufont，**版权状态不清晰** —— 所以只做私有，
+不做分发。
+
 ## [1.20.1] - 2026-10-18
 
 ### 参考图取色；IPix 字体评估后不采用
