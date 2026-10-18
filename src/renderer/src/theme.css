@@ -1114,28 +1114,22 @@ img {
   min-height: 0;
 }
 
+/*
+ * 顶部留空：不画底色、不写标题、不放关闭按钮，
+ * 只保留最小化与最大化/还原两个小按钮（用户要求）。
+ * 整条仍是拖拽区，双击最大化。
+ */
 .titlebar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 34px;
+  gap: 6px;
+  height: 32px;
   flex-shrink: 0;
-  padding: 0 6px 0 12px;
-  background: var(--wood-panel-dark);
-  border-bottom: 3px solid var(--wood-outline);
-  /* 整条可拖动窗口；按钮区单独 no-drag */
+  padding: 0 8px;
+  background: transparent;
+  border-bottom: none;
   -webkit-app-region: drag;
   user-select: none;
-}
-.titlebar-icon {
-  font-size: 15px;
-  line-height: 1;
-}
-.titlebar-title {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  color: var(--ink);
 }
 .titlebar-buttons {
   display: flex;
@@ -1143,23 +1137,18 @@ img {
   -webkit-app-region: no-drag;
 }
 .titlebar-btn {
-  width: 36px;
-  height: 24px;
+  width: 30px;
+  height: 22px;
   padding: 0;
   line-height: 1;
   font-size: 12px;
-  color: var(--ink);
-  border: 2px solid var(--wood-outline);
-  background: var(--wood-panel-light);
+  color: #33404a;
+  border: 2px solid rgba(60, 40, 20, 0.35);
+  background: rgba(250, 232, 200, 0.55);
   cursor: pointer;
 }
 .titlebar-btn:hover {
-  background: #fff0cf;
-}
-.titlebar-btn.close:hover {
-  background: var(--danger);
-  border-color: var(--danger);
-  color: #fff;
+  background: rgba(255, 240, 207, 0.92);
 }
 
 .sidebar {
