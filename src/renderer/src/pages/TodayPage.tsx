@@ -411,7 +411,7 @@ export function TodayPage({
 
             {nothingToDo ? (
               <EmptyState
-                icon="🌿"
+                icon="sun"
                 title={doneToday.length > 0 ? '今天的事都做完了' : '今天没有要做的事'}
                 hint={
                   groups.early.length > 0

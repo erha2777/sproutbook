@@ -127,7 +127,7 @@ export function RecipesPage(): ReactNode {
           <LoadFailure what="配方库" detail={loadError} onRetry={() => void reload()} />
         ) : items.length === 0 ? (
           <EmptyState
-            icon="🧪"
+            icon="flask"
             title={debouncedQuery || kind ? '没有匹配的配方' : '还没有配方'}
             hint={
               debouncedQuery || kind

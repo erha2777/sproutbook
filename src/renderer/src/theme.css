@@ -78,9 +78,16 @@ body,
 }
 
 body {
-  /* --ui-font 在运行时被私有字体替换；没装就还是 Fusion Pixel */
-  font-family: var(--ui-font, 'Fusion Pixel', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif);
+  /*
+   * 中文用**平滑黑体**，不用像素字 —— 星露谷原版中文就是思源黑体（Noto Sans CJK），
+   * 像素画面配平滑中文才是原版的组合。Fusion Pixel 只留作最后兜底。
+   * --ui-font 仍然优先：用户往 <userData>/fonts 放了字体就换它。
+   */
+  font-family: var(--ui-font, 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC',
+      'Hiragino Sans GB', system-ui, sans-serif);
   font-size: 14px;
+  /* 原版中文是 Noto Sans CJK **Bold**，正文统一加粗一档才像 */
+  font-weight: 600;
   line-height: 1.6;
   color: var(--ink);
   background: var(--sky-1);
@@ -1155,7 +1162,7 @@ img {
   flex: 1;
   min-height: 0;
   /* 和内容同宽：宽屏下不要把 tab 拉到屏幕两端 */
-  max-width: 1240px;
+  max-width: 1120px;
   width: 100%;
   margin: 0 auto;
   /* 顶部让位交给 .main（那里留了 38px），这里不再重复 */
@@ -1166,8 +1173,78 @@ img {
   gap: 8px;
   flex-wrap: wrap;
   flex-shrink: 0;
-  /* 14px：和下面滚动区预留的 scrollbar-gutter 对齐 */
-  padding: 2px 14px 10px;
+  /* 已经挪到 .page-topbar 里，留白和高度都由那一行控制 */
+  padding: 0;
+}
+/*
+ * 顶部状态条：和四个 tab 同一行，靠右。
+ * 左边是导航、右边是"现在什么情况"，一行内分开，不多吃窗口高度。
+ */
+.top-hud {
+  margin-left: auto;
+  display: flex;
+  align-items: stretch;
+  font-size: 13px;
+  color: #6f4218;
+  white-space: nowrap;
+  /* 底下是热闹的游戏背景，必须给一块实底，否则字读不出来 */
+  background: #ffd789;
+  border: 2px solid #a86a2d;
+  box-shadow:
+    inset 0 3px 0 #ffe9bd,
+    inset 0 -3px 0 #e0b271;
+  /* 和左边四个 tab 同高，顶边/底边才对得齐 */
+  min-height: 38px;
+}
+/*
+ * 非养护区的顶部空行：高度、左右留白和养护区那排 tab 完全一致，
+ * 好让木框顶边在所有分区落在同一个 y 上。
+ * margin-bottom: -12px 抵消掉 .main 的 gap，否则会比养护区低 12px。
+ */
+.page-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 1120px;
+  /* 高度钉死成和养护区 tab 行一样（2 + 38 + 10 = 50） */
+  min-height: 50px;
+  margin: 0 auto -12px;
+  /* 左右不留内边距：tab 左边缘和木框外沿对齐 */
+  padding: 0;
+}
+.top-hud-date {
+  display: flex;
+  align-items: center;
+  padding: 5px 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.top-hud-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid rgba(168, 106, 45, 0.45);
+  cursor: pointer;
+}
+.top-hud-item:hover {
+  background: #ffedc4;
+}
+.top-hud-badge {
+  min-width: 20px;
+  padding: 0 4px;
+  text-align: center;
+  color: #fff8ec;
+  background: #b8391f;
+  border: 2px solid #7d2318;
 }
 .care-hub > .content {
   flex: 1;
@@ -1176,6 +1253,10 @@ img {
   scrollbar-gutter: stable both-edges;
 }
 .care-tab {
+  /* 图标和文字都按中心线对齐；按钮默认 inline-block，SVG 会贴着基线跑偏 */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 7px 16px;
   font-family: inherit;
   font-size: 14px;
@@ -1190,6 +1271,10 @@ img {
 }
 .care-tab:hover {
   background: #fae8c8;
+}
+/* 汉字在行框里略偏下，图标按中心对齐后会显得高 2px，这里补回来 */
+.care-tab svg {
+  transform: translateY(1px);
 }
 .care-tab.on {
   color: #17340a;
@@ -1231,12 +1316,12 @@ img {
   top: 0;
   left: 0;
   right: 0;
-  height: 28px;
+  height: 40px;
   z-index: 40;
   display: flex;
   justify-content: flex-end;
   align-items: flex-start;
-  padding: 3px 6px 0 0;
+  padding: 10px 10px 0 0;
   background: transparent;
   /* 透明但可拖动；按钮区单独 no-drag */
   -webkit-app-region: drag;
@@ -1355,7 +1440,7 @@ img {
   background: #fae8c8;
 }
 .back-btn:active {
-  transform: translateY(2px);
+  transform: translateY(1px);
 }
 
 .page-shell {
@@ -1431,7 +1516,7 @@ img {
  */
 .content > .content-inner {
   padding: 20px;
-  max-width: 1240px;
+  max-width: 1120px;
   margin: 0 auto;
   width: 100%;
   /* 像素字体比系统字体宽，宽表格可能顶出容器 —— 允许横向滚动，别裁掉操作列 */
@@ -1527,8 +1612,29 @@ img {
 }
 
 .empty-state .big {
-  font-size: 46px;
+  /* 现在是 PixelIcon 的 SVG，不再是 emoji 字号 */
+  line-height: 0;
+  opacity: 0.92;
 }
+/* 提示条左侧的图标：彩色方块 + 字形，替掉原来的 emoji */
+.notice-glyph {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff8ec;
+  border: 2px solid rgba(0, 0, 0, 0.35);
+}
+/* 独立成类，toast 里也复用同一套配色 */
+.notice-glyph.info { background: #2a4f8a; }
+.notice-glyph.warn { background: #b8801a; }
+.notice-glyph.danger { background: #b83a2a; }
+.notice-glyph.ok { background: #3f8f2a; }
 
 /* ---------- 滚动条 ---------- */
 
@@ -1751,6 +1857,23 @@ img {
  * 用主操作色（绿色）会让用户以为点了会发生什么，而已经在那个视图时
  * 点下去毫无反应，看起来就像坏了。
  */
+/* 工具条：窄窗口时整行换行，右边的按钮组作为整体挪到下一行 */
+.toolbar-row {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+.toolbar-row .pixel-btn,
+.toolbar-row .small.muted,
+.toolbar-row .view-tab {
+  white-space: nowrap;
+}
 .view-tabs {
   display: flex;
 }
@@ -2625,7 +2748,7 @@ img {
   transform: translateY(-1px);
 }
 .pixel-btn:active {
-  transform: translateY(2px);
+  transform: translateY(1px);
   filter: brightness(0.97);
 }
 .pixel-btn:focus-visible {
@@ -3097,6 +3220,37 @@ html.tex-button .home-btn b {
   display: none;
 }
 
+/*
+ * 按钮也支持九宫格：theme.json 里给 button 配 slice 时走 border-image，
+ * 这时图标和文字都保留（整张图那种才必须自带字）。
+ */
+html.tex-button.tex-button-slice .home-btn {
+  background: #ffd789;
+  background-image: none;
+  border-style: solid;
+  border-width: calc(var(--tex-button-slice-t, 16) * 1px) calc(var(--tex-button-slice-r, 16) * 1px)
+    calc(var(--tex-button-slice-b, 16) * 1px) calc(var(--tex-button-slice-l, 16) * 1px);
+  border-image-source: var(--tex-button);
+  border-image-slice: var(--tex-button-slice-t, 16) var(--tex-button-slice-r, 16)
+    var(--tex-button-slice-b, 16) var(--tex-button-slice-l, 16);
+  border-image-width: calc(var(--tex-button-slice-t, 16) * 1px) calc(var(--tex-button-slice-r, 16) * 1px)
+    calc(var(--tex-button-slice-b, 16) * 1px) calc(var(--tex-button-slice-l, 16) * 1px);
+  border-image-repeat: stretch;
+  border-image-outset: 0;
+  box-shadow: none;
+  image-rendering: pixelated;
+  padding: 0 12px;
+  /* 保证盒子比上下边框之和更高，否则浏览器会把 border-image 整体缩小（底部最先被压没） */
+  min-width: calc((var(--tex-button-slice-l, 16) + var(--tex-button-slice-r, 16)) * 1px + 84px);
+  min-height: calc((var(--tex-button-slice-t, 16) + var(--tex-button-slice-b, 16)) * 1px + 56px);
+}
+html.tex-button.tex-button-slice .home-btn b {
+  display: flex;
+}
+html.tex-button.tex-button-slice .home-btn:hover {
+  filter: brightness(1.06);
+}
+
 /* 有 slice 时走 border-image（下面），这里只处理没给 slice 的简单拉伸 */
 html.tex-panel:not(.tex-panel-slice) .pixel-panel {
   background-image: var(--tex-panel);
@@ -3216,19 +3370,226 @@ html.tex-cloud .cloud {
  * 素材包面板：DialogBoxGreen 当**页面外框**（一页一个），
  * 里面的小面板/卡片仍用双线细框 —— 否则每个小面板都套 24px 雕花框，太吵。
  */
-html.tex-panel.tex-panel-slice .content > .content-inner {
-  border-image-source: var(--tex-panel);
-  border-image-slice: var(--tex-panel-slice, 24);
-  border-width: calc(var(--tex-panel-slice, 24) * 1px);
+/*
+ * 套了整页木框之后：
+ *  - 纸面底色跟框内一致，避免内边缘出现「第二道深色边」
+ *  - 卡片改成单线框（原来的 border + inset 高光看起来是双层）
+ */
+/*
+ * 套了整页木框之后：
+ *  - 框画在 .content（滚动容器）上，滚动条才会落在**框里面**
+ *  - 纸面底色跟框内一致，避免内边缘出现「第二道深色边」
+ *  - 卡片改成单线框（原来的 border + inset 高光看起来是双层）
+ */
+/* 顶部四个 tab：同一套木框，选中态保留原来的绿色底 */
+html.tex-button .care-tab {
   border-style: solid;
   border-color: transparent;
-  border-image-width: calc(var(--tex-panel-slice, 24) * 1px);
+  border-width: 8px 8px 6px 8px;
+  border-image-source: var(--tex-button);
+  border-image-slice: 34 34 22 34;
+  border-image-width: 8px 8px 6px 8px;
+  border-image-repeat: stretch;
+  background: #ffd789;
+  box-shadow: none;
+  image-rendering: pixelated;
+  padding: 0 14px;
+  min-height: 38px;
+}
+html.tex-button .care-tab:hover {
+  filter: brightness(1.06);
+}
+html.tex-button .care-tab.on {
+  background: #9ec46a;
+  box-shadow: inset 0 3px 0 rgba(58, 46, 12, 0.18);
+}
+html.tex-button .care-tab.on:hover {
+  filter: brightness(1.02);
+}
+
+/* 提示条（toast）：同一套木框，靠底色区分成功 / 失败 */
+html.tex-button .toast {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 8px 8px 6px 8px;
+  border-image-source: var(--tex-button);
+  border-image-slice: 34 34 22 34;
+  border-image-width: 8px 8px 6px 8px;
+  border-image-repeat: stretch;
+  background: #ffd789;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25);
+  image-rendering: pixelated;
+  padding: 10px 12px;
+}
+html.tex-button .toast.success { background: #cfe8a8; }
+html.tex-button .toast.error { background: #f2b3a4; }
+/*
+ * 页面里的操作按钮（完成 / 跳过 / 编辑 / 保存 / 取消 …）
+ * 用同一张 button.png，边框压到 8px（small 6px）。
+ * ghost（纯文字按钮）不动 —— 给它套框会变成一排木牌，太吵。
+ */
+html.tex-button .pixel-btn:not(.ghost) {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 8px 8px 6px 8px;
+  border-image-source: var(--tex-button);
+  border-image-slice: 34 34 22 34;
+  border-image-width: 8px 8px 6px 8px;
+  border-image-repeat: stretch;
+  background: #ffd789;
+  box-shadow: none;
+  image-rendering: pixelated;
+  padding: 0 12px;
+  min-height: 40px;
+}
+html.tex-button .pixel-btn.small:not(.ghost) {
+  border-width: 6px 6px 5px 6px;
+  border-image-width: 6px 6px 5px 6px;
+  padding: 0 10px;
+  min-height: 32px;
+  font-size: 12px;
+}
+html.tex-button .pixel-btn.primary:not(.ghost) {
+  /* 和选中态 tab 同色，原来的亮绿压在木框里太跳 */
+  background: #9ec46a;
+}
+html.tex-button .pixel-btn.danger:not(.ghost) {
+  background: var(--red-light);
+}
+html.tex-button .pixel-btn:not(.ghost):hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+html.tex-button .pixel-btn:not(.ghost):active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.97);
+}/*
+ * 小按钮（首页齿轮/喇叭、右下角「后退」）也用同一套木框，缩小版：
+ * border-image 会把 17px 的木框压到 8px，纹理变细但风格统一。
+ */
+html.tex-button .home-gear,
+html.tex-button .back-btn {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 8px 8px 6px 8px;
+  border-image-source: var(--tex-button);
+  border-image-slice: 34 34 22 34;
+  border-image-width: 8px 8px 6px 8px;
+  border-image-repeat: stretch;
+  background: #ffd789;
+  background-image: none;
+  box-shadow: none;
+  image-rendering: pixelated;
+}
+html.tex-button .home-gear {
+  width: 54px;
+  height: 54px;
+}
+html.tex-button .home-gear:hover,
+html.tex-button .back-btn:hover {
+  filter: brightness(1.06);
+}
+html.tex-button .back-btn {
+  right: 10px;
+  bottom: 12px;
+  padding: 0 16px;
+}
+/* 给整页框留出外圈留白（窗口窄的时候框不会贴着窗口边） */
+html.tex-panel.tex-panel-slice .main {
+  padding: 50px;
+}
+html.tex-panel.tex-panel-slice .content {
+  /* 所有页面统一 1240：和养护页（.care-hub）同宽，宽屏下不会被撑成整块空框 */
+  width: 1120px;
+  max-width: 100%;
+  margin: 0 auto;
+  border-image-source: var(--tex-panel);
+  border-image-slice: var(--tex-panel-slice-t, 24) var(--tex-panel-slice-r, 24) var(--tex-panel-slice-b, 24)
+    var(--tex-panel-slice-l, 24);
+  border-width: calc(var(--tex-panel-slice-t, 24) * 1px) calc(var(--tex-panel-slice-r, 24) * 1px)
+    calc(var(--tex-panel-slice-b, 24) * 1px) calc(var(--tex-panel-slice-l, 24) * 1px);
+  border-style: solid;
+  border-color: transparent;
+  border-image-width: calc(var(--tex-panel-slice-t, 24) * 1px) calc(var(--tex-panel-slice-r, 24) * 1px)
+    calc(var(--tex-panel-slice-b, 24) * 1px) calc(var(--tex-panel-slice-l, 24) * 1px);
   /* stretch：长边上不重复出现雕花缺口，过渡更像一整圈框 */
   border-image-repeat: stretch;
   border-image-outset: 0;
-  background-image: none;
+  background: #ffcb7b;
+  padding: calc(var(--tex-panel-slice-t, 24) * 1px + 10px) calc(var(--tex-panel-slice-r, 24) * 1px + 10px)
+    calc(var(--tex-panel-slice-b, 24) * 1px + 14px) calc(var(--tex-panel-slice-l, 24) * 1px + 10px);
+}
+
+/*
+ * 竖向滚动条彻底不参与布局（仍然能滚：滚轮 / 触控板 / 键盘）。
+ *  - scrollbar-gutter: auto    不预留占位槽
+ *  - overflow-y: overlay       覆盖式滚动条，出现/消失都不改布局
+ *  - display:none              Chromium 自绘滚动条整条不画
+ * 切页时容器会重建，只要滚动条占一点宽度就会「闪一下 + 横向跳」，所以这里全禁掉。
+ */
+html.tex-panel.tex-panel-slice .content {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-gutter: auto;
+  overflow-y: overlay;
+}
+html.tex-panel.tex-panel-slice .content::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+/*
+ * 切页时原来有 page-in（内容上浮 6px）+ panel-rise 的入场动画。
+ * 框是固定不动的，内容在框里滑动看起来就是「跳一下」，套皮时关掉。
+ * 只保留一点点淡入，避免完全生硬。
+ */
+html.tex-panel.tex-panel-slice .content > .content-inner {
+  animation: none;
+}
+html.tex-panel.tex-panel-slice .content-inner > .pixel-panel,
+html.tex-panel.tex-panel-slice .content-inner > .pixel-card,
+html.tex-panel.tex-panel-slice .content-inner > .pixel-frame {
+  animation: none;
+}
+/* 框挪到 .content 之后，纸面本身不要再画边和底 */
+html.tex-panel.tex-panel-slice .content > .content-inner {
+  background: transparent;
+  border: 0;
   box-shadow: none;
-  padding: calc(var(--tex-panel-slice, 24) * 1px + 14px);
+  padding: 0;
+}
+
+html.tex-panel.tex-panel-slice .pixel-panel,
+html.tex-panel.tex-panel-slice .pixel-card {
+  border-width: 2px;
+  box-shadow: 0 3px 0 0 rgba(0, 0, 0, 0.12);
+}
+/*
+ * 弹窗：单独套一圈木框（和整页框同一张图、同一组 slice）。
+ * 头/脚去掉原来的深色横条，改成细分割线 —— 否则框里外两层深色太重。
+ */
+html.tex-panel.tex-panel-slice .modal {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 14px 17px 15px 14px;
+  border-image-source: var(--tex-panel);
+  border-image-slice: 14 17 15 14;
+  border-image-width: 14px 17px 15px 14px;
+  border-image-repeat: stretch;
+  background: #ffcb7b;
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.25);
+  padding: 0;
+  image-rendering: pixelated;
+}
+html.tex-panel.tex-panel-slice .modal-header {
+  background: transparent;
+  border-bottom: 2px dashed rgba(120, 62, 12, 0.35);
+}
+html.tex-panel.tex-panel-slice .modal-body {
+  background: transparent;
+}
+html.tex-panel.tex-panel-slice .modal-footer {
+  background: transparent;
+  border-top: 2px dashed rgba(120, 62, 12, 0.35);
 }
 
 

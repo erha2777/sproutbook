@@ -165,7 +165,7 @@ export interface Environment {
   /**
    * 区 / 县 / 县级市。
    * 只有配了和风天气的 key 时，这一级才会真正影响坐标 ——
-   * Open-Meteo 认不出中国的区县（某县县查不到，邻县却查得到）。
+   * Open-Meteo 认不出中国的区县（示范县查不到，邻县却查得到）。
    */
   district: string | null
   lat: number | null

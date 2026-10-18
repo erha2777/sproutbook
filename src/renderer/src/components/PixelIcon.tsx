@@ -9,7 +9,31 @@
  * 颜色用单字符代号，见 PALETTE。
  */
 
+import { useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
+
+/*
+ * 图标覆盖：<userData>/textures/icons/<name>.png（或开发期仓库 textures/icons/）。
+ * 有同名图片就用图片，没有就用下面的字符网格画。图片不进仓库，版权素材只在本机生效。
+ */
+let overrideUrls: Record<string, string> = {}
+const listeners = new Set<() => void>()
+
+export function setIconUrls(map: Record<string, string> | undefined): void {
+  overrideUrls = map ?? {}
+  for (const notify of listeners) notify()
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function useIconUrl(name: string): string | undefined {
+  return useSyncExternalStore(subscribe, () => overrideUrls[name])
+}
 
 const PALETTE: Record<string, string> = {
   k: '#4a2608', // 深棕描边
@@ -25,6 +49,119 @@ const PALETTE: Record<string, string> = {
 }
 
 const ICONS: Record<string, string[]> = {
+  // 地图图钉（位置）
+  pin: [
+    '................',
+    '.....kkkkkk.....',
+    '....krrrrrrk....',
+    '...krrrrrrrrk...',
+    '...krrwwwwrrk...',
+    '...krrwwwwrrk...',
+    '...krrrrrrrrk...',
+    '....krrrrrrk....',
+    '.....krrrrk.....',
+    '......krrk......',
+    '.......kk.......',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................'
+  ],
+  // 警示三角
+  warn: [
+    '................',
+    '.......kk.......',
+    '......kyyk......',
+    '......kyyk......',
+    '.....kyyyyk.....',
+    '.....kykyyk.....',
+    '....kyykyyyk....',
+    '....kyykyyyk....',
+    '...kyyykyyyyk...',
+    '...kyyyyyyyyk...',
+    '..kyyyyyyyyyyk..',
+    '..kkkkkkkkkkkk..',
+    '................',
+    '................',
+    '................',
+    '................'
+  ],  // 太阳（今日）：黄色实心 + 深棕描边，放在绿色选中底上也看得清
+  sun: [
+    '................',
+    '.......kk.......',
+    '.......kk.......',
+    '..k....kk....k..',
+    '...k..kkkk..k...',
+    '....kkkkkkkk....',
+    '...kkyyyyyykk...',
+    '..kkyyyyyyyykk..',
+    '..kkyyyyyyyykk..',
+    '...kkyyyyyykk...',
+    '....kkkkkkkk....',
+    '...k..kkkk..k...',
+    '..k....kk....k..',
+    '.......kk.......',
+    '.......kk.......',
+    '................'
+  ],
+  // 日历（养护计划）
+  calendar: [
+    '................',
+    '....k......k....',
+    '..kkkkkkkkkkkk..',
+    '..krrrrrrrrrrk..',
+    '..krrrrrrrrrrk..',
+    '..kwwwwwwwwwwk..',
+    '..kwkkwkkwkkwk..',
+    '..kwwwwwwwwwwk..',
+    '..kwkkwkkwkkwk..',
+    '..kwwwwwwwwwwk..',
+    '..kwkkwkkwkkwk..',
+    '..kwwwwwwwwwwk..',
+    '..kkkkkkkkkkkk..',
+    '................',
+    '................',
+    '................'
+  ],
+  // 本子（养护日志）
+  journal: [
+    '................',
+    '..kkkkkkkkkkkk..',
+    '..kOOOOOOOOOOk..',
+    '..kOwwwwwwwwOk..',
+    '..kOwkkkkkkwOk..',
+    '..kOwwwwwwwwOk..',
+    '..kOwkkkkkkwOk..',
+    '..kOwwwwwwwwOk..',
+    '..kOwkkkkkkwOk..',
+    '..kOwwwwwwwwOk..',
+    '..kOOOOOOOOOOk..',
+    '..kkkkkkkkkkkk..',
+    '................',
+    '................',
+    '................',
+    '................'
+  ],
+  // 药水瓶（配方）
+  flask: [
+    '................',
+    '......kkkk......',
+    '......kwwk......',
+    '......kwwk......',
+    '......kwwk......',
+    '.....kwwwwk.....',
+    '....kwwwwwwk....',
+    '...kwwwwwwwwk...',
+    '...kwggggggwk...',
+    '...kwGGGGGGwk...',
+    '...kwggggggwk...',
+    '...kwwwwwwwwk...',
+    '...kkkkkkkkkk...',
+    '................',
+    '................',
+    '................'
+  ],
   // 一株盆栽：树冠 + 花盆
   garden: [
     '................',
@@ -105,32 +242,34 @@ const ICONS: Record<string, string[]> = {
   gear: [
     '................',
     '......kkkk......',
-    '....kk.oo.kk....',
-    '....k..oo..k....',
-    '..kkk.oooo.kkk..',
-    '..k..oooooo..k..',
-    '..k.ooo..ooo.k..',
-    '..k.ooo..ooo.k..',
-    '..k..oooooo..k..',
-    '..kkk.oooo.kkk..',
-    '....k..oo..k....',
-    '....kk.oo.kk....',
+    '....kk.OO.kk....',
+    '....k..OO..k....',
+    '..kkk.OOOO.kkk..',
+    '..k..OOOOOO..k..',
+    '..k.OOO..OOO.k..',
+    '..k.OOO..OOO.k..',
+    '..k..OOOOOO..k..',
+    '..kkk.OOOO.kkk..',
+    '....k..OO..k....',
+    '....kk.OO.kk....',
     '......kkkk......',
     '................',
     '................',
     '................'
   ],
-  // 喇叭开
+  // 喇叭开：喇叭体用深木色（O），声波用描边色（k）—— 用 o/y 在米黄底上会糊成一团
   sound: [
     '................',
     '.......kk.......',
-    '......kook......',
-    '.....koook..y...',
-    '....kooook.y.y..',
-    '....kooook..y...',
-    '....kooook..y...',
-    '.....koook.y.y..',
-    '......kook..y...',
+    '......kOOk......',
+    '.....kOOOk......',
+    '....kOOOOk..k...',
+    '....kOOOOk.k.k..',
+    '....kOOOOk.k.k..',
+    '....kOOOOk.k.k..',
+    '....kOOOOk..k...',
+    '.....kOOOk......',
+    '......kOOk......',
     '.......kk.......',
     '................',
     '................',
@@ -139,21 +278,21 @@ const ICONS: Record<string, string[]> = {
     '................',
     '................'
   ],
-  // 喇叭关（加一道斜杠）
+  // 喇叭关：同款喇叭 + 右边一个红色小叉
   mute: [
     '................',
     '.......kk.......',
-    '......kook......',
-    '.....koook......',
-    '....kooook......',
-    '....kooook......',
-    '....kooook......',
-    '.....koook......',
-    '......kook......',
+    '......kOOk......',
+    '.....kOOOk......',
+    '....kOOOOk......',
+    '....kOOOOk.r.r..',
+    '....kOOOOk..r...',
+    '....kOOOOk.r.r..',
+    '....kOOOOk......',
+    '.....kOOOk......',
+    '......kOOk......',
     '.......kk.......',
-    '.....r...r......',
-    '......r.r.......',
-    '.......r........',
+    '................',
     '................',
     '................',
     '................'
@@ -169,6 +308,21 @@ export function PixelIcon({
   size?: number
   className?: string
 }): ReactNode {
+  const override = useIconUrl(name)
+  if (override) {
+    return (
+      <img
+        className={className}
+        src={override}
+        width={size}
+        height={size}
+        alt=""
+        aria-hidden
+        draggable={false}
+        style={{ imageRendering: 'pixelated', objectFit: 'contain' }}
+      />
+    )
+  }
   const rows = ICONS[name] ?? []
   return (
     <svg

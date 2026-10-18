@@ -2020,12 +2020,12 @@ export async function runSmoke(outFile: string): Promise<number> {
          * 措辞：温度必须归给**预报点**，不能读成「你家院子实测」。
          *
          * 第一版写的是「前院（东南136°）最高 31.2℃」，用户看到就以为是院子的温度 ——
-         * 但那是某市市中心那个格点的预报。用户反馈「位置不够精准」指的就是这个。
+         * 但那是市中心那个格点的预报。用户反馈「位置不够精准」指的就是这个。
          */
         {
-          const withLabel = assessWeatherRisks([zhudinghong], [day('2026-11-20', 3, 10)], '中国 · 湖南 · 某市')
+          const withLabel = assessWeatherRisks([zhudinghong], [day('2026-11-20', 3, 10)], '中国 · 示例省 · 示例市')
           const msg = withLabel[0]?.message ?? ''
-          check('温度归给预报点而不是植株位置', msg.includes('中国 · 湖南 · 某市预报最低'), msg)
+          check('温度归给预报点而不是植株位置', msg.includes('中国 · 示例省 · 示例市预报最低'), msg)
           check('植株位置另说，不再和温度绑在一起', msg.includes('前院这株能扛到'), msg)
           // 钉子：不能出现「前院……最低 <温度>」这种读起来像实测的说法
           check('不出现「前院最低 3℃」这种过度声称', !/前院[^，]*最低/.test(msg), msg)
@@ -2539,21 +2539,21 @@ export async function runSmoke(outFile: string): Promise<number> {
           level: 'district',
           provider: 'open-meteo'
         }
-        setSetting(db, GEOCODE_CACHE_KEY, { 'geo-v2|open-meteo|湖南|某市|某县县': fake })
+        setSetting(db, GEOCODE_CACHE_KEY, { 'geo-v2|open-meteo|示例省|示例市|示范县': fake })
 
         const cfg = readWeatherConfig(db, null)
         check('自检里默认走 Open-Meteo（否则下面这条会真发请求）', cfg.provider === 'open-meteo', cfg.provider)
 
-        const fromCache = await lookupLocation(db, cfg, { province: '湖南', city: '某市', district: '某县县' })
+        const fromCache = await lookupLocation(db, cfg, { province: '示例省', city: '示例市', district: '示范县' })
         check('命中缓存时原样返回（＝没联网）', fromCache?.label === '缓存里的假地点', String(fromCache?.label))
         check('缓存里的坐标与精度一并带出', fromCache?.latitude === 1.23 && fromCache?.level === 'district')
 
         // 换个区县就该重新解析；这里只断言键确实按区县区分（不去真的请求）
         const cache = getSetting<Record<string, unknown>>(db, GEOCODE_CACHE_KEY, {})
-        check('缓存键含数据源', 'geo-v2|open-meteo|湖南|某市|某县县' in cache, Object.keys(cache).join(','))
+        check('缓存键含数据源', 'geo-v2|open-meteo|示例省|示例市|示范县' in cache, Object.keys(cache).join(','))
         check(
           '缓存键按省市区分开',
-          !('open-meteo|湖南|某市|平江县' in cache) && !('open-meteo|湖北|武汉|某县县' in cache)
+          !('open-meteo|示例省|示例市|另县' in cache) && !('open-meteo|外省|外市|示范县' in cache)
         )
 
         setSetting(db, GEOCODE_CACHE_KEY, {})
@@ -2572,18 +2572,18 @@ export async function runSmoke(outFile: string): Promise<number> {
           lightLevel: null,
           lightHours: null,
           climateZone: null,
-          province: '湖南',
-          city: '某市',
-          district: '某县县',
-          lat: 30.0000,
-          lon: 120.0000,
+          province: '示例省',
+          city: '示例市',
+          district: '示范县',
+          lat: 31.2345,
+          lon: 121.5678,
           canHeat: false,
           frostProtected: false,
           sortOrder: 99
         })
-        check('新建位置时区县写入正确', saved.district === '某县县', String(saved.district))
-        check('新建位置时纬度不错位', saved.lat === 30.0000, String(saved.lat))
-        check('新建位置时经度不错位', saved.lon === 120.0000, String(saved.lon))
+        check('新建位置时区县写入正确', saved.district === '示范县', String(saved.district))
+        check('新建位置时纬度不错位', saved.lat === 31.2345, String(saved.lat))
+        check('新建位置时经度不错位', saved.lon === 121.5678, String(saved.lon))
 
         // 编辑：这正是用户报「修改不了」的那条路径
         const edited = saveEnvironment(db, {
@@ -2593,22 +2593,22 @@ export async function runSmoke(outFile: string): Promise<number> {
           lightLevel: null,
           lightHours: null,
           climateZone: null,
-          province: '湖南',
-          city: '某市',
-          district: '平江县',
+          province: '示例省',
+          city: '示例市',
+          district: '另县',
           lat: 28.71,
           lon: 113.58,
           canHeat: true,
           frostProtected: true,
           sortOrder: 99
         })
-        check('编辑位置时区县能改', edited.district === '平江县', String(edited.district))
+        check('编辑位置时区县能改', edited.district === '另县', String(edited.district))
         check('编辑位置时坐标能改', edited.lat === 28.71 && edited.lon === 113.58, `${edited.lat},${edited.lon}`)
         check('编辑位置时开关能改', edited.canHeat === true && edited.frostProtected === true)
 
         // 再读一次，确认真的落库了而不是只改了返回值
         const reread = getEnvironment(db, saved.id)
-        check('重新读取后区县仍在', reread?.district === '平江县', String(reread?.district))
+        check('重新读取后区县仍在', reread?.district === '另县', String(reread?.district))
         check('重新读取后坐标仍在', reread?.lat === 28.71 && reread?.lon === 113.58)
 
         archiveEnvironment(db, saved.id)
@@ -2616,7 +2616,7 @@ export async function runSmoke(outFile: string): Promise<number> {
 
       // ---- 天气数据源配置 ----
       //
-      // 用户的需求是「某县县」这种区县级地名，而 Open-Meteo 认不出来。
+      // 用户的需求是「示范县」这种区县级地名，而 Open-Meteo 认不出来。
       // 和风天气能认，但要 key。底线是：**不配 key 的人照样能用。**
       {
         const fresh = readWeatherConfig(db, null)

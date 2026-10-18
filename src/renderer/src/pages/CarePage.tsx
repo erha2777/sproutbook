@@ -438,6 +438,21 @@ export function CarePage({
         <Button size="small" onClick={() => void openPurge()}>
           清理计划
         </Button>
+        {/* 导出成独立 HTML：给不在电脑边上的自己 / 家人看，或打印贴墙上 */}
+        <Button
+          size="small"
+          disabled={!plantFilter}
+          title={plantFilter ? `把这一株 ${year} 年的全年计划导出成网页` : '先在左边选一株'}
+          onClick={() => {
+            if (!plantFilter) return
+            void window.api.care.exportPlanHtml(Number(plantFilter), year).then((r) => {
+              if (r.canceled) return
+              toast.push(`已导出 ${r.count} 项：${r.path ?? ''}`, 'success')
+            })
+          }}
+        >
+          导出计划
+        </Button>
         <Button variant="primary" onClick={() => setEditing('new')}>
           ＋ 新增任务
         </Button>
@@ -600,13 +615,13 @@ export function CarePage({
             </SectionTitle>
             {!dayInMonth ? (
               <EmptyState
-                icon="🗓"
+                icon="calendar"
                 title="点月历里的某一天"
                 hint="那一天安排了什么会列在这里，可以直接查看 / 编辑 / 删除。"
               />
             ) : dayTasks.length === 0 ? (
               <EmptyState
-                icon="🌿"
+                icon="garden"
                 title="这一天还没有安排"
                 hint="可以给这天单独加一条；年度计划到「我的花园」里选中那株生成。"
                 action={

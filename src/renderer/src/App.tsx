@@ -3,6 +3,8 @@ import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, ToastProvider, cx, useToast } from './components/ui'
 import { TitleBar } from './components/TitleBar'
 import { Backdrop } from './components/Backdrop'
+import { PixelIcon, setIconUrls } from './components/PixelIcon'
+import { TopHud } from './components/TopHud'
 import { GardenPage } from './pages/GardenPage'
 import { SpeciesPage } from './pages/SpeciesPage'
 import { SpeciesEditor } from './pages/SpeciesEditor'
@@ -29,10 +31,10 @@ type Route =
 
 /** 养护子页（首页「养护」进去后的四个 tab） */
 const CARE_TABS: Array<{ key: CareTab; icon: string; label: string }> = [
-  { key: 'today', icon: '🌤️', label: '今日' },
-  { key: 'plans', icon: '📅', label: '养护计划' },
-  { key: 'logs', icon: '📓', label: '养护日志' },
-  { key: 'recipes', icon: '🧪', label: '配方' }
+  { key: 'today', icon: 'sun', label: '今日' },
+  { key: 'plans', icon: 'calendar', label: '养护计划' },
+  { key: 'logs', icon: 'journal', label: '养护日志' },
+  { key: 'recipes', icon: 'flask', label: '配方' }
 ]
 
 const HASH_TO_ROUTE: Record<string, Route['name']> = {
@@ -270,8 +272,9 @@ function Shell(): ReactNode {
   useEffect(() => {
     void (async () => {
       try {
-        const { slots, slices, backgrounds } = await window.api.app.textures()
+        const { slots, slices, backgrounds, icons } = await window.api.app.textures()
         if (backgrounds.length > 0) setBackdrops(backgrounds)
+        setIconUrls(icons)
         const root = document.documentElement
         const vars: Array<[string, string, string]> = [
           ['home-bg', '--tex-home-bg', 'tex-home'],
@@ -291,7 +294,12 @@ function Shell(): ReactNode {
           const slice = slices?.[slot]
           if (slice) {
             // border-image-slice 只认数字，单位由 CSS 里 calc(*1px) 补
-            root.style.setProperty(`--tex-${slot}-slice`, String(slice))
+            const [t, r, b, l] = Array.isArray(slice) ? slice : [slice, slice, slice, slice]
+            root.style.setProperty(`--tex-${slot}-slice`, String(t))
+            root.style.setProperty(`--tex-${slot}-slice-t`, String(t))
+            root.style.setProperty(`--tex-${slot}-slice-r`, String(r))
+            root.style.setProperty(`--tex-${slot}-slice-b`, String(b))
+            root.style.setProperty(`--tex-${slot}-slice-l`, String(l))
             root.classList.add(`tex-${slot}-slice`)
           }
         }
@@ -429,6 +437,29 @@ function Shell(): ReactNode {
       <TitleBar />
       <div className="page-shell">
       <main className="main">
+        {/* 所有分区共用同一条顶行：养护区左边是 tab，其他区只有右边的 HUD。
+            结构一致，切页时框不会上下跳 */}
+        <div className="page-topbar">
+          {route.name === 'care' ? (
+            <div className="care-tabs">
+              {CARE_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={cx('care-tab', route.tab === tab.key && 'on')}
+                  onClick={() => setRoute({ name: 'care', tab: tab.key })}
+                >
+                  <PixelIcon name={tab.icon} size={17} /> {tab.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <TopHud
+            pending={carePending}
+            onGoWeather={() => setRoute({ name: 'care', tab: 'today' })}
+            onGoPlans={() => setRoute({ name: 'care', tab: 'plans' })}
+          />
+        </div>
         {compatHint ? (
           <div style={{ padding: '0 0 2px' }}>
             <Notice tone="warn">
@@ -473,21 +504,8 @@ function Shell(): ReactNode {
           就会漏出一条「滚过去的内容」，结构上分开最稳。
         */}
         {route.name === 'care' ? (
-          <div className="care-hub">
-            <div className="care-tabs">
-              {CARE_TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  className={cx('care-tab', route.tab === tab.key && 'on')}
-                  onClick={() => setRoute({ name: 'care', tab: tab.key })}
-                >
-                  {tab.icon} {tab.label}
-                </button>
-              ))}
-            </div>
-            <div className="content">
-              <PageErrorBoundary resetKey={`care:${route.tab}`}>
+          <div className="content">
+            <PageErrorBoundary resetKey={`care:${route.tab}`}>
                 {route.tab === 'today' ? (
                   <TodayPage
                     onCareChanged={refreshCareBadge}
@@ -500,7 +518,6 @@ function Shell(): ReactNode {
                 {route.tab === 'logs' ? <LogsPage /> : null}
                 {route.tab === 'recipes' ? <RecipesPage /> : null}
               </PageErrorBoundary>
-            </div>
           </div>
         ) : (
         <div className="content">

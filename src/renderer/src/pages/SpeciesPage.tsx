@@ -116,7 +116,7 @@ export function SpeciesPage({
       ) : filtered.length === 0 ? (
         <Panel>
           <EmptyState
-            icon="📖"
+            icon="species"
             title={query || family || bloomingOnly ? '没有符合条件的物种' : '物种库还是空的'}
             hint="物种库保存的是植物的「百科信息」：科属、毒性、耐寒、花期等。新增后可以给多株植物共用，也可以用 AI 自动补全。"
             action={

@@ -285,7 +285,7 @@ export function LogsPage(): ReactNode {
           <Spinner label="加载中…" />
         ) : logs.length === 0 ? (
           <EmptyState
-            icon="📓"
+            icon="journal"
             title={plantId ? '这株还没有记录' : '还没有记录'}
             hint="完成任务时会自动写一条日志；也可以在上面手动记一笔。"
           />

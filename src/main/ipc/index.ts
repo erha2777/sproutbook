@@ -9,6 +9,8 @@
  */
 
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron'
+import { logStartup } from '../startupLog'
+import { buildCarePlanHtml } from '../../core/carePlanHtml'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
 import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
@@ -290,7 +292,7 @@ function registerAppIpc(): void {
     const dirs = [join(app.getPath('userData'), 'textures')]
     if (!app.isPackaged) dirs.push(join(app.getAppPath(), 'textures'))
     const slots: Record<string, string> = {}
-    const slices: Record<string, number> = {}
+    const slices: Record<string, number | [number, number, number, number]> = {}
     const backgrounds: string[] = []
     const exts = ['png', 'jpg', 'jpeg', 'webp']
     const seen = new Set<string>()
@@ -332,10 +334,36 @@ function registerAppIpc(): void {
       }
     }
 
+    /*
+     * 图标覆盖：<dir>/icons/<name>.png → 前端 PixelIcon 按 name 取图。
+     * 没放同名文件就继续用画出来的默认图标。
+     */
+    const icons: Record<string, string> = {}
+    for (const dir of dirs) {
+      const iconDir = join(dir, 'icons')
+      if (!existsSync(iconDir)) continue
+      let names: string[] = []
+      try {
+        names = readdirSync(iconDir).sort()
+      } catch {
+        names = []
+      }
+      for (const name of names) {
+        const dot = name.lastIndexOf('.')
+        if (dot <= 0) continue
+        if (!exts.includes(name.slice(dot + 1).toLowerCase())) continue
+        const key = name.slice(0, dot)
+        if (icons[key]) continue
+        const url = readAsUrl(join(iconDir, name))
+        if (url) icons[key] = url
+      }
+    }
+
     interface ThemeEntry {
       file: string
       crop?: { x: number; y: number; w: number; h: number }
-      slice?: number
+      /** 九宫格边距：一个数（四边相同）或 [上, 右, 下, 左] */
+      slice?: number | [number, number, number, number]
     }
     interface ThemeFile {
       slots?: Record<string, ThemeEntry>
@@ -356,7 +384,11 @@ function registerAppIpc(): void {
         if (!entry || typeof entry.file !== 'string') continue
         const url = loadSlotImage(dir, entry)
         if (url) slots[slot] = url
-        if (typeof entry.slice === 'number' && entry.slice > 0) slices[slot] = entry.slice
+        if (typeof entry.slice === 'number' && entry.slice > 0) {
+          slices[slot] = entry.slice
+        } else if (Array.isArray(entry.slice) && entry.slice.length === 4 && entry.slice.every((v) => typeof v === 'number' && v > 0)) {
+          slices[slot] = entry.slice as [number, number, number, number]
+        }
       }
       for (const rel of theme.backgrounds ?? []) {
         if (backgrounds.length >= 8) break
@@ -368,7 +400,8 @@ function registerAppIpc(): void {
         seen.add(file)
         backgrounds.push(url)
       }
-      return { slots, slices, backgrounds }
+      logStartup('皮肤 theme.json', { dir, slots: Object.keys(slots), slices })
+      return { slots, slices, backgrounds, icons }
     }
 
     // 2) 没有 theme.json：约定文件名
@@ -404,7 +437,7 @@ function registerAppIpc(): void {
       }
     }
 
-    return { slots, slices, backgrounds }
+    return { slots, slices, backgrounds, icons }
   })
 
   /** 私有背景音乐列表（<userData>/textures/music） */
@@ -810,6 +843,55 @@ function registerImageIpc(): void {
   handle('care:generate', (plantId: number, year: number) => generateTasksForPlant(getDb(), plantId, year))
   handle('care:generateAll', (year: number) => generateTasksForAll(getDb(), year))
   handle('care:overview', (year: number) => careOverview(getDb(), year))
+
+  /*
+   * 导出「这一株的全年计划」为独立 HTML。
+   * 只读数据库 + 拼字符串，然后弹保存框；不写库，也不依赖渲染进程。
+   */
+  handle('care:plan.exportHtml', async (plantId: number, year: number) => {
+    const db = getDb()
+    const plant = getPlant(db, plantId)
+    if (!plant) throw new Error('植株不存在')
+    const tasks = listCareTasks(db, { plantId, from: `${year}-01-01`, to: `${year}-12-31` })
+    // 封面：thumb_path 是 imagesDir() 里的文件名，读出来内联成 data URI（HTML 要能单文件带走）
+    let coverDataUrl: string | null = null
+    if (plant.coverThumb) {
+      try {
+        const file = join(imagesDir(), plant.coverThumb)
+        if (existsSync(file)) {
+          const ext = plant.coverThumb.toLowerCase().split('.').pop() ?? 'png'
+          const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png'
+          coverDataUrl = `data:${mime};base64,${readFileSync(file).toString('base64')}`
+        }
+      } catch {
+        // 图读不出来就不带封面，不影响导出
+      }
+    }
+    const html = buildCarePlanHtml({
+      plantName: plant.nickname,
+      coverDataUrl,
+      speciesName: plant.species?.commonName ?? null,
+      year,
+      tasks: tasks.map((task) => ({
+        actionType: task.actionType,
+        title: task.title,
+        detail: task.detail,
+        dueDate: task.dueDate,
+        windowDays: task.windowDays,
+        status: task.status
+      })),
+      generatedAt: new Date()
+    })
+    const safeName = plant.nickname.replace(/[\\/:*?"<>|]/g, '_')
+    const result = await dialog.showSaveDialog({
+      title: '导出全年养护计划',
+      defaultPath: `${safeName}-${year}-养护计划.html`,
+      filters: [{ name: 'HTML 网页', extensions: ['html'] }]
+    })
+    if (result.canceled || !result.filePath) return { canceled: true, path: null, count: tasks.length }
+    writeFileSync(result.filePath, html, 'utf8')
+    return { canceled: false, path: result.filePath, count: tasks.length }
+  })
 
   // 物候阶段：切换会立刻改变任务生成结果，也会写一条养护日志
   handle('care:plantPhase', (plantId: number) => getPlantPhase(getDb(), plantId))

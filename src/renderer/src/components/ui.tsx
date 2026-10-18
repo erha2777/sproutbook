@@ -6,6 +6,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import { formatMonthSet, normalizeMonths } from '@core/fieldTypes'
+import { PixelIcon } from './PixelIcon'
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
@@ -37,20 +38,29 @@ export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?
   return <span className={cx('pixel-badge', tone)}>{children}</span>
 }
 
+const NOTICE_GLYPH: Record<string, string> = { danger: '×', warn: '!', ok: '✓', info: 'i' }
+
 export function Notice({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'warn' | 'danger' | 'ok' }): ReactNode {
-  const icon = tone === 'danger' ? '⛔' : tone === 'warn' ? '⚠️' : tone === 'ok' ? '✅' : 'ℹ️'
   return (
     <div className={cx('notice', tone)}>
-      <span>{icon}</span>
+      <span className={cx('notice-glyph', tone)}>{NOTICE_GLYPH[tone]}</span>
       <div style={{ flex: 1 }}>{children}</div>
     </div>
   )
 }
 
-export function EmptyState({ icon = '🌱', title, hint, action }: { icon?: string; title: string; hint?: string; action?: ReactNode }): ReactNode {
+/**
+ * 空状态。
+ *
+ * `icon` 是 PixelIcon 的名字（`garden` / `calendar` / `journal` …），不再收 emoji ——
+ * 彩色圆角 emoji 放在木框和像素图标中间太出戏。
+ */
+export function EmptyState({ icon = 'garden', title, hint, action }: { icon?: string; title: string; hint?: string; action?: ReactNode }): ReactNode {
   return (
     <div className="empty-state">
-      <div className="big">{icon}</div>
+      <div className="big">
+        <PixelIcon name={icon} size={46} />
+      </div>
       <div style={{ fontWeight: 700, fontSize: 15 }}>{title}</div>
       {hint ? <div className="small" style={{ maxWidth: 460 }}>{hint}</div> : null}
       {action}
@@ -87,7 +97,7 @@ export function LoadFailure({
   return (
     <Panel>
       <EmptyState
-        icon="⚠"
+        icon="warn"
         title={`${what}读取失败`}
         hint={
           `这不是「没有数据」，而是没读到 —— 你的数据可能还在。` +
@@ -588,7 +598,9 @@ export function ToastProvider({ children }: { children: ReactNode }): ReactNode 
       <div className="toast-stack">
         {items.map((item) => (
           <div key={item.id} className={cx('toast', item.tone === 'error' && 'error', item.tone === 'success' && 'success')}>
-            <span>{item.tone === 'error' ? '⛔' : item.tone === 'success' ? '✅' : 'ℹ️'}</span>
+            <span className={cx('notice-glyph', item.tone === 'error' ? 'danger' : item.tone === 'success' ? 'ok' : 'info')}>
+              {item.tone === 'error' ? '×' : item.tone === 'success' ? '✓' : 'i'}
+            </span>
             <span style={{ flex: 1 }}>{item.message}</span>
           </div>
         ))}

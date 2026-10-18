@@ -394,17 +394,17 @@ export function GardenPage({
         ) : null}
 
         <Panel className="sticky-head">
-          <div className="row" style={{ flexWrap: 'nowrap' }}>
-            <div style={{ width: 190 }}>
+          <div className="row toolbar-row">
+            <div style={{ flex: '1 1 200px', minWidth: 150, maxWidth: 260 }}>
               <TextInput value={query} onChange={(v) => patch({ query: v })} placeholder="搜索昵称 / 物种 / 别名…" />
             </div>
-            <div style={{ width: 158 }}>
+            <div style={{ flex: '0 1 150px', minWidth: 120 }}>
               <SelectInput value={status} onChange={(v) => patch({ status: v as '' | PlantStatus })} options={statusOptions} />
             </div>
-            <div style={{ width: 158 }}>
+            <div style={{ flex: '0 1 150px', minWidth: 120 }}>
               <SelectInput value={envId} onChange={(v) => patch({ envId: v })} options={envOptions} />
             </div>
-            <span className="spacer" />
+            <div className="toolbar-right">
             {/*
               视图切换用分段控件，而不是两个主按钮。
               原来激活的那个用的是主操作色（和「＋新增植株」一样的绿），
@@ -418,25 +418,26 @@ export function GardenPage({
                 onClick={() => setView('scene')}
                 title="用像素图看每株长到哪一步"
               >
-                🌿 花园
+                花园
               </button>
               <button
                 className={`view-tab${view === 'list' ? ' on' : ''}`}
                 onClick={() => setView('list')}
                 title="搜索、筛选、批量管理"
               >
-                ▦ 列表
+                列表
               </button>
             </div>
             {/* 植株信息模板挪进了「我的花园」——原来在侧栏是一个独立页 */}
             {onOpenTemplates ? (
               <Button size="small" onClick={onOpenTemplates} title="决定「本株信息」里有哪些项目">
-                🧩 信息模板
+                信息模板
               </Button>
             ) : null}
             <Button variant="primary" onClick={() => setEditing('new')}>
               ＋ 新增植株
             </Button>
+            </div>
           </div>
         </Panel>
 
@@ -449,7 +450,7 @@ export function GardenPage({
         ) : gardenItems.length === 0 ? (
           <Panel>
             <EmptyState
-              icon="🪴"
+              icon="garden"
               title={query || status || envId ? '没有符合条件的植株' : '花园里还没有植物'}
               hint={
                 query || status || envId

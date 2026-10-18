@@ -387,7 +387,7 @@ export function SettingsPage(): ReactNode {
             </Notice>
 
             {backups.length === 0 ? (
-              <EmptyState icon="💾" title="还没有备份" hint="点击「立即备份」创建第一份。" />
+              <EmptyState icon="gear" title="还没有备份" hint="点击「立即备份」创建第一份。" />
             ) : (
               <table className="pixel-table">
                 <thead>
@@ -548,7 +548,7 @@ export function SettingsPage(): ReactNode {
         </SectionTitle>
         <div className="small muted" style={{ marginBottom: 8 }}>
           霜冻预警要按你所在位置的天气判断。默认用 <b>Open-Meteo</b>：免费、不用注册。
-          但它是全球模型，<b>认不出中国的区县</b> ——「某县县」查不到，而「邻县」却查得到，不可靠。
+          但它是全球模型，<b>认不出中国的区县</b> ——同一个省里有的县查得到、有的查不到，不可靠。
           想要区县级精度就配一个<b>和风天气</b>的 key。<b>不配也完全能用</b>，只是地名的精度停在市一级。
         </div>
 
@@ -619,8 +619,8 @@ export function SettingsPage(): ReactNode {
                   setWeatherTesting(true)
                   setWeatherTestResult(null)
                   try {
-                    // 拿「某县县」试 —— 那正是 Open-Meteo 认不出、用户真正需要的那个地名
-                    const r = await window.api.weather.testLocation('某县县')
+                    // 拿一个区县级地名试 —— 这一级才是 Open-Meteo 常认不出的那种
+                    const r = await window.api.weather.testLocation('东城区')
                     setWeatherTestResult(
                       r.ok
                         ? {
@@ -634,7 +634,7 @@ export function SettingsPage(): ReactNode {
                   }
                 }}
               >
-                {weatherTesting ? '测试中…' : '用「某县县」试一下'}
+                {weatherTesting ? '测试中…' : '用「东城区」试一下'}
               </Button>
               {/*
                 硬清缓存。

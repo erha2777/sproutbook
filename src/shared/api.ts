@@ -145,9 +145,11 @@ export interface SproutbookApi {
      */
     textures(): Promise<{
       slots: Record<string, string>
-      /** 九宫格边距（theme.json 里的 slice，单位像素） */
-      slices: Record<string, number>
+      /** 九宫格边距（theme.json 里的 slice）：单值或 [上, 右, 下, 左] */
+      slices: Record<string, number | [number, number, number, number]>
       backgrounds: string[]
+      /** 图标覆盖：textures/icons/<name>.png，名字对应 PixelIcon 的 name */
+      icons: Record<string, string>
     }>
   }
   /**
@@ -320,6 +322,12 @@ export interface SproutbookApi {
     generate(plantId: number, year: number): Promise<CareGenerateResult>
     generateAll(year: number): Promise<CareGenerateResult>
     overview(year: number): Promise<CareOverview>
+
+    /**
+     * 把某一株的**全年**养护计划导出成独立 HTML（弹保存对话框）。
+     * `canceled` 表示用户取消了保存。
+     */
+    exportPlanHtml(plantId: number, year: number): Promise<CarePlanExportResult>
 
     /** 植株当前物候阶段 */
     plantPhase(plantId: number): Promise<PlantPhaseInfo>
@@ -620,3 +628,11 @@ export interface WeatherWarningResult {
 }
 
 export type { Plant, PlantListItem as PlantCard }
+
+export interface CarePlanExportResult {
+  canceled: boolean
+  /** 保存路径；用户取消时为 null */
+  path: string | null
+  /** 这份计划里的任务条数 */
+  count: number
+}

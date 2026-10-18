@@ -77,7 +77,7 @@ export function EnvironmentManager({ onChanged }: { onChanged?: () => void }): R
           <Spinner label="加载中…" />
         ) : items.length === 0 ? (
           <EmptyState
-            icon="📍"
+            icon="pin"
             title="还没有养护位置"
             hint="至少建一个，比如「南向阳台」，之后新增植株时就能选它。"
             action={
@@ -262,14 +262,14 @@ function EnvironmentEditorModal({
 
           {/*
             区县这一级只有配了和风天气的 key 才真正影响坐标。
-            Open-Meteo 认不出中国的区县（某县县查不到，邻县却查得到），
+            Open-Meteo 认不出中国的区县（某县查不到，邻县却查得到），
             所以这里如实说明，而不是让用户以为填了就一定更准。
           */}
           <Field
             label="区 / 县（可选）"
-            help="例如「某县县」。只有在「设置 → 天气数据源」配好和风天气的 key 之后，这一级才会真正影响坐标；否则仅作记录，坐标仍落在市一级。"
+            help="例如「某县」。只有在「设置 → 天气数据源」配好和风天气的 key 之后，这一级才会真正影响坐标；否则仅作记录，坐标仍落在市一级。"
           >
-            <TextInput value={district} onChange={setDistrict} placeholder="某县县" />
+            <TextInput value={district} onChange={setDistrict} placeholder="某县" />
           </Field>
 
           <Field label="纬度（可选）">

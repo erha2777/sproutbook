@@ -130,7 +130,7 @@ export function TemplatesPage({
         ) : loadError ? (
           <LoadFailure what="信息模板" detail={loadError} onRetry={() => void reload()} />
         ) : visible.length === 0 ? (
-          <EmptyState icon="🧩" title="还没有字段" hint="点击右上角「新增字段」开始定制你的信息模板。" />
+          <EmptyState icon="journal" title="还没有字段" hint="点击右上角「新增字段」开始定制你的信息模板。" />
         ) : (
           <table className="pixel-table">
             <thead>
