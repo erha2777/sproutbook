@@ -109,7 +109,8 @@ const api: SproutbookApi = {
     tasks: (query) => call('care:tasks', query ?? {}),
     createTask: (input) => call('care:task.create', input),
     updateTask: (id, patch) => call('care:task.update', id, patch),
-    completeTask: (id, note, date) => call('care:task.complete', id, note ?? null, date),
+    completeTask: (id, note, date, imageIds) =>
+      call('care:task.complete', id, note ?? null, date, imageIds ?? null),
     skipTask: (id, reason) => call('care:task.skip', id, reason ?? null),
     reopenTask: (id) => call('care:task.reopen', id),
     removeTask: (id) => call('care:task.delete', id),

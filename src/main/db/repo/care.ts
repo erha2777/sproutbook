@@ -462,7 +462,13 @@ export function updateCareTask(db: Db, id: number, patch: CareTaskPatch): CareTa
  * 同时写一条养护日志 —— 完成情况本身就是「这株植物经历过什么」，
  * 分开维护两份记录迟早会对不上。日志是时间线，任务是待办，一条事实两处视角。
  */
-export function completeCareTask(db: Db, id: number, note?: string | null, date?: string): CareTask | null {
+export function completeCareTask(
+  db: Db,
+  id: number,
+  note?: string | null,
+  date?: string,
+  imageIds?: number[]
+): CareTask | null {
   return db.transaction(() => {
     const task = getCareTask(db, id)
     if (!task) return null
@@ -475,8 +481,9 @@ export function completeCareTask(db: Db, id: number, note?: string | null, date?
       id
     )
 
+    let logId: number | null = null
     if (task.plantId !== null) {
-      db.run(
+      const r = db.run(
         `INSERT INTO care_logs (plant_id, task_id, log_date, kind, content, recipe_id) VALUES (?, ?, ?, ?, ?, ?)`,
         task.plantId,
         id,
@@ -490,7 +497,26 @@ export function completeCareTask(db: Db, id: number, note?: string | null, date?
          */
         task.recipeId ?? null
       )
+      logId = Number(r.lastInsertRowid)
     }
+
+    /*
+     * 完成时顺手带的照片：选图时已经导入 images 表，这里挂到刚写的日志上。
+     * 没有日志（任务没绑植株）就不挂 —— 照片留在 images 里，不凭空丢掉。
+     */
+    if (logId !== null && imageIds && imageIds.length > 0) {
+      const ids = imageIds.filter((v) => Number.isFinite(v))
+      if (ids.length > 0) {
+        const placeholders = ids.map(() => '?').join(',')
+        db.run(
+          `UPDATE images SET log_id = ?, plant_id = COALESCE(plant_id, ?) WHERE id IN (${placeholders})`,
+          logId,
+          task.plantId,
+          ...ids
+        )
+      }
+    }
+
     return getCareTask(db, id)
   })
 }

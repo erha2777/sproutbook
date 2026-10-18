@@ -252,12 +252,18 @@ export function TodayPage({
   const act = async (
     task: CareTaskListItem,
     action: 'complete' | 'skip' | 'reopen',
-    note?: string
+    note?: string,
+    imageIds?: number[]
   ): Promise<void> => {
     setBusyId(task.id)
     try {
       if (action === 'complete') {
-        const updated = await window.api.care.completeTask(task.id, note?.trim() ? note : null)
+        const updated = await window.api.care.completeTask(
+          task.id,
+          note?.trim() ? note : null,
+          undefined,
+          imageIds
+        )
         if (updated) mergeDone(task, updated)
         toast.push('已完成', 'success')
       } else if (action === 'skip') {
@@ -301,7 +307,7 @@ export function TodayPage({
       busy={busyId === task.id}
       recipes={recipes}
       materials={materials}
-      onComplete={(t, note) => void act(t, 'complete', note)}
+      onComplete={(t, note, images) => void act(t, 'complete', note, images)}
       onSkip={(t) => void act(t, 'skip')}
       onReopen={(t) => void act(t, 'reopen')}
       onEdit={(t) => setEditing(t)}

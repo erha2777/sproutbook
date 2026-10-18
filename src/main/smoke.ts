@@ -1447,6 +1447,23 @@ export async function runSmoke(outFile: string): Promise<number> {
         }
       }
 
+      // ---- 完成时顺手带照片 ----
+      {
+        const shoal = addImage(db, { plantId: carePlantId, path: 'smoke-done-photo.png' })
+        const target = listCareTasks(db, { plantId: carePlantId, status: 'open' })[0]
+        if (target) {
+          completeCareTask(db, target.id, '完成时拍照', undefined, [shoal.id])
+          const written = listCareLogs(db, { plantId: carePlantId, limit: 10 }).find((l) => l.taskId === target.id)
+          check(
+            '完成时带的照片会写进自动生成的那条日志',
+            written?.images.length === 1 && written.images[0].path === 'smoke-done-photo.png',
+            String(written?.images.length)
+          )
+          // 收尾：撤销会把那条日志一起删掉
+          reopenCareTask(db, target.id)
+        }
+      }
+
       // ---- 仓储：查询 ----
       check('可按月份区间过滤任务', listCareTasks(db, { plantId: carePlantId, from: '2026-03-01', to: '2026-03-31' }).every((t) => t.dueDate.startsWith('2026-03')))
       check('可按状态过滤', listCareTasks(db, { status: 'open' }).every((t) => t.status === 'pending'))

@@ -264,8 +264,8 @@ export interface SproutbookApi {
     tasks(query?: CareTaskQuery): Promise<CareTaskListItem[]>
     createTask(input: CareTaskInput): Promise<CareTask>
     updateTask(id: number, patch: CareTaskPatch): Promise<CareTask | null>
-    /** 完成时会自动写一条养护日志 */
-    completeTask(id: number, note?: string | null, date?: string): Promise<CareTask | null>
+    /** 完成时会自动写一条养护日志；imageIds 会挂到那条日志上 */
+    completeTask(id: number, note?: string | null, date?: string, imageIds?: number[]): Promise<CareTask | null>
     skipTask(id: number, reason?: string | null): Promise<CareTask | null>
     /** 撤销完成 / 跳过，并删掉对应日志 */
     reopenTask(id: number): Promise<CareTask | null>

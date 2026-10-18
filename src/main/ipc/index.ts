@@ -540,8 +540,8 @@ function registerImageIpc(): void {
   handle('care:tasks', (query?: CareTaskQuery) => listCareTasks(getDb(), query ?? {}))
   handle('care:task.create', (input: CareTaskInput) => createCareTask(getDb(), input))
   handle('care:task.update', (id: number, patch: CareTaskPatch) => updateCareTask(getDb(), id, patch))
-  handle('care:task.complete', (id: number, note?: string | null, date?: string) =>
-    completeCareTask(getDb(), id, note, date)
+  handle('care:task.complete', (id: number, note?: string | null, date?: string, imageIds?: number[] | null) =>
+    completeCareTask(getDb(), id, note, date, imageIds ?? undefined)
   )
   handle('care:task.skip', (id: number, reason?: string | null) => skipCareTask(getDb(), id, reason))
   handle('care:task.reopen', (id: number) => reopenCareTask(getDb(), id))

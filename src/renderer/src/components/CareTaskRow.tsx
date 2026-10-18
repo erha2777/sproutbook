@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareTaskListItem } from '@shared/api'
-import type { Material, RecipeListItem } from '@core/types'
+import type { ImageRecord, Material, RecipeListItem } from '@core/types'
 import {
   CARE_ACTION_ICONS,
   CARE_ACTION_LABELS,
@@ -100,7 +100,7 @@ export interface CareTaskRowProps {
   materials: Material[] | null
   /** 把这一行的 DOM 交给页面（跳转后要 scrollIntoView） */
   registerRef?: (el: HTMLDivElement | null) => void
-  onComplete?: (task: CareTaskListItem, note: string) => void
+  onComplete?: (task: CareTaskListItem, note: string, imageIds?: number[]) => void
   onSkip?: (task: CareTaskListItem) => void
   onReopen?: (task: CareTaskListItem) => void
   onEdit: (task: CareTaskListItem) => void
@@ -138,6 +138,18 @@ export function CareTaskRow({
   /** 备注输入框：点「完成」先展开，确认后才真写 */
   const [noteOpen, setNoteOpen] = useState(false)
   const [note, setNote] = useState('')
+  /** 完成时顺手带的照片（先导入 images，确认时把 id 交给日志） */
+  const [picked, setPicked] = useState<ImageRecord[]>([])
+
+  const pickPhotos = async (): Promise<void> => {
+    try {
+      const res = await window.api.images.pick({})
+      if (res.canceled) return
+      if (res.imported.length > 0) setPicked((prev) => [...prev, ...res.imported])
+    } catch {
+      // 选图失败不该挡住「完成」本身，静默忽略
+    }
+  }
 
   /*
    * 任务被标成完成 / 跳过后（包括在别处撤销又完成），
@@ -205,30 +217,66 @@ export function CareTaskRow({
         {task.completedNote ? <div className="small muted">备注：{task.completedNote}</div> : null}
 
         {noteOpen && mode === 'act' ? (
-          <div className="row tight" style={{ marginTop: 6 }}>
-            <div style={{ flex: 1 }}>
-              <TextInput value={note} onChange={setNote} placeholder="记一句当时的情况（可留空）" autoFocus />
+          <div style={{ marginTop: 6 }}>
+            <div className="row tight">
+              <div style={{ flex: 1 }}>
+                <TextInput value={note} onChange={setNote} placeholder="记一句当时的情况（可留空）" autoFocus />
+              </div>
+              <Button size="small" onClick={() => void pickPhotos()} title="给这条记录配照片">
+                📷 照片
+              </Button>
+              <Button
+                size="small"
+                variant="primary"
+                onClick={() => {
+                  setNoteOpen(false)
+                  const ids = picked.map((p) => p.id)
+                  onComplete?.(task, note, ids.length > 0 ? ids : undefined)
+                  setNote('')
+                  setPicked([])
+                }}
+              >
+                确认完成
+              </Button>
+              <Button
+                size="small"
+                variant="ghost"
+                onClick={() => {
+                  setNoteOpen(false)
+                  setNote('')
+                  // 取消就不留这些照片，不然 images 里会攒孤儿文件
+                  for (const image of picked) void window.api.images.remove(image.id).catch(() => undefined)
+                  setPicked([])
+                }}
+              >
+                取消
+              </Button>
             </div>
-            <Button
-              size="small"
-              variant="primary"
-              onClick={() => {
-                setNoteOpen(false)
-                onComplete?.(task, note)
-              }}
-            >
-              确认完成
-            </Button>
-            <Button
-              size="small"
-              variant="ghost"
-              onClick={() => {
-                setNoteOpen(false)
-                setNote('')
-              }}
-            >
-              取消
-            </Button>
+            {picked.length > 0 ? (
+              <div className="log-images" style={{ marginTop: 6 }}>
+                {picked.map((image) => (
+                  <div key={image.id} className="log-image-cell">
+                    <img
+                      className="log-image"
+                      src={`plantimg://local/${encodeURIComponent(image.thumbPath ?? image.path)}`}
+                      alt=""
+                    />
+                    <button
+                      type="button"
+                      className="log-image-remove"
+                      title="不放进这条记录"
+                      onClick={() => {
+                        setPicked((prev) => prev.filter((p) => p.id !== image.id))
+                        void window.api.images.remove(image.id).catch(() => undefined)
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <span className="small muted">完成时会写进养护日志（{picked.length} 张）</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
