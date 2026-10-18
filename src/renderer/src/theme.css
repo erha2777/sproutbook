@@ -35,12 +35,12 @@
   --sky-5: #cdf2e4;
 
   /* 木质面板 */
-  --wood-outline: #4a2a10;
-  --wood-frame: #a86a2d;
-  --wood-frame-light: #c98a45;
-  --wood-panel: #f2d6a4;
-  --wood-panel-light: #fae8c8;
-  --wood-panel-dark: #dcb87e;
+  --wood-outline: #5b2f12;
+  --wood-frame: #b9722f;
+  --wood-frame-light: #e0a45c;
+  --wood-panel: #fbd192;
+  --wood-panel-light: #ffe3ae;
+  --wood-panel-dark: #d99b52;
 
   /* 文字 */
   --ink: #4a2a12;
@@ -1440,7 +1440,7 @@ img {
    * 所有内页共用一块「纸面」底：压在私有地图背景上，
    * 内容不再直接浮在花花绿绿的地图上看不清。
    */
-  background: rgba(247, 231, 200, 0.97);
+  background: rgba(240, 196, 133, 0.97);
   border: 3px solid rgba(90, 60, 25, 0.85);
   box-shadow:
     inset 0 3px 0 rgba(255, 255, 255, 0.55),
@@ -3046,11 +3046,11 @@ img {
 }
 
 .home-btn {
-  background: #fed883;
+  background: #fbcf83;
   border-color: #b87a38;
 }
 .home-btn:hover {
-  background: #ffe9a8;
+  background: #ffe0a4;
 }
 
 
