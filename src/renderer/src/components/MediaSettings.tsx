@@ -100,6 +100,8 @@ export function MediaSettings(): ReactNode {
   }
 
   const removeBackdrop = async (name: string): Promise<void> => {
+    // 删掉的是用户自己传进来的文件，删了就得重新找 —— 先问一句
+    if (!window.confirm(`删除背景图「${name}」？文件会一起删掉。`)) return
     const r = await window.api.app.removeBackdrop(name)
     setBackdrops(r)
     await load()
@@ -175,7 +177,12 @@ export function MediaSettings(): ReactNode {
               </button>
               {backdrops.map((item) => (
                 <div key={item.name} className={cx('media-thumb', prefs.backdrop === item.name && 'on')}>
-                  <button type="button" onClick={() => void pickBackdrop(item.name)} title={item.name}>
+                  <button
+                    type="button"
+                    className="media-thumb-pick"
+                    onClick={() => void pickBackdrop(item.name)}
+                    title={`用这张当背景：${item.name}`}
+                  >
                     <img src={item.url} alt={item.name} />
                   </button>
                   <button
