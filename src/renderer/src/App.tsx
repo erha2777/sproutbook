@@ -631,7 +631,7 @@ function Shell(): ReactNode {
               onBack={() => setRoute(route.owner === 'plant' ? { name: 'garden' } : { name: 'species' })}
             />
           ) : null}
-          {route.name === 'settings' ? <SettingsPage /> : null}
+          {route.name === 'settings' ? <SettingsPage themeBackdrop={baseBackdrops[0] ?? null} /> : null}
           </PageErrorBoundary>
         </div>
         )}

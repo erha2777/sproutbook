@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    像素字体：Fusion Pixel 12px（OFL，字体文件在 src/renderer/src/assets）
    --------------------------------------------------------------------------
    12px 是它的设计尺寸，其余字号会被缩放。为了让 12px 的字最清晰，
@@ -3798,6 +3798,29 @@ html.tex-panel.tex-panel-slice .modal-footer {
   background: #b8391f;
   border: 2px solid #7d2318;
   cursor: pointer;
+}
+.media-thumb-mode {
+  position: relative;
+  padding: 0;
+}
+.media-thumb-mode img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* 角标式标题：压在预览图底部，一眼知道这块是"模式"而不是某张图 */
+.media-thumb-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff6e0;
+  background: rgba(70, 44, 22, 0.62);
+  text-align: center;
 }
 .media-thumb-all {
   display: flex;

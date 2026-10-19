@@ -27,7 +27,7 @@ const PRESETS: Array<{ label: string; baseUrl: string; chatModel: string; vision
   { label: '本地 LM Studio', baseUrl: 'http://localhost:1234/v1', chatModel: '', visionModel: '' }
 ]
 
-export function SettingsPage(): ReactNode {
+export function SettingsPage({ themeBackdrop = null }: { themeBackdrop?: string | null }): ReactNode {
   const toast = useToast()
   const [settings, setSettings] = useState<AiSettings | null>(null)
   const [apiKeyDraft, setApiKeyDraft] = useState('')
@@ -338,7 +338,7 @@ export function SettingsPage(): ReactNode {
 
       <Panel>
         <SectionTitle>声音与背景</SectionTitle>
-        <MediaSettings />
+        <MediaSettings themePreview={themeBackdrop} />
       </Panel>
 
       <Panel>

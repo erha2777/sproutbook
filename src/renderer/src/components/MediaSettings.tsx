@@ -16,7 +16,7 @@ interface Track {
   url: string
 }
 
-export function MediaSettings(): ReactNode {
+export function MediaSettings({ themePreview = null }: { themePreview?: string | null }): ReactNode {
   const toast = useToast()
   const [tracks, setTracks] = useState<Track[]>([])
   const [backdrops, setBackdrops] = useState<Track[]>([])
@@ -163,13 +163,18 @@ export function MediaSettings(): ReactNode {
         </div>
         {/* 三个选项一直显示：主题背景 / 全部轮播 / 自己上传的 */}
         <div className="media-thumbs">
+          {/*
+            主题背景：用主题自带的第一张当预览图。
+            以前这里只有文字，看着像"没图"；有图才看得出点它会变成什么样。
+          */}
           <button
             type="button"
-            className={cx('media-thumb', 'media-thumb-all', prefs.backdrop === THEME_BACKDROP && 'on')}
+            className={cx('media-thumb', 'media-thumb-mode', prefs.backdrop === THEME_BACKDROP && 'on')}
             onClick={() => void pickBackdrop(THEME_BACKDROP)}
             title="只用主题自带的背景（不用上传的那些）"
           >
-            主题背景
+            {themePreview ? <img src={themePreview} alt="" /> : null}
+            <span className="media-thumb-label">主题背景</span>
           </button>
           <button
             type="button"
