@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 植株编辑弹窗（实例层）。
  *
  * 与物种编辑的区别：这里只填「我这一株」的信息 —— 昵称、位置、状态、入手日期、备注。
@@ -324,6 +324,7 @@ export function PlantEditorModal({
           coverId={savedId !== null ? coverId : undefined}
           onSetCover={savedId !== null ? setCoverId : undefined}
           searchHint={plant?.species?.commonName ?? plant?.nickname}
+          speciesId={speciesId}
           onChanged={() => undefined}
         />
 

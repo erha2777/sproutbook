@@ -486,6 +486,12 @@ export async function runSmoke(outFile: string): Promise<number> {
       addImage(db, { plantId: bareId, path: "own-cover.jpg", thumbPath: "own-cover-thumb.jpg" })
       const ownWins = listPlants(db, {}).items.find((p) => p.id === bareId)
       check("有自己的图时优先用自己的", ownWins?.coverThumb === "own-cover-thumb.jpg", String(ownWins?.coverThumb))
+      // 借物种的图当封面：存的是 cover_image_id，不复制文件
+      const speciesImg = listImages(db, { speciesId }).find((img) => img.path === "species-cover.jpg")
+      check("可以借物种的图当封面", setPlantCover(db, bareId, speciesImg?.id ?? 0) === true)
+      const borrowedCover = listPlants(db, {}).items.find((p) => p.id === bareId)
+      check("借来之后封面就是物种那张", borrowedCover?.coverThumb === "species-cover-thumb.jpg", String(borrowedCover?.coverThumb))
+      setPlantCover(db, bareId, null)
     }
 
     const stats = plantStats(db, 6)

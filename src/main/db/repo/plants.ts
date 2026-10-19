@@ -173,8 +173,21 @@ export function setPlantCover(db: Db, plantId: number, imageId: number | null): 
     const r = db.run('UPDATE plants SET cover_image_id = NULL, updated_at = ? WHERE id = ?', new Date().toISOString(), plantId)
     return Number(r.changes) > 0
   }
-  const belongs = db.get<{ id: number }>('SELECT id FROM images WHERE id = ? AND plant_id = ?', imageId, plantId)
-  if (!belongs) throw new Error('这张图片不属于这株植物')
+  /*
+   * 封面可以指向两种图：
+   *   1. 这株自己的图
+   *   2. 它**所属物种**的图 —— 借用不复制，删掉物种那张时封面自动退回兜底
+   * 别的植株、别的物种的图一律拒绝。
+   */
+  const plant = db.get<{ species_id: number | null }>('SELECT species_id FROM plants WHERE id = ?', plantId)
+  if (!plant) throw new Error('植株不存在')
+  const row = db.get<{ id: number; plant_id: number | null; species_id: number | null }>(
+    'SELECT id, plant_id, species_id FROM images WHERE id = ?',
+    imageId
+  )
+  const own = row?.plant_id === plantId
+  const sameSpecies = row?.species_id !== null && row?.species_id !== undefined && row.species_id === plant.species_id
+  if (!row || (!own && !sameSpecies)) throw new Error('这张图片不属于这株植物')
   const r = db.run('UPDATE plants SET cover_image_id = ?, updated_at = ? WHERE id = ?', imageId, new Date().toISOString(), plantId)
   return Number(r.changes) > 0
 }

@@ -24,10 +24,8 @@ export interface ImageStripProps {
   /** 「网上找图」的预填搜索词（物种名 / 昵称） */
   searchHint?: string
   /**
-   * 植株编辑器用：显示「物种图片」，点一张**复制**一份到这株。
-   *
-   * 复制而不是共用：删除图片时会连文件一起删，两行指向同一个文件
-   * 会把另一边弄坏。复制之后互不影响。
+   * 植株编辑器用：把**物种图库**的图也列出来（只读、不能删）。
+   * 点一张 = 借它当这株的封面（存 cover_image_id，不复制文件）。
    */
   speciesId?: number | null
 }
@@ -38,13 +36,35 @@ export function ImageStrip({
   onChanged,
   coverId,
   onSetCover,
-  searchHint
+  searchHint,
+  speciesId
 }: ImageStripProps): ReactNode {
   const toast = useToast()
   const [images, setImages] = useState<ImageRecord[]>([])
   const [busy, setBusy] = useState(false)
   /** 「网上找图」弹窗 */
   const [searchOpen, setSearchOpen] = useState(false)
+  /** 所属物种的图片（只读，可借来当封面） */
+  const [speciesImages, setSpeciesImages] = useState<ImageRecord[]>([])
+
+  useEffect(() => {
+    if (!speciesId) {
+      setSpeciesImages([])
+      return
+    }
+    let alive = true
+    void window.api.images
+      .list({ speciesId })
+      .then((list) => {
+        if (alive) setSpeciesImages(list)
+      })
+      .catch(() => {
+        if (alive) setSpeciesImages([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [speciesId])
 
   const ownerKey = [owner.plantId ?? "", owner.speciesId ?? "", owner.environmentId ?? ""].join(":")
 
@@ -190,9 +210,9 @@ export function ImageStrip({
         </button>
       ) : null}
 
-      {onSetCover && images.length > 0 ? (
+      {onSetCover && (images.length > 0 || speciesImages.length > 0) ? (
         <div className="small muted" style={{ flexBasis: '100%' }}>
-          封面：{coverId ? '已选一张照片' : '默认（最早导入的一张）'}
+          封面：{coverId ? '已选一张照片' : '默认（自己的图优先，没有就借物种的第一张）'}
           {coverId ? (
             <Button size="small" variant="ghost" onClick={() => onSetCover(null)}>
               恢复默认
@@ -204,6 +224,36 @@ export function ImageStrip({
       ) : null}
 
       {images.length === 0 && disabled ? <span className="small muted">暂无图片</span> : null}
+
+      {/*
+        物种图库：只读展示，点一张就借它当封面（不复制文件、不能删）。
+        同物种的花长得一样，一株株传图太啰嗦；想用自己拍的照片再走上面三个入口。
+      */}
+      {speciesImages.length > 0 && onSetCover ? (
+        <div className="species-strip">
+          <div className="small muted species-strip-title">
+            物种图片（只读 · 点一张借来当封面）
+          </div>
+          <div className="image-strip">
+            {speciesImages.map((image) => {
+              const url = imageUrl(image.thumbPath ?? image.path)
+              const borrowed = coverId === image.id
+              return (
+                <div
+                  key={image.id}
+                  className={cx('image-thumb', 'pickable', borrowed && 'is-cover')}
+                  onClick={() => onSetCover(borrowed ? null : image.id)}
+                  title={borrowed ? '点一下取消，回到默认封面' : '点一下借这张当封面'}
+                >
+                  {url ? <img src={url} alt={image.caption ?? '物种图片'} /> : null}
+                  <span className="species-tag">物种</span>
+                  {borrowed ? <span className="image-cover-badge">封面</span> : null}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {searchOpen ? (
         <ImageSearchModal

@@ -1,4 +1,4 @@
-/* ==========================================================================
+﻿/* ==========================================================================
    像素字体：Fusion Pixel 12px（OFL，字体文件在 src/renderer/src/assets）
    --------------------------------------------------------------------------
    12px 是它的设计尺寸，其余字号会被缩放。为了让 12px 的字最清晰，
@@ -3814,4 +3814,29 @@ html.tex-panel.tex-panel-slice .modal-footer {
   border: 0;
   background: none;
   cursor: pointer;
+}
+
+/* 植株编辑器里的「物种图片」：只读借用，视觉上和自己的图区分开 */
+.species-strip {
+  flex-basis: 100%;
+  margin-top: 6px;
+}
+.species-strip-title {
+  margin-bottom: 6px;
+}
+.species-tag {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  font-size: 11px;
+  color: #2f4f2a;
+  background: rgba(198, 232, 170, 0.92);
+  border: 1px solid rgba(60, 90, 40, 0.5);
+  pointer-events: none;
+}
+.species-strip .image-thumb {
+  opacity: 0.95;
+}
+.species-strip .image-thumb.is-cover {
+  opacity: 1;
 }
