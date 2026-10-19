@@ -1,4 +1,4 @@
-/**
+﻿/**
  * IPC 注册中心。
  *
  * 统一约定：
@@ -229,6 +229,26 @@ function registerAppIpc(): void {
 
   handle('app:openImagesDir', async () => {
     await shell.openPath(imagesDir())
+    return true
+  })
+
+
+  /*
+   * 打开音乐 / 背景图目录。
+   *
+   * 用户传了歌和图之后常想自己进去看看（改名、清理、换文件），
+   * 光有"上传"按钮就得靠记路径。目录不存在就先建出来，避免打开一个不存在的路径。
+   */
+  handle('app:openMediaDir', async (kind: 'music' | 'backgrounds' | 'root' = 'root') => {
+    const texturesDir = join(app.getPath('userData'), 'textures')
+    const target =
+      kind === 'music' ? join(texturesDir, 'music') : kind === 'backgrounds' ? backdropsDir() : texturesDir
+    try {
+      mkdirSync(target, { recursive: true })
+    } catch {
+      // 建不出来就让 openPath 自己报
+    }
+    await shell.openPath(target)
     return true
   })
 

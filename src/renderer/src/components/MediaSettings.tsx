@@ -115,6 +115,9 @@ export function MediaSettings({ themePreview = null }: { themePreview?: string |
         <div className="row tight" style={{ marginBottom: 6 }}>
           <b>背景音乐</b>
           <span className="spacer" />
+          <Button size="small" onClick={() => void window.api.app.openMediaDir('music')} title="在资源管理器里打开音乐目录">
+            打开目录
+          </Button>
           <Button size="small" onClick={() => void importMusic()} disabled={busy}>
             上传音乐
           </Button>
@@ -157,6 +160,9 @@ export function MediaSettings({ themePreview = null }: { themePreview?: string |
         <div className="row tight" style={{ marginBottom: 6 }}>
           <b>背景图</b>
           <span className="spacer" />
+          <Button size="small" onClick={() => void window.api.app.openMediaDir('backgrounds')} title="在资源管理器里打开背景图目录">
+            打开目录
+          </Button>
           <Button size="small" onClick={() => void importBackdrops()} disabled={busy}>
             上传背景
           </Button>

@@ -130,6 +130,8 @@ export interface SproutbookApi {
     backupNow(): Promise<BackupInfo | null>
     openDataDir(): Promise<boolean>
     openImagesDir(): Promise<boolean>
+    /** 打开音乐 / 背景图 / 素材总目录（不存在会先建） */
+    openMediaDir(kind: 'music' | 'backgrounds' | 'root'): Promise<boolean>
     /** 退出应用（首页的「退出」按钮） */
     quit(): Promise<boolean>
     /** 私有字体：<userData>/fonts 里放了字体就返回 data URL（不打包进仓库） */
