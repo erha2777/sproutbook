@@ -385,6 +385,28 @@ function Shell(): ReactNode {
   }, [toast])
 
   /*
+   * 全局声音开关：固定在窗口左上角，所有分区都能按（原来只在首页左下角）。
+   * 和右上角的最小化/最大化一左一右，位置对称。
+   */
+  const toggleSound = (): void => {
+    const next = !soundOn
+    setSoundOn(next)
+    setSfx(next)
+    if (next) sfx('success')
+  }
+  const soundToggle = (
+    <button
+      type="button"
+      className="home-gear global-sound"
+      title={soundOn ? '关闭声音（音效 + 背景音乐）' : '开启声音（音效 + 背景音乐）'}
+      aria-label={soundOn ? '关闭声音' : '开启声音'}
+      onClick={toggleSound}
+    >
+      <PixelIcon name={soundOn ? 'sound' : 'mute'} size={22} />
+    </button>
+  )
+
+  /*
    * 首页是**标题画面**，不套导航：它把应用收成四个入口。
    * 其余页面**没有横向导航**，只靠右下角的「← 后退」回首页再换分区
    * （和参考图一致：分区里不摆一排入口）。
@@ -404,14 +426,8 @@ function Shell(): ReactNode {
           onSettings={() => setRoute({ name: 'settings' })}
           musicName={musicName}
           musicPlaying={musicPlaying}
-          soundOn={soundOn}
-          onToggleSound={() => {
-            const next = !soundOn
-            setSoundOn(next)
-            setSfx(next)
-            if (next) sfx('success')
-          }}
         />
+        {soundToggle}
       </div>
     )
   }
@@ -435,6 +451,7 @@ function Shell(): ReactNode {
       <Backdrop images={backdrops} />
       {/* 无边框窗口的自制标题栏：拖动 + 最小化 / 最大化 / 关闭 */}
       <TitleBar />
+      {soundToggle}
       <div className="page-shell">
       <main className="main">
         {/* 所有分区共用同一条顶行：养护区左边是 tab，其他区只有右边的 HUD。

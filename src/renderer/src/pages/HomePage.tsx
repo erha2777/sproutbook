@@ -20,8 +20,6 @@ export function HomePage({
   onSettings,
   carePending,
   version,
-  soundOn,
-  onToggleSound,
   musicName = null,
   musicPlaying = false
 }: {
@@ -33,9 +31,6 @@ export function HomePage({
   /** 养护里「逾期 + 该做」的数量，挂在「养护」按钮上 */
   carePending: number
   version: string | null
-  /** 界面音效开关（存 localStorage） */
-  soundOn: boolean
-  onToggleSound: () => void
   /** 正在播放的背景音乐文件名（没有就不显示） */
   musicName?: string | null
   /** 音乐是否真的在播（浏览器可能拒绝自动播放） */
@@ -84,15 +79,7 @@ export function HomePage({
       <button type="button" className="home-gear" title="设置" aria-label="设置" onClick={onSettings}>
         <PixelIcon name="gear" size={24} />
       </button>
-      <button
-        type="button"
-        className="home-gear home-sound"
-        title={soundOn ? '关闭声音（音效 + 背景音乐）' : '开启声音（音效 + 背景音乐）'}
-        aria-label={soundOn ? '关闭声音' : '开启声音'}
-        onClick={onToggleSound}
-      >
-        <PixelIcon name={soundOn ? 'sound' : 'mute'} size={24} />
-      </button>
+
       {musicName ? (
         <div
           className={`home-music${musicPlaying ? '' : ' paused'}`}

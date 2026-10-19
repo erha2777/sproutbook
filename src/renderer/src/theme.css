@@ -1121,6 +1121,17 @@ img {
 }
 
 /* 设置是低频入口：左下角齿轮，和参考图一致 */
+/* 全局声音开关：固定在窗口左上角，和右上角的最小化/最大化对称 */
+.global-sound {
+  position: fixed;
+  left: 6px;
+  top: 2px;
+  width: 44px;
+  height: 44px;
+  z-index: 46;
+  /* 压在标题栏的拖拽带上，必须显式声明可点 */
+  -webkit-app-region: no-drag;
+}
 .home-gear {
   position: absolute;
   left: 18px;
@@ -2898,6 +2909,17 @@ img {
     0 7px 0 rgba(0, 0, 0, 0.22);
 }
 
+/* 全局声音开关：固定在窗口左上角，和右上角的最小化/最大化对称 */
+.global-sound {
+  position: fixed;
+  left: 6px;
+  top: 2px;
+  width: 44px;
+  height: 44px;
+  z-index: 46;
+  /* 压在标题栏的拖拽带上，必须显式声明可点 */
+  -webkit-app-region: no-drag;
+}
 .home-gear {
   transition:
     transform 0.3s ease,
@@ -3127,6 +3149,17 @@ img {
 .home-gear svg {
   display: block;
   image-rendering: pixelated;
+}
+/* 全局声音开关：固定在窗口左上角，和右上角的最小化/最大化对称 */
+.global-sound {
+  position: fixed;
+  left: 6px;
+  top: 2px;
+  width: 44px;
+  height: 44px;
+  z-index: 46;
+  /* 压在标题栏的拖拽带上，必须显式声明可点 */
+  -webkit-app-region: no-drag;
 }
 .home-gear {
   display: flex;
@@ -3480,7 +3513,18 @@ html.tex-button .back-btn {
   box-shadow: none;
   image-rendering: pixelated;
 }
-html.tex-button .home-gear {
+html.tex-button /* 全局声音开关：固定在窗口左上角，和右上角的最小化/最大化对称 */
+.global-sound {
+  position: fixed;
+  left: 6px;
+  top: 2px;
+  width: 44px;
+  height: 44px;
+  z-index: 46;
+  /* 压在标题栏的拖拽带上，必须显式声明可点 */
+  -webkit-app-region: no-drag;
+}
+.home-gear {
   width: 54px;
   height: 54px;
 }
