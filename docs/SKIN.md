@@ -17,6 +17,19 @@
 找到的第一个 `theme.json` 生效；`icons/` 目录两个地方都会扫，先找到的优先。
 `textures/` 在 `.gitignore` 里，不进仓库（版权素材）。
 
+### 音乐、背景图、位置照片放在哪
+
+| 内容 | 目录 | 怎么进 |
+|---|---|---|
+| 背景音乐 | `<userData>/textures/music/` | 设置 → 声音与背景 → 上传音乐（或直接丢文件进去） |
+| 背景图 | `<userData>/textures/backgrounds/` | 同上，上传背景 |
+| 养护位置照片 | `<userData>/images/`（和植株图片同一套存储） | 位置编辑弹窗里的「照片」 |
+
+两个素材目录在设置页各有「打开目录」按钮，不用记路径。背景图进内存前会先缩到最长边 1600、
+转成 JPEG data URL —— 原图十几 MB 也不至于把界面卡住；选中的是哪个存在数据库的
+`settings['media.prefs']` 里（`{"musicTrack": ..., "backdrop": ...}`），
+`backdrop` 为 `null` 是"全部轮播"、`"__theme__"` 是"只用主题自带的"。
+
 ---
 
 ## 2. `theme.json`

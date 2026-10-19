@@ -271,12 +271,13 @@ flowchart LR
 
 ```
 src/
-├── core/          领域内核（13 个纯函数模块）
+├── core/          领域内核（14 个纯函数模块）
 │   ├── care.ts        规则展开、紧急度、日期运算
 │   ├── growth.ts      生长阶段推进
 │   ├── weather.ts     天气判定与建议
 │   ├── sprite.ts      像素精灵生成
 │   ├── fieldTypes.ts  动态字段类型与归一化
+│   ├── media.ts       背景选择（主题 / 单选 / 全部轮播）
 │   └── ...
 ├── shared/api.ts  IPC 契约（约 550 行类型声明）
 ├── preload/       contextBridge 白名单
@@ -285,7 +286,7 @@ src/
 │   ├── sandbox.ts     沙箱与 GPU 降级策略
 │   ├── ipc/index.ts   全部通道注册
 │   ├── db/            连接、迁移、schema、种子、备份、repo
-│   └── services/      ai / weather / images / secrets / transfer
+│   └── services/      ai / weather / images / media / secrets / transfer
 └── renderer/
     ├── src/pages/     10 个页面（Garden · Today · Care · Logs · Species · Recipes · Settings · Templates · PlantEditor · SpeciesEditor）
     └── src/components/ 16 个组件（含 CareTaskRow · WeatherPanel · CareCalendar）
