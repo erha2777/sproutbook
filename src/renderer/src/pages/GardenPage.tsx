@@ -241,13 +241,30 @@ export function GardenPage({
    */
   const markPhase = async (plantId: number, phase: CarePhase | null): Promise<void> => {
     try {
+      const year = new Date().getFullYear()
+      /*
+       * 先问一句：这一株今年有计划吗？
+       *
+       * 没有就**不生成**。标记阶段是"记录现状"，不是"替我排计划" ——
+       * 一株刚建、还没排过计划的花，切个阶段就凭空多出整年的任务，
+       * 用户会觉得应用自作主张。
+       */
+      const hadPlan = await window.api.care.hasPlan(plantId, year)
       const info = await window.api.care.setPlantPhase(plantId, phase, null)
       setPhases((prev) => ({ ...prev, [plantId]: info }))
-      // 重新生成任务：阶段一变，限定该阶段的规则就该生效/失效
-      await window.api.care.generate(plantId, new Date().getFullYear())
+      if (hadPlan) {
+        // 有计划的才重排：阶段一变，限定该阶段的规则就该生效/失效
+        await window.api.care.generate(plantId, year)
+      }
       // 「下一件事」也要跟着刷新（阶段一变就可能有新任务，或旧任务失效）
       await refreshNextTask(plantId)
-      toast.push(phase ? `已标记为「${CARE_PHASE_LABELS[phase]}」，相关任务已重新生成` : '已清除阶段标记', 'success')
+      if (!phase) {
+        toast.push('已清除阶段标记', 'success')
+      } else if (hadPlan) {
+        toast.push(`已标记为「${CARE_PHASE_LABELS[phase]}」，相关任务已重新生成`, 'success')
+      } else {
+        toast.push(`已标记为「${CARE_PHASE_LABELS[phase]}」（这株还没有计划，不生成任务）`, 'success')
+      }
     } catch (error) {
       toast.push(`标记失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }

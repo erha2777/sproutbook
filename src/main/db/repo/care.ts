@@ -633,6 +633,26 @@ export function getPlantPhase(db: Db, plantId: number): PlantPhaseInfo {
  * 阶段变化会立刻改变后续生成的任务（限定阶段的规则会随之生效或失效），
  * 所以这里只负责记录状态，重新生成由调用方决定。
  */
+/**
+ * 这一株**当年**有没有计划（= 有没有任务 / 计划行）。
+ *
+ * 用途：切阶段时判断要不要顺手重新生成任务。
+ * 一株从没生成过计划的花，切个阶段不该凭空多出整年的任务 ——
+ * 用户要的是"标记现状"，不是"替我做计划"。
+ */
+export function hasCarePlan(db: Db, plantId: number, year: number): boolean {
+  const from = `${year}-01-01`
+  const to = `${year + 1}-01-01`
+  const task = db.scalar<number>(
+    'SELECT 1 FROM care_tasks WHERE plant_id = ? AND due_date >= ? AND due_date < ? LIMIT 1',
+    plantId,
+    from,
+    to
+  )
+  if (task) return true
+  const plan = db.scalar<number>('SELECT 1 FROM care_plans WHERE plant_id = ? AND (year IS NULL OR year = ?) LIMIT 1', plantId, year)
+  return Boolean(plan)
+}
 export function setPlantPhase(db: Db, plantId: number, phase: CarePhase | null, note?: string | null): PlantPhaseInfo {
   return db.transaction(() => {
     const now = new Date().toISOString()

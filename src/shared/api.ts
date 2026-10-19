@@ -329,6 +329,9 @@ export interface SproutbookApi {
      */
     exportPlanHtml(plantId: number, year: number): Promise<CarePlanExportResult>
 
+    /** 这一株当年有没有计划（有没有任务 / 计划行） */
+    hasPlan(plantId: number, year: number): Promise<boolean>
+
     /** 植株当前物候阶段 */
     plantPhase(plantId: number): Promise<PlantPhaseInfo>
     /** 标记阶段；会写一条养护日志。phase 传 null 表示清除 */

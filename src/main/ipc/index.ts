@@ -75,6 +75,7 @@ import {
   reopenCareTask,
   saveCareRule,
   setPlantPhase,
+  hasCarePlan,
   skipCareTask,
   updateCareLog,
   updateCareTask
@@ -896,6 +897,11 @@ function registerImageIpc(): void {
 
   // 物候阶段：切换会立刻改变任务生成结果，也会写一条养护日志
   handle('care:plantPhase', (plantId: number) => getPlantPhase(getDb(), plantId))
+  /*
+   * 这一株当年有没有计划。渲染层在「切阶段要不要顺手重排任务」时问它。
+   * 没有计划就不生成 —— 标记现状 ≠ 替用户排计划。
+   */
+  handle('care:hasPlan', (plantId: number, year: number) => hasCarePlan(getDb(), plantId, year))
   handle('care:setPlantPhase', (plantId: number, phase: CarePhase | null, note?: string | null) =>
     setPlantPhase(getDb(), plantId, phase, note)
   )

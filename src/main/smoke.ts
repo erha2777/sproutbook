@@ -124,6 +124,7 @@ import {
   reopenCareTask,
   saveCareRule,
   setPlantPhase,
+  hasCarePlan,
   skipCareTask,
   updateCareLog,
   updateCareTask
@@ -1393,7 +1394,13 @@ export async function runSmoke(outFile: string): Promise<number> {
       const year = 2026
       // 注入固定的「今天」：生成会跳过时间窗已过的月份，用真实时钟测试会在跨月时随机失败
       const FIXED_TODAY = '2026-01-01'
+
+      // 还没生成过计划 → hasCarePlan 为假（切阶段时据此决定不重排任务）
+      check('没生成过计划的植株 hasCarePlan = false', hasCarePlan(db, carePlantId, year) === false)
+      check('换一年也还是没有计划', hasCarePlan(db, carePlantId, year + 1) === false)
+
       const g1 = generateTasksForPlant(db, carePlantId, year, { today: FIXED_TODAY })
+      check('生成之后 hasCarePlan = true', hasCarePlan(db, carePlantId, year) === true)
       check('按规则生成了任务', g1.created > 0, JSON.stringify(g1))
       const tasks1 = listCareTasks(db, { plantId: carePlantId })
       check('生成的任务都能查到', tasks1.length === g1.created, `${tasks1.length} vs ${g1.created}`)

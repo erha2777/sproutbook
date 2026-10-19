@@ -134,6 +134,7 @@ const api: SproutbookApi = {
     overview: (year) => call('care:overview', year),
     exportPlanHtml: (plantId, year) => call('care:plan.exportHtml', plantId, year),
 
+    hasPlan: (plantId, year) => call('care:hasPlan', plantId, year),
     plantPhase: (plantId) => call('care:plantPhase', plantId),
     setPlantPhase: (plantId, phase, note) => call('care:setPlantPhase', plantId, phase, note ?? null),
 
