@@ -11,6 +11,7 @@ import type { ReactNode } from 'react'
 import type { AiSettings, AppInfo, SandboxStatus } from '@core/types'
 import type { AppPaths, BackupInfo, WeatherConfigSnapshot } from '@shared/api'
 import { formatBytes, formatDateTime } from '../lib/util'
+import { MediaSettings } from '../components/MediaSettings'
 import { Badge, Button, EmptyState, Field, Notice, Panel, SectionTitle, SelectInput, Sign, Spinner, TextInput, useToast } from '../components/ui'
 import { EnvironmentManager } from '../components/EnvironmentManager'
 import { TransferPanel } from '../components/TransferPanel'
@@ -334,6 +335,11 @@ export function SettingsPage(): ReactNode {
       <EnvironmentManager />
 
       <TransferPanel />
+
+      <Panel>
+        <SectionTitle>声音与背景</SectionTitle>
+        <MediaSettings />
+      </Panel>
 
       <Panel>
         <SectionTitle>数据与备份</SectionTitle>

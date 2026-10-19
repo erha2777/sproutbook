@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, ToastProvider, cx, useToast } from './components/ui'
 import { TitleBar } from './components/TitleBar'
@@ -107,7 +107,14 @@ function Shell(): ReactNode {
   /** 界面音效开关：默认开，首页喇叭图标可关 */
   const [soundOn, setSoundOn] = useState(isSfxOn)
   /** 私有背景图：首页背后缓慢飘动的截图 */
-  const [backdrops, setBackdrops] = useState<string[]>([])
+  /** 主题自带的背景（theme.json 的 backgrounds） */
+  const [baseBackdrops, setBaseBackdrops] = useState<string[]>([])
+  /** 用户自己上传的背景图（名字用于匹配偏好） */
+  const [uploadedBackdrops, setUploadedBackdrops] = useState<Array<{ name: string; url: string }>>([])
+  /** 选中的背景文件名；null = 全部轮播 */
+  const [backdropPref, setBackdropPref] = useState<string | null>(null)
+  /** 设置页改了音乐/背景后，靠这个计数重跑加载 */
+  const [mediaVersion, setMediaVersion] = useState(0)
   /** 正在播放的私有背景音乐（没有就是 null） */
   const [musicName, setMusicName] = useState<string | null>(null)
   const [musicPlaying, setMusicPlaying] = useState(false)
@@ -273,7 +280,7 @@ function Shell(): ReactNode {
     void (async () => {
       try {
         const { slots, slices, backgrounds, icons } = await window.api.app.textures()
-        if (backgrounds.length > 0) setBackdrops(backgrounds)
+        if (backgrounds.length > 0) setBaseBackdrops(backgrounds)
         setIconUrls(icons)
         const root = document.documentElement
         const vars: Array<[string, string, string]> = [
@@ -323,17 +330,18 @@ function Shell(): ReactNode {
   }, [])
 
   /*
-   * 背景音乐：取列表里的第一首，循环播放，音量压到 0.3 左右。
-   * 自动播放被系统拦下时，等用户第一次点窗口再开始（Electron 里已放开 autoplay）。
+   * 背景音乐：播放设置里选中的那首（没选就用第一首），循环，音量 0.3。
+   * 设置页换了歌会通过 sproutbook:media 事件触发重跑（见下面的 mediaVersion）。
    */
   useEffect(() => {
     let disposed = false
     void (async () => {
       try {
-        const tracks = await window.api.app.music()
+        const [tracks, prefs] = await Promise.all([window.api.app.music(), window.api.app.mediaPrefs()])
         if (disposed || tracks.length === 0) return
-        setMusicName(tracks[0].name)
-        const audio = new Audio(tracks[0].url)
+        const track = tracks.find((t) => t.name === prefs.musicTrack) ?? tracks[0]
+        setMusicName(track.name)
+        const audio = new Audio(track.url)
         audio.loop = true
         audio.volume = 0.3
         audioRef.current = audio
@@ -357,8 +365,41 @@ function Shell(): ReactNode {
       audioRef.current?.pause()
       audioRef.current = null
     }
+  }, [mediaVersion])
+
+
+  /*
+   * 设置页改了音乐/背景之后，用 window 事件通知这里重跑加载。
+   * 比引入全局状态轻：只有一个"变了"的信号，数据还是各自去取。
+   */
+  useEffect(() => {
+    const reload = (): void => setMediaVersion((v) => v + 1)
+    window.addEventListener('sproutbook:media', reload)
+    return () => window.removeEventListener('sproutbook:media', reload)
   }, [])
 
+  // 用户自己放的背景图 + 选中的是哪一张
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [list, prefs] = await Promise.all([window.api.app.backdrops(), window.api.app.mediaPrefs()])
+        setUploadedBackdrops(list)
+        setBackdropPref(prefs.backdrop)
+      } catch {
+        // 读不到就当没有，不影响主题自带的背景
+      }
+    })()
+  }, [mediaVersion])
+
+  /* 实际用于渲染的背景：选中某一张就只用它，否则主题自带 + 上传的轮播 */
+  const backdrops = useMemo(() => {
+    const all = [...baseBackdrops, ...uploadedBackdrops.map((b) => b.url)]
+    if (backdropPref) {
+      const chosen = uploadedBackdrops.find((b) => b.name === backdropPref)
+      if (chosen) return [chosen.url]
+    }
+    return all
+  }, [baseBackdrops, uploadedBackdrops, backdropPref])
   // 静音开关同时控制背景音乐
   useEffect(() => {
     const audio = audioRef.current

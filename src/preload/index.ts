@@ -38,7 +38,14 @@ const api: SproutbookApi = {
     quit: () => call('app:quit'),
     fonts: () => call('app:fonts'),
     textures: () => call('app:textures'),
-    music: () => call('app:music')
+    music: () => call('app:music'),
+    importMusic: () => call('app:importMusic'),
+    removeMusic: (name) => call('app:removeMusic', name),
+    backdrops: () => call('app:backdrops'),
+    importBackdrops: () => call('app:importBackdrops'),
+    removeBackdrop: (name) => call('app:removeBackdrop', name),
+    mediaPrefs: () => call('app:mediaPrefs'),
+    setMediaPrefs: (patch) => call('app:setMediaPrefs', patch)
   },
   sandbox: {
     status: () => call('sandbox:status'),

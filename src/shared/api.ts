@@ -138,6 +138,20 @@ export interface SproutbookApi {
      * 私有背景音乐：<userData>/textures/music 下的音频
      */
     music(): Promise<Array<{ name: string; url: string }>>
+    /** 弹文件对话框添加音乐（复制进 <userData>/textures/music） */
+    importMusic(): Promise<{ canceled: boolean; tracks: Array<{ name: string; url: string }> }>
+    /** 删掉一首，返回剩余列表 */
+    removeMusic(name: string): Promise<Array<{ name: string; url: string }>>
+    /** 用户自己放的背景图（<userData>/textures/backgrounds，已缩到 1600 内的 data URL） */
+    backdrops(): Promise<Array<{ name: string; url: string }>>
+    importBackdrops(): Promise<{ canceled: boolean; backdrops: Array<{ name: string; url: string }> }>
+    removeBackdrop(name: string): Promise<Array<{ name: string; url: string }>>
+    /** 选中的曲目 / 背景（null = 第一首 / 全部轮播） */
+    mediaPrefs(): Promise<{ musicTrack: string | null; backdrop: string | null }>
+    setMediaPrefs(patch: { musicTrack?: string | null; backdrop?: string | null }): Promise<{
+      musicTrack: string | null
+      backdrop: string | null
+    }>
     /**
      * 私有素材：<userData>/textures 下的图片。
      * slots: home-bg / sign / button / panel / cloud

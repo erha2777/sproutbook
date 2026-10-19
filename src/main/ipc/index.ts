@@ -1,4 +1,4 @@
-﻿/**
+/**
  * IPC 注册中心。
  *
  * 统一约定：
@@ -14,8 +14,8 @@ import { buildCarePlanHtml } from '../../core/carePlanHtml'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
 import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { join, normalize, resolve } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { basename, join, normalize, resolve } from 'node:path'
 import type { Db } from '../db/connection'
 import { backupsDir, dataDir, dbFilePath, getDb, imagesDir, makeManualBackup } from '../db'
 import { listBackups } from '../db/backup'
@@ -106,6 +106,7 @@ import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } fro
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
 import { cloneImageFiles, importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
 import { listMusic } from '../services/music'
+import { EMPTY_MEDIA_PREFS, MEDIA_KEY, backdropsDir, listBackdrops, type MediaPrefs } from '../services/media'
 import {
   createCompatShortcut,
   detectIntegrityLevel,
@@ -443,6 +444,103 @@ function registerAppIpc(): void {
 
   /** 私有背景音乐列表（<userData>/textures/music） */
   handle('app:music', () => listMusic())
+
+  /*
+   * 音乐与背景的「上传 + 切换」。
+   *
+   * 文件都落在 <userData>/textures 下，和皮肤素材同一个地方 ——
+   * 备份、迁移、清理只要盯着这一个目录。
+   * 选中的是哪一首 / 哪一张存在 settings 表里（media.prefs），重启后仍然生效。
+   */
+  handle('app:importMusic', async () => {
+    const dir = join(app.getPath('userData'), 'textures', 'music')
+    mkdirSync(dir, { recursive: true })
+    const result = await dialog.showOpenDialog({
+      title: '添加音乐',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: '音频', extensions: ['mp3', 'ogg', 'wav', 'm4a', 'flac', 'opus'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) return { canceled: true, tracks: listMusic() }
+    for (const src of result.filePaths) {
+      try {
+        const name = basename(src)
+        const target = join(dir, name)
+        if (!existsSync(target)) copyFileSync(src, target)
+      } catch {
+        // 单个文件失败不影响其他
+      }
+    }
+    return { canceled: false, tracks: listMusic() }
+  })
+
+  handle('app:removeMusic', (name: string) => {
+    const dir = resolve(join(app.getPath('userData'), 'textures', 'music'))
+    const file = resolve(join(dir, basename(String(name ?? ''))))
+    if (!file.startsWith(dir) || !existsSync(file)) return listMusic()
+    try {
+      unlinkSync(file)
+    } catch {
+      // 文件被占用就留着
+    }
+    // 删掉的正好是选中的那首 → 清掉偏好
+    const prefs = getSetting<MediaPrefs>(getDb(), MEDIA_KEY, EMPTY_MEDIA_PREFS)
+    if (prefs.musicTrack === basename(file)) {
+      setSetting(getDb(), MEDIA_KEY, { ...prefs, musicTrack: null })
+    }
+    return listMusic()
+  })
+
+  /** 用户自己放的背景图（<userData>/textures/backgrounds） */
+  handle('app:backdrops', () => listBackdrops())
+
+  handle('app:importBackdrops', async () => {
+    const dir = backdropsDir()
+    mkdirSync(dir, { recursive: true })
+    const result = await dialog.showOpenDialog({
+      title: '添加背景图',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) return { canceled: true, backdrops: listBackdrops() }
+    for (const src of result.filePaths) {
+      try {
+        const name = basename(src)
+        const target = join(dir, name)
+        if (!existsSync(target)) copyFileSync(src, target)
+      } catch {
+        // 单个失败不影响其他
+      }
+    }
+    return { canceled: false, backdrops: listBackdrops() }
+  })
+
+  handle('app:removeBackdrop', (name: string) => {
+    const dir = resolve(backdropsDir())
+    const file = resolve(join(dir, basename(String(name ?? ''))))
+    if (!file.startsWith(dir) || !existsSync(file)) return listBackdrops()
+    try {
+      unlinkSync(file)
+    } catch {
+      // 留着
+    }
+    const prefs = getSetting<MediaPrefs>(getDb(), MEDIA_KEY, EMPTY_MEDIA_PREFS)
+    if (prefs.backdrop === basename(file)) {
+      setSetting(getDb(), MEDIA_KEY, { ...prefs, backdrop: null })
+    }
+    return listBackdrops()
+  })
+
+  handle('app:mediaPrefs', () => getSetting<MediaPrefs>(getDb(), MEDIA_KEY, EMPTY_MEDIA_PREFS))
+  handle('app:setMediaPrefs', (patch: Partial<MediaPrefs>) => {
+    const db = getDb()
+    const current = getSetting<MediaPrefs>(db, MEDIA_KEY, EMPTY_MEDIA_PREFS)
+    const next: MediaPrefs = {
+      musicTrack: patch.musicTrack === undefined ? current.musicTrack : patch.musicTrack,
+      backdrop: patch.backdrop === undefined ? current.backdrop : patch.backdrop
+    }
+    setSetting(db, MEDIA_KEY, next)
+    return next
+  })
 
   /** 首页的「退出」按钮 */
   handle('app:quit', () => {

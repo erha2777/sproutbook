@@ -2,6 +2,33 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.36.0] - 2026-10-19
+
+### 设置里可以上传 / 切换音乐和背景了
+
+用户：「音乐和背景在设置里增加可上传可切换」。
+
+原来音乐只读 `<userData>/textures/music`、永远放列表第一首；背景只读 theme.json 的
+`backgrounds`，界面上都没有入口 —— 想换只能手动往目录里丢文件。
+
+#### 新增
+
+| 能力 | 位置 | 说明 |
+|---|---|---|
+| 上传音乐 | 设置 → 声音与背景 | 弹文件框，复制进 `<userData>/textures/music` |
+| 选/删音乐 | 同上 | 选中的存 `media.prefs`，重启后还是它 |
+| 上传背景 | 同上 | 复制进 `<userData>/textures/backgrounds` |
+| 选/删背景 | 同上 | 「全部轮播」= 主题自带 + 上传的一起轮播；选一张就只用它 |
+
+#### 实现要点
+
+- 新服务 `src/main/services/media.ts`：背景图读出来先缩到最长边 1600 再转 JPEG data URL
+  （原图动辄 5MB，直接 base64 会让界面卡一下；背景是铺满屏的，1600 够用）
+- IPC：`app:importMusic` / `app:removeMusic` / `app:backdrops` / `app:importBackdrops` /
+  `app:removeBackdrop` / `app:mediaPrefs` / `app:setMediaPrefs`；文件名一律过 `basename` + 目录前缀校验
+- 渲染层：`MediaSettings` 组件；改完 dispatch `sproutbook:media` 事件，`App` 靠 `mediaVersion`
+  重跑加载 —— 不把播放器状态提到全局，音乐立刻换、背景立刻换
+- 删掉的正好是选中的那首/那张时，偏好自动清空，避免指向不存在的文件
 ## [1.35.1] - 2026-10-19
 
 ### 养护位置加「备注」

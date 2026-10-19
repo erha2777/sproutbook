@@ -3725,3 +3725,93 @@ html.tex-panel.tex-panel-slice .modal-footer {
     0 6px 0 rgba(0, 0, 0, 0.25);
   padding: 24px;
 }
+
+/* ---- 设置页：声音与背景 ---- */
+.media-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.media-block b {
+  font-size: 14px;
+}
+.media-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.media-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 2px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+}
+.media-row.on {
+  background: #cfe8a8;
+}
+.media-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.media-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.media-thumb {
+  position: relative;
+  width: 132px;
+  height: 82px;
+  border: 3px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+  padding: 0;
+  cursor: pointer;
+  image-rendering: auto;
+}
+.media-thumb.on {
+  border-color: #3f8f2a;
+  box-shadow: 0 0 0 2px #8ed05e inset;
+}
+.media-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.media-thumb-del {
+  position: absolute;
+  right: -6px;
+  top: -6px;
+  width: 20px;
+  height: 20px;
+  line-height: 1;
+  font-size: 13px;
+  color: #fff6e0;
+  background: #b8391f;
+  border: 2px solid #7d2318;
+  cursor: pointer;
+}
+.media-thumb-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.media-thumb button {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
