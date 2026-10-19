@@ -305,7 +305,14 @@ export type CareActionType =
 export type CareHemisphere = 'N' | 'S'
 
 /** 植株的物候阶段。是「观察到的状态」而不是月份，所以由人标记。 */
-export type CarePhase = 'growing' | 'budding' | 'blooming' | 'dormant' | 'recovering'
+export type CarePhase =
+  | 'seed'
+  | 'growing'
+  | 'budding'
+  | 'blooming'
+  | 'dormant'
+  | 'recovering'
+  | 'pest'
 
 /**
  * 物种养护规则。

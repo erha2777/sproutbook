@@ -90,6 +90,8 @@ import {
   generateTasks,
   groupTasksByRule,
   isCarePhase,
+  CARE_PHASE_HINTS,
+  CARE_PHASE_OPTIONS,
   monthsCovered,
   normalizePhases,
   parseSpeciesKeys,
@@ -1793,6 +1795,15 @@ export async function runSmoke(outFile: string): Promise<number> {
 
       // ---- 阶段工具 ----
       check('isCarePhase 只认已知阶段', isCarePhase('growing') && !isCarePhase('flowering') && !isCarePhase(null))
+      // 1.33.3 新增的两个阶段：种子/种球、病虫害
+      check('种子/种球期是合法阶段', isCarePhase('seed'))
+      check('病虫害期是合法阶段', isCarePhase('pest'))
+      check(
+        '阶段下拉里有「种子/种球期」和「病虫害期」',
+        CARE_PHASE_OPTIONS.some((o) => o.value === 'seed' && o.label.includes('种子/种球')) &&
+          CARE_PHASE_OPTIONS.some((o) => o.value === 'pest' && o.label.includes('病虫害'))
+      )
+      check('每个阶段都有说明文案', CARE_PHASE_OPTIONS.every((o) => (CARE_PHASE_HINTS[o.value] ?? '').length > 0))
       check('normalizePhases 过滤非法值', JSON.stringify(normalizePhases(['growing', 'xx', 'dormant'])) === '["growing","dormant"]')
       check('normalizePhases 去重', JSON.stringify(normalizePhases(['growing', 'growing'])) === '["growing"]')
       check('normalizePhases 空数组返回 null', normalizePhases([]) === null)
@@ -2852,6 +2863,9 @@ export async function runSmoke(outFile: string): Promise<number> {
         deriveGrowthStage({ ...base, phase: 'growing', bloomMonths: [6] }).stage === 'growing'
       )
       check('推导来源标为 phase', deriveGrowthStage({ ...base, phase: 'blooming' }).source === 'phase')
+      // 新增阶段要落到画面上已有的两个阶段：种子 → seed、病虫害 → sick
+      check('种子/种球期画成 seed', deriveGrowthStage({ ...base, phase: 'seed' }).stage === 'seed')
+      check('病虫害期画成 sick', deriveGrowthStage({ ...base, phase: 'pest' }).stage === 'sick')
       check(
         '阶段的说明用中文而不是内部键名',
         deriveGrowthStage({ ...base, phase: 'blooming' }).reason.includes('花期') &&

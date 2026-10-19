@@ -149,31 +149,45 @@ export function describeSpeciesKeys(keys: string[]): string {
  */
 export type { CarePhase }
 
-const PHASE_KEYS = ['growing', 'budding', 'blooming', 'dormant', 'recovering'] as const satisfies readonly CarePhase[]
+const PHASE_KEYS = [
+  'seed',
+  'growing',
+  'budding',
+  'blooming',
+  'dormant',
+  'recovering',
+  'pest'
+] as const satisfies readonly CarePhase[]
 
 export const CARE_PHASE_LABELS: Record<CarePhase, string> = {
+  seed: '种子/种球期',
   growing: '生长期',
   budding: '花芽分化期',
   blooming: '花期',
   dormant: '休眠期',
-  recovering: '缓苗期'
+  recovering: '缓苗期',
+  pest: '病虫害期'
 }
 
 export const CARE_PHASE_ICONS: Record<CarePhase, string> = {
+  seed: '🌰',
   growing: '🌱',
   budding: '🔍',
   blooming: '🌸',
   dormant: '😴',
-  recovering: '🩹'
+  recovering: '🩹',
+  pest: '🐛'
 }
 
 /** 界面上的说明：这个阶段什么时候算开始。 */
 export const CARE_PHASE_HINTS: Record<CarePhase, string> = {
+  seed: '播种到出苗、种球生根前，只做保湿和观察',
   growing: '春萌芽后，到花芽分化之前',
   budding: '现蕾之前，需要停高氮、改磷钾',
   blooming: '花苞显色开放，通常需要全部停肥',
   dormant: '落叶或低温停滞，水溶肥一律停',
-  recovering: '缓苗、暴雨、换盆之后，只做恢复性处理'
+  recovering: '缓苗、暴雨、换盆之后，只做恢复性处理',
+  pest: '发现虫害/病斑期间，先处理病虫，暂停施肥'
 }
 
 export const CARE_PHASE_OPTIONS = (Object.keys(CARE_PHASE_LABELS) as CarePhase[]).map((value) => ({

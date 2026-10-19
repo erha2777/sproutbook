@@ -102,11 +102,14 @@ function daysSince(iso: string | null | undefined, today: string): number | null
  * 只是掉了叶子。缓苗是**临时状态**，不是「这株还小」。
  */
 const PHASE_TO_STAGE: Record<CarePhase, GrowthStage> = {
+  seed: 'seed',
   growing: 'growing',
   budding: 'budding',
   blooming: 'blooming',
   dormant: 'dormant',
-  recovering: 'recovering'
+  recovering: 'recovering',
+  // 病虫害不是"生长阶段"，画面按"有状况"那种画（sick）
+  pest: 'sick'
 }
 
 export interface GrowthInput {
