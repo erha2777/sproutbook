@@ -103,7 +103,7 @@ import { autofillSpecies } from '../services/ai/autofill'
 import { identifyPlant } from '../services/ai/identify'
 import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } from '../services/ai/client'
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
-import { importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
+import { cloneImageFiles, importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
 import { listMusic } from '../services/music'
 import {
   createCompatShortcut,
@@ -702,7 +702,8 @@ function registerImageIpc(): void {
     if (!image || !plant) throw new Error('找不到图片或植株')
     if (image.speciesId === null) throw new Error('这张图不属于任何物种')
     if (plant.speciesId !== image.speciesId) throw new Error('这株不属于该物种，不能直接用它的图')
-    const file = importImage(join(imagesDir(), image.path))
+    // 用硬链接「再记一份」：和复制一样能独立删除，但磁盘只占一份
+    const file = cloneImageFiles(image.path, image.thumbPath)
     return addImage(db, {
       plantId,
       path: file.fileName,
