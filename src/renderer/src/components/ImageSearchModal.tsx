@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 「网上找图」弹窗：搜必应图片 → 预览 → 挑一张入库。
  *
  * 为什么不让 AI 直接给图：chat 模型没有联网工具，给不出真实图片地址；
@@ -81,7 +81,10 @@ export function ImageSearchModal({
             {busy ? '搜索中…' : '搜索'}
           </Button>
         </div>
-        <div className="small muted">图片来自必应图片搜索；挑中的那张才会下载，没挑不会占空间。</div>
+        <div className="small muted">
+          图片来自必应图片搜索（和网页版同一份索引）；搜不到就换个说法，比如去掉品种名和引号。
+          挑中的那张才会下载，没挑不会占空间。
+        </div>
 
         {error ? <Notice tone="warn">{error}</Notice> : null}
 

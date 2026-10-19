@@ -11,6 +11,7 @@ import { app, nativeImage, net, protocol } from 'electron'
 import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, extname, join, normalize } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { normalizeQuery, parseBingResults, queryTokens, rankHits, type BingImageHit } from '../../core/imageSearch'
 
 const IMAGE_SCHEME = 'plantimg'
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'])
@@ -40,7 +41,8 @@ export interface WebImageCandidate {
 }
 
 const BROWSER_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+const ZH_LANG = 'zh-CN,zh-Hans;q=0.9,zh;q=0.8,en;q=0.6'
 
 /**
  * 用必应图片搜索找候选图。
@@ -50,35 +52,43 @@ const BROWSER_UA =
  * 必应图片的 HTML 里带真实 `murl`（原图）和 `turl`（缩略图），
  * 由**应用**去搜、由**用户**挑，这条链路既不依赖 key，也不怕模型编造。
  *
+ * ## 为什么先"预热"再搜（2026-10-19 修）
+ *
+ * 直接对 `/images/async` 发请求、且**没有 cookie** 时，必应会退化成
+ * 一份"热门图片"页面（南通街景、汽车、书籍贴图……），和用户浏览器里看到的
+ * 结果完全无关。实测：先 GET 一次 `cn.bing.com/images` 拿到 MUID/_EDGE_S 等
+ * cookie，再带着它搜同一个词，返回的就是正常结果。
+ * 所以这里维护一个进程级 cookie，搜之前确保预热过；结果明显不对时再预热一次重试。
+ *
+ * ## 相关性校验
+ *
+ * 即使预热过，冷门词也可能拿到"猜你想搜"的泛化结果。这里用查询词给每条结果
+ * 打分（标题 / 来源页里是否出现查询词或其片段），明显不相关的整批丢掉，
+ * 宁可报"没搜到"也不给用户看一堆药盒子。
+ *
  * 注意：缩略图转成 data URL 返回 —— 渲染层 CSP 是
  * `img-src 'self' plantimg: data: blob:`，远程 https 图片会被拦。
  */
 export async function searchWebImages(query: string, limit = 12): Promise<WebImageCandidate[]> {
-  const q = query.trim()
+  const q = normalizeQuery(query)
   if (!q) throw new Error('先输入要搜的名称')
-  const url = `https://cn.bing.com/images/search?q=${encodeURIComponent(q)}&form=HDRSC2&first=1`
 
-  const response = await net.fetch(url, {
-    headers: { 'user-agent': BROWSER_UA, accept: 'text/html' }
-  })
-  if (!response.ok) throw new Error(`搜索失败：HTTP ${response.status}`)
-  const html = await response.text()
-
-  // HTML 里是 `m="{&quot;murl&quot;:&quot;...&quot;,&quot;turl&quot;:&quot;...&quot;}"`
-  const originals = [...html.matchAll(/murl&quot;:&quot;(.*?)&quot;/g)].map((m) => decodeHtml(m[1]))
-  const thumbs = [...html.matchAll(/turl&quot;:&quot;(.*?)&quot;/g)].map((m) => decodeHtml(m[1]))
-  const titles = [...html.matchAll(/&quot;t&quot;:&quot;(.*?)&quot;/g)].map((m) => decodeHtml(m[1]))
-
-  const seen = new Set<string>()
-  const picked: Array<{ url: string; turl: string | null; title: string | null }> = []
-  for (let i = 0; i < originals.length && picked.length < limit; i++) {
-    const original = originals[i]
-    if (!original || !/^https?:\/\//i.test(original) || seen.has(original)) continue
-    seen.add(original)
-    picked.push({ url: original, turl: thumbs[i] ?? null, title: titles[i] ?? null })
+  await warmUpBing()
+  let scored = await fetchAndScore(q)
+  if (countRelevant(scored) < 4) {
+    // 可能 cookie 过期 / 这次被降级了：强制重拿 cookie 再来一次
+    await warmUpBing(true)
+    const retry = await fetchAndScore(q)
+    if (countRelevant(retry) > countRelevant(scored)) scored = retry
   }
-  if (picked.length === 0) throw new Error('没有搜到图片，换个名称再试')
 
+  const relevant = scored.filter((item) => item.score > 0)
+  if (relevant.length === 0) {
+    if (scored.length === 0) throw new Error('没有搜到图片，换个名称再试')
+    throw new Error('必应返回的结果和这个名称对不上，换个说法试试（比如只搜物种名，去掉品种名和引号）')
+  }
+
+  const picked = relevant.slice(0, limit)
   // 缩略图并发下载，失败就跳过（不因为没有预览就丢掉候选）
   const withThumbs = await Promise.all(
     picked.map(async (item) => {
@@ -92,13 +102,51 @@ export async function searchWebImages(query: string, limit = 12): Promise<WebIma
   return items
 }
 
-function decodeHtml(text: string): string {
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&#x2F;/g, '/')
-    .replace(/&quot;/g, '"')
+let bingCookies: string | null = null
+let bingWarmAt = 0
+
+const BING_ORIGIN = 'https://cn.bing.com'
+
+async function warmUpBing(force = false): Promise<void> {
+  // 20 分钟内的 cookie 直接复用
+  if (!force && bingCookies && Date.now() - bingWarmAt < 20 * 60 * 1000) return
+  try {
+    const response = await net.fetch(`${BING_ORIGIN}/images`, {
+      headers: { 'user-agent': BROWSER_UA, accept: 'text/html', 'accept-language': ZH_LANG }
+    })
+    // Electron 的 net.fetch 有时只给 `set-cookie` 单值头，没有 getSetCookie()；
+    // 两条都兜一下，否则拿不到 cookie 就又会被降级成"热门图片"
+    const jar =
+      typeof response.headers.getSetCookie === 'function'
+        ? response.headers.getSetCookie()
+        : (response.headers.get('set-cookie') ?? '').split(/,(?=[^;]+=)/).filter(Boolean)
+    bingCookies = jar.length > 0 ? jar.map((c) => c.split(';')[0]).join('; ') : bingCookies
+    bingWarmAt = Date.now()
+    await response.arrayBuffer()
+  } catch {
+    // 预热失败也继续 —— 可能本来就有 cookie，或者这次不需要
+  }
 }
 
+async function fetchAndScore(q: string): Promise<Array<BingImageHit & { score: number }>> {
+  const url = `${BING_ORIGIN}/images/async?q=${encodeURIComponent(q)}&first=0&count=35&mkt=zh-CN&FORM=IRFLTR`
+  const headers: Record<string, string> = {
+    'user-agent': BROWSER_UA,
+    accept: 'text/html',
+    'accept-language': ZH_LANG,
+    referer: `${BING_ORIGIN}/images`
+  }
+  if (bingCookies) headers.cookie = bingCookies
+
+  const response = await net.fetch(url, { headers })
+  if (!response.ok) throw new Error(`搜索失败：HTTP ${response.status}`)
+  const html = await response.text()
+  return rankHits(parseBingResults(html), queryTokens(q))
+}
+
+function countRelevant(items: Array<{ score: number }>): number {
+  return items.filter((item) => item.score > 0).length
+}
 /** 下载一张图并转 data URL；超过大小上限返回 null */
 async function fetchAsDataUrl(url: string, maxBytes = 3_000_000): Promise<string | null> {
   try {

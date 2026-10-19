@@ -13,6 +13,7 @@
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { normalizeQuery, parseBingResults, queryTokens, rankHits } from '../core/imageSearch'
 import { Db, countPlaceholders } from './db/connection'
 import { formatMonthSet, normalizeMonths } from '../core/fieldTypes'
 import { LATEST_VERSION, MIGRATIONS, migrateSafetyVisibility } from './db/schema'
@@ -3568,6 +3569,23 @@ export async function runSmoke(outFile: string): Promise<number> {
         `imported=${second.imported} skipped=${second.skipped}`)
 
       target.close()
+    }
+
+    // --- 图片搜索的纯解析逻辑（喂一段合成 HTML，不联网）---
+    {
+      const html =
+        '<a class="iusc" m="{&quot;murl&quot;:&quot;https://a.example/rose.jpg&quot;,&quot;turl&quot;:&quot;https://a.example/t.jpg&quot;,&quot;t&quot;:&quot;粉白桃之辉酢浆草&quot;,&quot;purl&quot;:&quot;https://a.example/page&quot;}"></a>' +
+        '<a class="iusc" m="{&quot;murl&quot;:&quot;https://b.example/pill.jpg&quot;,&quot;t&quot;:&quot;肝龙胶囊&quot;}"></a>' +
+        '<a class="iusc" m="{&quot;t&quot;:&quot;没有 murl 的坏块&quot;}"></a>'
+      const hits = parseBingResults(html)
+      check('解析出 2 条（缺 murl 的坏块被丢掉）', hits.length === 2, String(hits.length))
+
+      check('带引号的物种名被规范化', normalizeQuery('酢酱草"粉白桃之辉"') === '酢酱草 粉白桃之辉', normalizeQuery('酢酱草"粉白桃之辉"'))
+
+      const tokens = queryTokens('酢酱草 粉白桃之辉')
+      const ranked = rankHits(hits, tokens)
+      check('相关的那条排在最前', ranked[0]?.url.includes('a.example') === true, ranked[0]?.url ?? '')
+      check('不相关的药盒子被打 0 分', ranked[ranked.length - 1]?.score === 0, String(ranked[ranked.length - 1]?.score))
     }
 
     // --- 版本一致性 ---
