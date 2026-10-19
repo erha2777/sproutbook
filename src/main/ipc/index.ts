@@ -1,4 +1,4 @@
-/**
+﻿/**
  * IPC 注册中心。
  *
  * 统一约定：
@@ -685,7 +685,9 @@ function registerEnvironmentIpc(): void {
 // ---------------------------------------------------------------------------
 
 function registerImageIpc(): void {
-  handle('images:list', (owner: { plantId?: number; speciesId?: number }) => listImages(getDb(), owner))
+  handle('images:list', (owner: { plantId?: number; speciesId?: number; environmentId?: number }) =>
+    listImages(getDb(), owner)
+  )
 
   handle('images:search', (query: string) => searchWebImages(query, 12))
 
@@ -730,7 +732,7 @@ function registerImageIpc(): void {
     })
   })
 
-  handle('images:pick', async (owner: { plantId?: number; speciesId?: number }) => {
+  handle('images:pick', async (owner: { plantId?: number; speciesId?: number; environmentId?: number }) => {
     const result = await dialog.showOpenDialog({
       title: '选择图片',
       properties: ['openFile', 'multiSelections'],
@@ -746,6 +748,7 @@ function registerImageIpc(): void {
         const record = addImage(getDb(), {
           plantId: owner.plantId ?? null,
           speciesId: owner.speciesId ?? null,
+          environmentId: owner.environmentId ?? null,
           path: file.fileName,
           thumbPath: file.thumbName
         })

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 端到端自检。
  *
  * 刻意**不依赖 electron** —— 只用 node:sqlite + 文件系统，因此：
@@ -2603,6 +2603,16 @@ export async function runSmoke(outFile: string): Promise<number> {
         check('新建位置时区县写入正确', saved.district === '示范县', String(saved.district))
         check('新建位置时纬度不错位', saved.lat === 31.2345, String(saved.lat))
         check('新建位置时经度不错位', saved.lon === 121.5678, String(saved.lon))
+      // 位置照片：现在只存不用，但要能存、能取、能删
+      {
+        const before = listImages(db, { environmentId: saved.id })
+        check('新位置默认没有照片', before.length === 0, String(before.length))
+        const rec = addImage(db, { environmentId: saved.id, path: 'env-smoke.jpg', thumbPath: 'env-smoke-thumb.jpg' })
+        check('位置照片记下了 environmentId', rec.environmentId === saved.id, String(rec.environmentId))
+        check('照片没有跑到植株/物种名下', rec.plantId === null && rec.speciesId === null)
+        const after = listImages(db, { environmentId: saved.id })
+        check('按 location 能查回这张照片', after.length === 1 && after[0].path === 'env-smoke.jpg')
+      }
 
         // 编辑：这正是用户报「修改不了」的那条路径
         const edited = saveEnvironment(db, {

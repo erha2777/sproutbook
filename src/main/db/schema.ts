@@ -559,6 +559,17 @@ ALTER TABLE images ADD COLUMN log_id INTEGER;
 CREATE INDEX IF NOT EXISTS idx_images_log ON images(log_id);
 `
 
+/**
+ * 养护位置的图片。
+ *
+ * 位置照片（窗台朝向、光照、架子的层高）现在只存不用 ——
+ * 以后接 AI 分析（比如「这个位置适不适合这株」）时，图已经在这儿了。
+ */
+const V18_ENV_IMAGES = /* sql */ `
+ALTER TABLE images ADD COLUMN environment_id INTEGER REFERENCES environments(id) ON DELETE CASCADE;
+CREATE INDEX idx_images_environment ON images(environment_id, sort_order);
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -576,7 +587,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 14, name: 'rule_anchor_day', sql: V14_RULE_ANCHOR_DAY },
   { version: 15, name: 'rule_month_days', sql: V15_RULE_MONTH_DAYS },
   { version: 16, name: 'image_log', sql: V16_IMAGE_LOG },
-  { version: 17, name: 'safety_visibility', run: migrateSafetyVisibility }
+  { version: 17, name: 'safety_visibility', run: migrateSafetyVisibility },
+  { version: 18, name: 'environment_images', sql: V18_ENV_IMAGES }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

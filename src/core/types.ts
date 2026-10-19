@@ -497,6 +497,8 @@ export interface ImageRecord {
   id: number
   plantId: number | null
   speciesId: number | null
+  /** 养护位置的图片（拍窗台、架子、光照），暂时只存着，留给以后的 AI 分析 */
+  environmentId: number | null
   path: string
   thumbPath: string | null
   caption: string | null

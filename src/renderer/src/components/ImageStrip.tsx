@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 图片管理条：上传（系统文件对话框）、预览、删除。
  * 图片文件由主进程复制进 userData/images，数据库只存文件名。
  */
@@ -11,7 +11,7 @@ import { Button, Spinner, cx, useToast } from './ui'
 import { ImageSearchModal } from './ImageSearchModal'
 
 export interface ImageStripProps {
-  owner: { plantId?: number; speciesId?: number }
+  owner: { plantId?: number; speciesId?: number; environmentId?: number }
   disabled?: boolean
   /** 删除后回调，便于外层刷新封面 */
   onChanged?: () => void
@@ -69,10 +69,10 @@ export function ImageStrip({
     }
   }, [speciesId])
 
-  const ownerKey = `${owner.plantId ?? ''}:${owner.speciesId ?? ''}`
+  const ownerKey = [owner.plantId ?? "", owner.speciesId ?? "", owner.environmentId ?? ""].join(":")
 
   const load = useCallback(async () => {
-    if (!owner.plantId && !owner.speciesId) {
+    if (!owner.plantId && !owner.speciesId && !owner.environmentId) {
       setImages([])
       return
     }

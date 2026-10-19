@@ -245,10 +245,13 @@ export interface SproutbookApi {
     remove(id: number): Promise<boolean>
   }
   images: {
-    list(owner: { plantId?: number; speciesId?: number }): Promise<ImageRecord[]>
-    pick(owner: { plantId?: number; speciesId?: number }): Promise<ImportResponse>
+    list(owner: { plantId?: number; speciesId?: number; environmentId?: number }): Promise<ImageRecord[]>
+    pick(owner: { plantId?: number; speciesId?: number; environmentId?: number }): Promise<ImportResponse>
     /** 从图片地址下载并导入（用户粘贴浏览器里看到的图片链接） */
-    importUrl(owner: { plantId?: number; speciesId?: number }, url: string): Promise<ImageRecord>
+    importUrl(
+      owner: { plantId?: number; speciesId?: number; environmentId?: number },
+      url: string
+    ): Promise<ImageRecord>
     /** 用必应图片搜索找候选图（缩略图是 data URL，受 CSP 限制） */
     search(query: string): Promise<WebImageCandidate[]>
     /** 把物种图片复制一份给植株（复制文件，删一边不影响另一边） */

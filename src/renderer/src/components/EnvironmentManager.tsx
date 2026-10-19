@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 养护位置管理。
  *
  * 之前只有首次启动种子写入的 4 个预设位置，界面上没有任何入口可以新增或修改 ——
@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Environment, EnvironmentInput, LightLevel } from '@core/types'
 import { ENV_KIND_LABELS, LIGHT_LEVEL_LABELS } from '../lib/util'
+import { ImageStrip } from './ImageStrip'
 import { Badge, Button, EmptyState, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextInput, useToast } from './ui'
 
 const KIND_OPTIONS = Object.entries(ENV_KIND_LABELS).map(([value, label]) => ({ value, label }))
@@ -295,6 +296,17 @@ function EnvironmentEditorModal({
         <Notice tone="info">
           这两个开关会参与将来的养护提醒：露天且不能加温的位置，会在低温来临前优先被提示。
         </Notice>
+        {/*
+          位置照片：现在只存着，不参与任何计算。
+          以后接 AI 分析（"这株放在这个位置合不合适"）时，图已经在这儿了。
+        */}
+        {env ? (
+          <Field label="照片" help="拍一张这个位置：窗台朝向、光照、架子层高都看得出来。存着备用，暂时不参与计算。">
+            <ImageStrip owner={{ environmentId: env.id }} />
+          </Field>
+        ) : (
+          <Notice tone="info">保存之后可以给这个位置添加照片（窗台、光照、架子层高），以后用于 AI 分析。</Notice>
+        )}
       </div>
     </Modal>
   )
