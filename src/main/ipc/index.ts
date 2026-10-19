@@ -1,4 +1,4 @@
-/**
+﻿/**
  * IPC 注册中心。
  *
  * 统一约定：
@@ -34,7 +34,6 @@ import {
   addImage,
   archiveEnvironment,
   deleteImage,
-  getImage,
   getSetting,
   listEnvironments,
   listImages,
@@ -104,7 +103,7 @@ import { autofillSpecies } from '../services/ai/autofill'
 import { identifyPlant } from '../services/ai/identify'
 import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } from '../services/ai/client'
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
-import { cloneImageFiles, importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
+import { importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
 import { listMusic } from '../services/music'
 import { EMPTY_MEDIA_PREFS, MEDIA_KEY, backdropsDir, listBackdrops, type MediaPrefs } from '../services/media'
 import {
@@ -788,31 +787,6 @@ function registerImageIpc(): void {
   )
 
   handle('images:search', (query: string) => searchWebImages(query, 12))
-
-  /*
-   * 把物种的图片复制一份给这株植物。
-   *
-   * 为什么是**复制文件**而不是共用同一行：图片删除时会连文件一起删，
-   * 两行指向同一个文件，删其中一个就把另一个弄坏了。
-   * 复制之后两者互不影响（同一张图在磁盘上多占一份，图片本身很小）。
-   */
-  handle('images:copyFromSpecies', (plantId: number, imageId: number) => {
-    const db = getDb()
-    const image = getImage(db, imageId)
-    const plant = getPlant(db, plantId)
-    if (!image || !plant) throw new Error('找不到图片或植株')
-    if (image.speciesId === null) throw new Error('这张图不属于任何物种')
-    if (plant.speciesId !== image.speciesId) throw new Error('这株不属于该物种，不能直接用它的图')
-    // 用硬链接「再记一份」：和复制一样能独立删除，但磁盘只占一份
-    const file = cloneImageFiles(image.path, image.thumbPath)
-    return addImage(db, {
-      plantId,
-      path: file.fileName,
-      thumbPath: file.thumbName,
-      origin: 'species'
-    })
-  })
-
   /*
    * 从图片地址导入。
    *

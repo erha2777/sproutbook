@@ -38,36 +38,13 @@ export function ImageStrip({
   onChanged,
   coverId,
   onSetCover,
-  searchHint,
-  speciesId
+  searchHint
 }: ImageStripProps): ReactNode {
   const toast = useToast()
   const [images, setImages] = useState<ImageRecord[]>([])
-  const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   /** 「网上找图」弹窗 */
   const [searchOpen, setSearchOpen] = useState(false)
-  /** 这株所属物种的图片（用来复制过来） */
-  const [speciesImages, setSpeciesImages] = useState<ImageRecord[]>([])
-
-  useEffect(() => {
-    if (!speciesId) {
-      setSpeciesImages([])
-      return
-    }
-    let alive = true
-    void window.api.images
-      .list({ speciesId })
-      .then((list) => {
-        if (alive) setSpeciesImages(list)
-      })
-      .catch(() => {
-        if (alive) setSpeciesImages([])
-      })
-    return () => {
-      alive = false
-    }
-  }, [speciesId])
 
   const ownerKey = [owner.plantId ?? "", owner.speciesId ?? "", owner.environmentId ?? ""].join(":")
 
@@ -76,13 +53,11 @@ export function ImageStrip({
       setImages([])
       return
     }
-    setLoading(true)
     try {
       setImages(await window.api.images.list(owner))
     } catch (error) {
       toast.push(`读取图片失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     } finally {
-      setLoading(false)
     }
     // owner 是每次渲染新建的对象，用 ownerKey 作为依赖避免无限循环
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,21 +128,6 @@ export function ImageStrip({
     }
   }
 
-  /** 把物种的一张图复制到这株 */
-  const copySpeciesImage = async (image: ImageRecord): Promise<void> => {
-    if (!owner.plantId) return
-    setBusy(true)
-    try {
-      await window.api.images.copyFromSpecies(owner.plantId, image.id)
-      toast.push('已复制到这一株', 'success')
-      await load()
-      onChanged?.()
-    } catch (error) {
-      toast.push(`复制失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
 
   /**
    * 网上找图：挑中一张就下载入库（和链接导入同一条下载管线）。
@@ -244,35 +204,6 @@ export function ImageStrip({
       ) : null}
 
       {images.length === 0 && disabled ? <span className="small muted">暂无图片</span> : null}
-      {loading ? <Spinner label="读取中" /> : null}
-
-      {/*
-        物种图片：这株所属物种已经有的图，点一张复制一份过来。
-        没有物种图就不显示，避免一片空白。
-      */}
-      {speciesId && speciesImages.length > 0 ? (
-        <div style={{ flexBasis: '100%', marginTop: 8 }}>
-          <div className="small muted" style={{ marginBottom: 4 }}>
-              物种图片（点一张复制到这株；不复制也会默认借物种的第一张当封面）：
-          </div>
-          <div className="image-strip">
-            {speciesImages.map((image) => (
-              <button
-                key={image.id}
-                type="button"
-                className="image-thumb species-pick"
-                title="用这张（会复制一份到这株）"
-                disabled={disabled || busy}
-                onClick={() => void copySpeciesImage(image)}
-              >
-                <img src={imageUrl(image.thumbPath ?? image.path) ?? ''} alt="" />
-                {/* 给屏幕阅读器 / 自动化一个可读的名字 */}
-                <span className="sr-only">用这张</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       {searchOpen ? (
         <ImageSearchModal

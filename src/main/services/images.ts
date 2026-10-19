@@ -8,7 +8,7 @@
  */
 
 import { app, nativeImage, net, protocol } from 'electron'
-import { copyFileSync, existsSync, linkSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, extname, join, normalize } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { normalizeQuery, parseBingResults, queryTokens, rankHits, type BingImageHit } from '../../core/imageSearch'
@@ -294,62 +294,6 @@ export function importImage(sourcePath: string): ImportedImage {
   return { fileName, thumbName, width, height }
 }
 
-/**
- * 把已有图片「再记一份」：用**硬链接**而不是复制文件。
- *
- * 场景：植株借用物种图库里的图。复制一份能让两边独立删除（删图会连文件一起删），
- * 但同一张照片在磁盘上会存两份。硬链接两者兼得：
- *  - 两个文件名指向同一份数据，磁盘只占一份
- *  - 删掉任意一个文件名，另一个照常可用（内容直到最后一个链接被删才释放）
- *  - 之后「替换图片」是写新文件，不会改到原文件，所以不会串图
- *
- * 硬链接建不了（跨卷 / 文件系统不支持）就退回普通复制 —— 行为不变，只是多占空间。
- */
-export function cloneImageFiles(sourceName: string, sourceThumb: string | null): ImportedImage {
-  const dir = ensureImagesDir()
-  const source = join(dir, basename(sourceName))
-  if (!existsSync(source)) throw new Error('原图文件不存在')
-
-  const ext = extname(source).toLowerCase()
-  if (!ALLOWED_EXT.has(ext)) throw new Error(`不支持的图片格式：${ext || '(无扩展名)'}`)
-
-  const fileName = `${randomUUID()}${ext}`
-  linkOrCopy(source, join(dir, fileName))
-
-  let thumbName: string | null = null
-  if (sourceThumb) {
-    const thumbSource = join(dir, basename(sourceThumb))
-    if (existsSync(thumbSource)) {
-      const thumbExt = extname(thumbSource).toLowerCase() || '.jpg'
-      thumbName = `${basename(fileName, ext)}_thumb${thumbExt}`
-      linkOrCopy(thumbSource, join(dir, thumbName))
-    }
-  }
-
-  let width: number | null = null
-  let height: number | null = null
-  try {
-    const image = nativeImage.createFromPath(source)
-    if (!image.isEmpty()) {
-      const size = image.getSize()
-      width = size.width
-      height = size.height
-    }
-  } catch {
-    // 量不出尺寸不影响使用
-  }
-
-  return { fileName, thumbName, width, height }
-}
-
-/** 先试硬链接，失败退回复制 */
-function linkOrCopy(from: string, to: string): void {
-  try {
-    linkSync(from, to)
-  } catch {
-    copyFileSync(from, to)
-  }
-}
 
 /** 删除图片文件。文件不存在时也返回 true（幂等）。 */
 export function removeImageFiles(fileNames: Array<string | null | undefined>): void {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 渲染进程可用的 API 契约。
  *
  * preload 负责实现，renderer 只依赖这个接口 —— 这样两端永远不会因为通道名写错而静默失败：
@@ -269,7 +269,6 @@ export interface SproutbookApi {
     /** 用必应图片搜索找候选图（缩略图是 data URL，受 CSP 限制） */
     search(query: string): Promise<WebImageCandidate[]>
     /** 把物种图片复制一份给植株（复制文件，删一边不影响另一边） */
-    copyFromSpecies(plantId: number, imageId: number): Promise<ImageRecord>
     remove(id: number): Promise<ImageRecord | null>
   }
   materials: {
