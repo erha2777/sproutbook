@@ -23,6 +23,7 @@ interface EnvironmentRow {
   lon: number | null
   can_heat: number
   frost_protected: number
+  notes: string | null
   sort_order: number
   archived_at: string | null
 }
@@ -42,6 +43,7 @@ function mapEnvironment(row: EnvironmentRow): Environment {
     lon: row.lon,
     canHeat: row.can_heat === 1,
     frostProtected: row.frost_protected === 1,
+    notes: row.notes ?? null,
     sortOrder: row.sort_order,
     archivedAt: row.archived_at
   }
@@ -64,7 +66,7 @@ export function saveEnvironment(db: Db, input: EnvironmentInput): Environment {
   if (id) {
     db.run(
       `UPDATE environments SET name=?, kind=?, light_level=?, light_hours=?, climate_zone=?, province=?, city=?, district=?,
-         lat=?, lon=?, can_heat=?, frost_protected=?, sort_order=? WHERE id=?`,
+         lat=?, lon=?, can_heat=?, frost_protected=?, notes=?, sort_order=? WHERE id=?`,
       input.name,
       input.kind,
       input.lightLevel,
@@ -77,6 +79,7 @@ export function saveEnvironment(db: Db, input: EnvironmentInput): Environment {
       input.lon,
       input.canHeat ? 1 : 0,
       input.frostProtected ? 1 : 0,
+      input.notes ?? null,
       input.sortOrder,
       id
     )
@@ -86,8 +89,8 @@ export function saveEnvironment(db: Db, input: EnvironmentInput): Environment {
   }
 
   const r = db.run(
-    `INSERT INTO environments (name, kind, light_level, light_hours, climate_zone, province, city, district, lat, lon, can_heat, frost_protected, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO environments (name, kind, light_level, light_hours, climate_zone, province, city, district, lat, lon, can_heat, frost_protected, notes, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.name,
     input.kind,
     input.lightLevel,
@@ -100,6 +103,7 @@ export function saveEnvironment(db: Db, input: EnvironmentInput): Environment {
     input.lon,
     input.canHeat ? 1 : 0,
     input.frostProtected ? 1 : 0,
+    input.notes ?? null,
     input.sortOrder
   )
   const created = getEnvironment(db, Number(r.lastInsertRowid))

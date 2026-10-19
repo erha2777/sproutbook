@@ -2598,11 +2598,13 @@ export async function runSmoke(outFile: string): Promise<number> {
           lon: 121.5678,
           canHeat: false,
           frostProtected: false,
+          notes: '朝南偏东，上午 3 小时直射',
           sortOrder: 99
         })
         check('新建位置时区县写入正确', saved.district === '示范县', String(saved.district))
         check('新建位置时纬度不错位', saved.lat === 31.2345, String(saved.lat))
         check('新建位置时经度不错位', saved.lon === 121.5678, String(saved.lon))
+        check('位置备注写进去了', saved.notes === '朝南偏东，上午 3 小时直射', String(saved.notes))
       // 位置照片：现在只存不用，但要能存、能取、能删
       {
         const before = listImages(db, { environmentId: saved.id })
@@ -2629,11 +2631,13 @@ export async function runSmoke(outFile: string): Promise<number> {
           lon: 113.58,
           canHeat: true,
           frostProtected: true,
+          notes: null,
           sortOrder: 99
         })
         check('编辑位置时区县能改', edited.district === '另县', String(edited.district))
         check('编辑位置时坐标能改', edited.lat === 28.71 && edited.lon === 113.58, `${edited.lat},${edited.lon}`)
         check('编辑位置时开关能改', edited.canHeat === true && edited.frostProtected === true)
+        check('编辑时清空备注也生效', edited.notes === null, String(edited.notes))
 
         // 再读一次，确认真的落库了而不是只改了返回值
         const reread = getEnvironment(db, saved.id)

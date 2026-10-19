@@ -172,6 +172,8 @@ export interface Environment {
   lon: number | null
   canHeat: boolean
   frostProtected: boolean
+  /** 位置备注：朝向、西晒、架子层高、冬天暖气…… 填表填不出来但一眼要看到的东西 */
+  notes: string | null
   sortOrder: number
   archivedAt: string | null
 }

@@ -15,7 +15,7 @@ import type { ReactNode } from 'react'
 import type { Environment, EnvironmentInput, LightLevel } from '@core/types'
 import { ENV_KIND_LABELS, LIGHT_LEVEL_LABELS } from '../lib/util'
 import { ImageStrip } from './ImageStrip'
-import { Badge, Button, EmptyState, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextInput, useToast } from './ui'
+import { Badge, Button, EmptyState, Field, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, TextInput, TextArea, useToast } from './ui'
 
 const KIND_OPTIONS = Object.entries(ENV_KIND_LABELS).map(([value, label]) => ({ value, label }))
 const LIGHT_OPTIONS = Object.entries(LIGHT_LEVEL_LABELS).map(([value, label]) => ({ value, label }))
@@ -180,6 +180,7 @@ function EnvironmentEditorModal({
   const [lon, setLon] = useState(env?.lon === null || env?.lon === undefined ? '' : String(env.lon))
   const [canHeat, setCanHeat] = useState(env?.canHeat ?? false)
   const [frostProtected, setFrostProtected] = useState(env?.frostProtected ?? false)
+  const [notes, setNotes] = useState(env?.notes ?? "")
   const [saving, setSaving] = useState(false)
 
   const submit = async (): Promise<void> => {
@@ -203,6 +204,7 @@ function EnvironmentEditorModal({
       lon: num(lon),
       canHeat,
       frostProtected,
+      notes: notes.trim() || null,
       sortOrder: env?.sortOrder ?? 99
     }
 
@@ -296,6 +298,18 @@ function EnvironmentEditorModal({
         <Notice tone="info">
           这两个开关会参与将来的养护提醒：露天且不能加温的位置，会在低温来临前优先被提示。
         </Notice>
+
+        <Field
+          label="备注"
+          help="写填表写不出来的东西：朝南、下午西晒、架子三层、冬天暖气足……"
+        >
+          <TextArea
+            value={notes}
+            onChange={setNotes}
+            rows={3}
+            placeholder="例如：朝南偏东，上午 3 小时直射，下午被楼挡住；架子上层，离窗 30cm。"
+          />
+        </Field>
         {/*
           位置照片：现在只存着，不参与任何计算。
           以后接 AI 分析（"这株放在这个位置合不合适"）时，图已经在这儿了。

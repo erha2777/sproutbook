@@ -559,6 +559,11 @@ ALTER TABLE images ADD COLUMN log_id INTEGER;
 CREATE INDEX IF NOT EXISTS idx_images_log ON images(log_id);
 `
 
+/** 位置备注：写「朝南、下午西晒、架子三层、冬天暖气足」这类填表填不出来的话。 */
+const V19_ENV_NOTES = /* sql */ `
+ALTER TABLE environments ADD COLUMN notes TEXT;
+`
+
 /**
  * 养护位置的图片。
  *
@@ -588,7 +593,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 15, name: 'rule_month_days', sql: V15_RULE_MONTH_DAYS },
   { version: 16, name: 'image_log', sql: V16_IMAGE_LOG },
   { version: 17, name: 'safety_visibility', run: migrateSafetyVisibility },
-  { version: 18, name: 'environment_images', sql: V18_ENV_IMAGES }
+  { version: 18, name: 'environment_images', sql: V18_ENV_IMAGES },
+  { version: 19, name: 'environment_notes', sql: V19_ENV_NOTES }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */
