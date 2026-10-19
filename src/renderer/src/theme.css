@@ -1,4 +1,4 @@
-/* ==========================================================================
+﻿/* ==========================================================================
    像素字体：Fusion Pixel 12px（OFL，字体文件在 src/renderer/src/assets）
    --------------------------------------------------------------------------
    12px 是它的设计尺寸，其余字号会被缩放。为了让 12px 的字最清晰，
@@ -1121,16 +1121,40 @@ img {
 }
 
 /* 设置是低频入口：左下角齿轮，和参考图一致 */
-/* 全局声音开关：固定在窗口左上角，和右上角的最小化/最大化对称 */
-.global-sound {
+/*
+ * 全局声音开关：固定在窗口左上角。
+ *
+ * 样式走「游戏 HUD 那种直接贴在画面上的小图标」，不套木牌 ——
+ * 木框在左上角太抢眼，参考图里的 HUD 图标就是扁平的一个字形。
+ */
+.global-sound,
+html.tex-button .home-gear.global-sound {
   position: fixed;
-  left: 6px;
-  top: 2px;
-  width: 44px;
-  height: 44px;
+  left: 8px;
+  top: 6px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   z-index: 46;
+  border: 0;
+  border-image: none;
+  background: transparent;
+  box-shadow: none;
+  image-rendering: pixelated;
+  opacity: 0.9;
   /* 压在标题栏的拖拽带上，必须显式声明可点 */
   -webkit-app-region: no-drag;
+}
+.global-sound:hover,
+html.tex-button .home-gear.global-sound:hover {
+  opacity: 1;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.55));
+}
+.global-sound svg {
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45));
+}
+.global-sound:active {
+  transform: translateY(1px);
 }
 .home-gear {
   position: absolute;
@@ -2909,16 +2933,40 @@ img {
     0 7px 0 rgba(0, 0, 0, 0.22);
 }
 
-/* 全局声音开关：固定在窗口左上角，和右上角的最小化/最大化对称 */
-.global-sound {
+/*
+ * 全局声音开关：固定在窗口左上角。
+ *
+ * 样式走「游戏 HUD 那种直接贴在画面上的小图标」，不套木牌 ——
+ * 木框在左上角太抢眼，参考图里的 HUD 图标就是扁平的一个字形。
+ */
+.global-sound,
+html.tex-button .home-gear.global-sound {
   position: fixed;
   left: 6px;
   top: 2px;
-  width: 44px;
-  height: 44px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   z-index: 46;
+  border: 0;
+  border-image: none;
+  background: transparent;
+  box-shadow: none;
+  image-rendering: pixelated;
+  opacity: 0.9;
   /* 压在标题栏的拖拽带上，必须显式声明可点 */
   -webkit-app-region: no-drag;
+}
+.global-sound:hover,
+html.tex-button .home-gear.global-sound:hover {
+  opacity: 1;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.55));
+}
+.global-sound svg {
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45));
+}
+.global-sound:active {
+  transform: translateY(1px);
 }
 .home-gear {
   transition:
@@ -3150,16 +3198,40 @@ img {
   display: block;
   image-rendering: pixelated;
 }
-/* 全局声音开关：固定在窗口左上角，和右上角的最小化/最大化对称 */
-.global-sound {
+/*
+ * 全局声音开关：固定在窗口左上角。
+ *
+ * 样式走「游戏 HUD 那种直接贴在画面上的小图标」，不套木牌 ——
+ * 木框在左上角太抢眼，参考图里的 HUD 图标就是扁平的一个字形。
+ */
+.global-sound,
+html.tex-button .home-gear.global-sound {
   position: fixed;
   left: 6px;
   top: 2px;
-  width: 44px;
-  height: 44px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   z-index: 46;
+  border: 0;
+  border-image: none;
+  background: transparent;
+  box-shadow: none;
+  image-rendering: pixelated;
+  opacity: 0.9;
   /* 压在标题栏的拖拽带上，必须显式声明可点 */
   -webkit-app-region: no-drag;
+}
+.global-sound:hover,
+html.tex-button .home-gear.global-sound:hover {
+  opacity: 1;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.55));
+}
+.global-sound svg {
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45));
+}
+.global-sound:active {
+  transform: translateY(1px);
 }
 .home-gear {
   display: flex;
@@ -3513,16 +3585,40 @@ html.tex-button .back-btn {
   box-shadow: none;
   image-rendering: pixelated;
 }
-html.tex-button /* 全局声音开关：固定在窗口左上角，和右上角的最小化/最大化对称 */
-.global-sound {
+html.tex-button /*
+ * 全局声音开关：固定在窗口左上角。
+ *
+ * 样式走「游戏 HUD 那种直接贴在画面上的小图标」，不套木牌 ——
+ * 木框在左上角太抢眼，参考图里的 HUD 图标就是扁平的一个字形。
+ */
+.global-sound,
+html.tex-button .home-gear.global-sound {
   position: fixed;
   left: 6px;
   top: 2px;
-  width: 44px;
-  height: 44px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   z-index: 46;
+  border: 0;
+  border-image: none;
+  background: transparent;
+  box-shadow: none;
+  image-rendering: pixelated;
+  opacity: 0.9;
   /* 压在标题栏的拖拽带上，必须显式声明可点 */
   -webkit-app-region: no-drag;
+}
+.global-sound:hover,
+html.tex-button .home-gear.global-sound:hover {
+  opacity: 1;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.55));
+}
+.global-sound svg {
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45));
+}
+.global-sound:active {
+  transform: translateY(1px);
 }
 .home-gear {
   width: 54px;

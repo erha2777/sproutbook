@@ -402,7 +402,7 @@ function Shell(): ReactNode {
       aria-label={soundOn ? '关闭声音' : '开启声音'}
       onClick={toggleSound}
     >
-      <PixelIcon name={soundOn ? 'sound' : 'mute'} size={22} />
+      <PixelIcon name={soundOn ? 'sound' : 'mute'} size={24} />
     </button>
   )
 
