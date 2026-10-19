@@ -40,12 +40,16 @@ const SELECT_BASE = `
     s.family          AS species_family,
     e.name            AS env_name,
     /*
-     * 封面：优先用用户指定的那张（plants.cover_image_id），
-     * 没指定就退回到最早导入的一张 —— 老数据没有指定过封面，行为不变。
+     * 封面，三级兜底：
+     *   1. 用户在这一株里指定的那张（plants.cover_image_id）
+     *   2. 这一株自己最早导入的一张
+     *   3. **物种图库里的第一张** —— 同物种的花长得一样，一株株设封面太麻烦；
+     *      只是显示时借用，不复制文件、也不写入这一株的图片列表
      */
     COALESCE(
       (SELECT thumb_path FROM images WHERE id = p.cover_image_id),
-      (SELECT thumb_path FROM images WHERE plant_id = p.id ORDER BY sort_order, id LIMIT 1)
+      (SELECT thumb_path FROM images WHERE plant_id = p.id ORDER BY sort_order, id LIMIT 1),
+      (SELECT thumb_path FROM images WHERE species_id = p.species_id ORDER BY sort_order, id LIMIT 1)
     ) AS cover_thumb
   FROM plants p
   LEFT JOIN species s      ON s.id = p.species_id

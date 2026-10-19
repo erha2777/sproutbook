@@ -472,6 +472,20 @@ export async function runSmoke(outFile: string): Promise<number> {
         rejected = true
       }
       check('不能拿别的植株的照片当封面', rejected && first.id > 0)
+      /*
+       * 物种兜底：这株自己没有任何图时，默认借物种图库的第一张做封面 ——
+       * 同物种的花长得一样，一株株设封面太麻烦。
+       */
+      const bare = savePlant(db, { speciesId, nickname: "没图的月季", values: { nickname: "没图的月季" } })
+      const bareId = bare.plant?.id ?? 0
+      const nothing = listPlants(db, {}).items.find((p) => p.id === bareId)
+      check("自己没图、物种也没图时封面为空", nothing?.coverThumb === null, String(nothing?.coverThumb))
+      addImage(db, { speciesId, path: "species-cover.jpg", thumbPath: "species-cover-thumb.jpg" })
+      const borrowed = listPlants(db, {}).items.find((p) => p.id === bareId)
+      check("没有自己的图时借物种的第一张", borrowed?.coverThumb === "species-cover-thumb.jpg", String(borrowed?.coverThumb))
+      addImage(db, { plantId: bareId, path: "own-cover.jpg", thumbPath: "own-cover-thumb.jpg" })
+      const ownWins = listPlants(db, {}).items.find((p) => p.id === bareId)
+      check("有自己的图时优先用自己的", ownWins?.coverThumb === "own-cover-thumb.jpg", String(ownWins?.coverThumb))
     }
 
     const stats = plantStats(db, 6)

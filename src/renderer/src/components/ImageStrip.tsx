@@ -253,7 +253,7 @@ export function ImageStrip({
       {speciesId && speciesImages.length > 0 ? (
         <div style={{ flexBasis: '100%', marginTop: 8 }}>
           <div className="small muted" style={{ marginBottom: 4 }}>
-            物种图片（点一张复制到这株）：
+              物种图片（点一张复制到这株；不复制也会默认借物种的第一张当封面）：
           </div>
           <div className="image-strip">
             {speciesImages.map((image) => (
