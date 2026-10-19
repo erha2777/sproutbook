@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 渲染进程可用的 API 契约。
  *
  * preload 负责实现，renderer 只依赖这个接口 —— 这样两端永远不会因为通道名写错而静默失败：
@@ -144,6 +144,8 @@ export interface SproutbookApi {
     removeMusic(name: string): Promise<Array<{ name: string; url: string }>>
     /** 用户自己放的背景图（<userData>/textures/backgrounds，已缩到 1600 内的 data URL） */
     backdrops(): Promise<Array<{ name: string; url: string }>>
+    /** 单独取某一张背景（列表里没有时兜底） */
+    backdropUrl(name: string): Promise<string | null>
     importBackdrops(): Promise<{ canceled: boolean; backdrops: Array<{ name: string; url: string }> }>
     removeBackdrop(name: string): Promise<Array<{ name: string; url: string }>>
     /** 选中的曲目 / 背景（null = 第一首 / 全部轮播） */

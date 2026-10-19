@@ -1,4 +1,4 @@
-﻿/**
+/**
  * IPC 注册中心。
  *
  * 统一约定：
@@ -105,7 +105,7 @@ import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } fro
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
 import { importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
 import { listMusic } from '../services/music'
-import { EMPTY_MEDIA_PREFS, MEDIA_KEY, backdropsDir, listBackdrops, type MediaPrefs } from '../services/media'
+import { EMPTY_MEDIA_PREFS, MEDIA_KEY, backdropsDir, listBackdrops, readBackdrop, type MediaPrefs } from '../services/media'
 import {
   createCompatShortcut,
   detectIntegrityLevel,
@@ -490,7 +490,16 @@ function registerAppIpc(): void {
   })
 
   /** 用户自己放的背景图（<userData>/textures/backgrounds） */
-  handle('app:backdrops', () => listBackdrops())
+  handle('app:backdrops', () => {
+    const list = listBackdrops()
+    // 出过「选完背景反而没背景」的问题：把个数记进启动日志，下次一眼能对上
+    logStartup('背景图列表', { dir: backdropsDir(), count: list.length, names: list.map((b) => b.name) })
+    return list
+  })
+
+  /** 单独取某一张（偏好指向的文件不在列表里时兜底用） */
+  handle('app:backdropUrl', (name: string) => readBackdrop(String(name ?? '')))
+
 
   handle('app:importBackdrops', async () => {
     const dir = backdropsDir()

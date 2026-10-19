@@ -13,9 +13,22 @@ import type { ReactNode } from 'react'
 import type { CSSProperties } from 'react'
 
 export function Backdrop({ images }: { images: string[] }): ReactNode {
+  /*
+   * 空数组时保留上一次的画面。
+   *
+   * 出过一次「选完背景反而变成空白」：偏好暂时解析不出来时 images 变成空数组，
+   * 这一层直接卸载，露出的是应用底图 —— 看起来就是"背景没了"。
+   * 背景是装饰，宁可多留一帧旧的，也不要突然空一下。
+   */
+  const [sticky, setSticky] = useState<string[]>(images)
+  useEffect(() => {
+    if (images.length > 0) setSticky(images)
+  }, [images])
+  const shown = images.length > 0 ? images : sticky
+
   const layers = useMemo(
     () =>
-      images.map((url, index) => {
+      shown.map((url, index) => {
         const rand = (seed: number): number => {
           const x = Math.sin((index + 1) * 91.7 + seed * 37.3) * 10000
           return x - Math.floor(x)

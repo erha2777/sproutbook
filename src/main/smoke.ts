@@ -79,6 +79,7 @@ import {
   normalizeHabit
 } from '../core/sprite'
 import { WEATHER_ICON_KINDS, WEATHER_ICON_SIZE, buildWeatherIcon } from '../core/weatherIcon'
+import { THEME_BACKDROP, resolveBackdrops } from '../core/media'
 import { defaultFieldDefinitions } from '../core/defaultTemplate'
 import {
   addDays,
@@ -2634,6 +2635,20 @@ export async function runSmoke(outFile: string): Promise<number> {
         check('照片没有跑到植株/物种名下', rec.plantId === null && rec.speciesId === null)
         const after = listImages(db, { environmentId: saved.id })
         check('按 location 能查回这张照片', after.length === 1 && after[0].path === 'env-smoke.jpg')
+    }
+
+    /*
+     * 背景选择：三种模式，外加一条硬规矩 ——
+     * 选中的那张解析不出来时，绝对不能返回空数组（否则背景整个消失）。
+     */
+    {
+      const base = ["theme-1"]
+      const uploaded = [{ name: "a.png", url: "data:a" }, { name: "b.png", url: "data:b" }]
+      check('背景：主题背景只给主题的', JSON.stringify(resolveBackdrops(base, uploaded, THEME_BACKDROP)) === '["theme-1"]')
+      check('背景：全部轮播 = 主题 + 上传', resolveBackdrops(base, uploaded, null).length === 3)
+      check('背景：选中一张就只用它', JSON.stringify(resolveBackdrops(base, uploaded, "b.png")) === '["data:b"]')
+      check('背景：选中的不在列表里就退回全部，不清空', resolveBackdrops(base, uploaded, "c.png").length === 3)
+      check('背景：不在列表但有直链时用直链', JSON.stringify(resolveBackdrops(base, uploaded, "c.png", "data:c")) === '["data:c"]')
       }
 
         // 编辑：这正是用户报「修改不了」的那条路径

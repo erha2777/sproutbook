@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { THEME_BACKDROP } from '@core/media'
 import { Button, Notice, cx, useToast } from './ui'
 
 interface Track {
@@ -160,47 +161,49 @@ export function MediaSettings(): ReactNode {
             上传背景
           </Button>
         </div>
-        {backdrops.length === 0 ? (
-          <div className="small muted">
-            还没有自己的背景图。主题自带的背景仍会照常轮播；上传 png / jpg 后可以在这里单独挑一张。
-          </div>
-        ) : (
-          <>
-            <div className="media-thumbs">
+        {/* 三个选项一直显示：主题背景 / 全部轮播 / 自己上传的 */}
+        <div className="media-thumbs">
+          <button
+            type="button"
+            className={cx('media-thumb', 'media-thumb-all', prefs.backdrop === THEME_BACKDROP && 'on')}
+            onClick={() => void pickBackdrop(THEME_BACKDROP)}
+            title="只用主题自带的背景（不用上传的那些）"
+          >
+            主题背景
+          </button>
+          <button
+            type="button"
+            className={cx('media-thumb', 'media-thumb-all', prefs.backdrop === null && 'on')}
+            onClick={() => void pickBackdrop(null)}
+            title="主题自带的背景 + 自己上传的一起轮播"
+          >
+            全部轮播
+          </button>
+          {backdrops.map((item) => (
+            <div key={item.name} className={cx('media-thumb', prefs.backdrop === item.name && 'on')}>
               <button
                 type="button"
-                className={cx('media-thumb', 'media-thumb-all', prefs.backdrop === null && 'on')}
-                onClick={() => void pickBackdrop(null)}
-                title="全部轮播（含主题自带的背景）"
+                className="media-thumb-pick"
+                onClick={() => void pickBackdrop(item.name)}
+                title={`用这张当背景：${item.name}`}
               >
-                全部轮播
+                <img src={item.url} alt={item.name} />
               </button>
-              {backdrops.map((item) => (
-                <div key={item.name} className={cx('media-thumb', prefs.backdrop === item.name && 'on')}>
-                  <button
-                    type="button"
-                    className="media-thumb-pick"
-                    onClick={() => void pickBackdrop(item.name)}
-                    title={`用这张当背景：${item.name}`}
-                  >
-                    <img src={item.url} alt={item.name} />
-                  </button>
-                  <button
-                    type="button"
-                    className="media-thumb-del"
-                    title="删除这张"
-                    onClick={() => void removeBackdrop(item.name)}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
+              <button
+                type="button"
+                className="media-thumb-del"
+                title="删除这张"
+                onClick={() => void removeBackdrop(item.name)}
+              >
+                ×
+              </button>
             </div>
-            <Notice tone="info">
-              选中的那张只会用它一个；选「全部轮播」时，主题自带的背景和你上传的会一起轮播。
-            </Notice>
-          </>
-        )}
+          ))}
+        </div>
+        <Notice tone="info">
+          「主题背景」= 只显示主题自带的那几张；「全部轮播」= 主题自带的和你上传的一起轮；点某一张就只用它一个。
+          {backdrops.length === 0 ? ' 现在还没有上传的背景图，用「上传背景」加 png / jpg。' : ''}
+        </Notice>
       </div>
     </div>
   )

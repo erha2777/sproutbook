@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 音乐 / 背景的"选哪个"偏好，和用户自己放的背景图。
  *
  * 文件都落在 <userData>/textures 下：
@@ -11,7 +11,7 @@
 
 import { app, nativeImage } from 'electron'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 
 export interface MediaPrefs {
   /** 选中的曲目文件名；null = 用列表里的第一首 */
@@ -67,8 +67,7 @@ export function listBackdrops(): BackdropItem[] {
   return out
 }
 
-function readAsUrl(file: string): string | null {
-  try {
+function readAsUrl(file: string): string | null {  try {
     const image = nativeImage.createFromPath(file)
     if (!image.isEmpty()) {
       const size = image.getSize()
@@ -89,4 +88,20 @@ function readAsUrl(file: string): string | null {
   } catch {
     return null
   }
+}
+/**
+ * 单独取一张背景图（按文件名）。
+ *
+ * 用途：偏好里存的文件名在列表里找不到时（列表扫描失败、文件刚被占用），
+ * 还能直接把它读出来 —— 否则背景会变成"什么都没有"。
+ * 路径必须落在 backgrounds 目录里，防目录穿越。
+ */
+export function readBackdrop(name: string): string | null {
+  const raw = String(name ?? '')
+  if (!raw || raw === '__theme__') return null
+  const dir = resolve(backdropsDir())
+  const file = resolve(join(dir, basename(raw)))
+  if (!file.startsWith(dir)) return null
+  if (!existsSync(file)) return null
+  return readAsUrl(file)
 }

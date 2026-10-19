@@ -1,4 +1,4 @@
-﻿/**
+/**
  * preload：唯一的渲染进程 ↔ 主进程通道。
  *
  * 安全约束：
@@ -42,6 +42,7 @@ const api: SproutbookApi = {
     importMusic: () => call('app:importMusic'),
     removeMusic: (name) => call('app:removeMusic', name),
     backdrops: () => call('app:backdrops'),
+    backdropUrl: (name) => call('app:backdropUrl', name),
     importBackdrops: () => call('app:importBackdrops'),
     removeBackdrop: (name) => call('app:removeBackdrop', name),
     mediaPrefs: () => call('app:mediaPrefs'),

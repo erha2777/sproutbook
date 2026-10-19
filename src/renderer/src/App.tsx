@@ -3,6 +3,7 @@ import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, ToastProvider, cx, useToast } from './components/ui'
 import { TitleBar } from './components/TitleBar'
 import { Backdrop } from './components/Backdrop'
+import { THEME_BACKDROP, resolveBackdrops } from '@core/media'
 import { PixelIcon, setIconUrls } from './components/PixelIcon'
 import { TopHud } from './components/TopHud'
 import { GardenPage } from './pages/GardenPage'
@@ -379,27 +380,48 @@ function Shell(): ReactNode {
   }, [])
 
   // 用户自己放的背景图 + 选中的是哪一张
+  //
+  // 用 allSettled：这两个请求一个失败不该把另一个也拖下水 ——
+  // 之前 Promise.all 一起 reject 时，偏好和列表同时丢掉，背景直接变回默认，看着像"背景没了"。
   useEffect(() => {
     void (async () => {
-      try {
-        const [list, prefs] = await Promise.all([window.api.app.backdrops(), window.api.app.mediaPrefs()])
-        setUploadedBackdrops(list)
-        setBackdropPref(prefs.backdrop)
-      } catch {
-        // 读不到就当没有，不影响主题自带的背景
-      }
+      const [list, prefs] = await Promise.allSettled([window.api.app.backdrops(), window.api.app.mediaPrefs()])
+      if (list.status === 'fulfilled') setUploadedBackdrops(list.value)
+      if (prefs.status === 'fulfilled') setBackdropPref(prefs.value.backdrop)
     })()
   }, [mediaVersion])
 
-  /* 实际用于渲染的背景：选中某一张就只用它，否则主题自带 + 上传的轮播 */
-  const backdrops = useMemo(() => {
-    const all = [...baseBackdrops, ...uploadedBackdrops.map((b) => b.url)]
-    if (backdropPref) {
-      const chosen = uploadedBackdrops.find((b) => b.name === backdropPref)
-      if (chosen) return [chosen.url]
+  /*
+   * 选中的那张如果不在列表里（扫描失败、文件刚被占用），单独问一次它的 URL。
+   * 再拿不到就退回"全部轮播" —— 宁可显示别的，也不能因为解析不出来让背景一片空白。
+   */
+  const [directBackdrop, setDirectBackdrop] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    if (!backdropPref || backdropPref === THEME_BACKDROP || uploadedBackdrops.some((b) => b.name === backdropPref)) {
+      setDirectBackdrop(null)
+      return () => {
+        alive = false
+      }
     }
-    return all
-  }, [baseBackdrops, uploadedBackdrops, backdropPref])
+    void window.api.app
+      .backdropUrl(backdropPref)
+      .then((url) => {
+        if (alive) setDirectBackdrop(url)
+      })
+      .catch(() => {
+        if (alive) setDirectBackdrop(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [backdropPref, uploadedBackdrops])
+
+  /* 实际用于渲染的背景：选主题 / 选某一张 / 全部轮播 */
+  const backdrops = useMemo(
+    () => resolveBackdrops(baseBackdrops, uploadedBackdrops, backdropPref, directBackdrop),
+    [baseBackdrops, uploadedBackdrops, backdropPref, directBackdrop]
+  )
   // 静音开关同时控制背景音乐
   useEffect(() => {
     const audio = audioRef.current
