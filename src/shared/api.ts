@@ -240,6 +240,8 @@ export interface SproutbookApi {
       status?: PlantStatus
       envId?: number
       speciesId?: number
+      /** 最近改动 / 入手时间 / 购入价格 */
+      sort?: 'updated' | 'acquired' | 'price'
       limit?: number
       offset?: number
     }): Promise<{ items: PlantListItem[]; total: number }>

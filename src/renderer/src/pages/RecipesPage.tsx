@@ -158,6 +158,7 @@ export function RecipesPage(): ReactNode {
                   <div className="card-meta">
                     <Badge tone="info">{recipe.kind}</Badge>
                     <Badge tone="muted">{recipe.items.length} 种材料</Badge>
+                    {recipe.available ? <Badge tone="ok">可使用</Badge> : null}
                   </div>
                   <div className="small" style={{ margin: '8px 0', lineHeight: 1.7 }}>
                     {recipe.summary}

@@ -219,6 +219,33 @@ export function saveSpecies(
     const name = String(col.common_name ?? existingRow?.common_name ?? '').trim()
 
     /*
+     * 重名检查。
+     *
+     * 物种是"一个物种一条记录"，同名两条会让规则、封面、搜索全部对不上 ——
+     * 而且用户很难自己发现：列表里两行字一样，只能靠记忆。
+     *
+     * 比的是 trim + 忽略大小写之后的名字，忽略已归档的记录，自己不算重复。
+     * 报错挂在 common_name 字段上，表单会把它显示在那一格下面。
+     */
+    if (name) {
+      const dup = db.get<{ id: number; archived_at: string | null }>(
+        'SELECT id, archived_at FROM species WHERE lower(trim(common_name)) = lower(?) AND id != ? LIMIT 1',
+        name,
+        id ?? 0
+      )
+      if (dup && dup.archived_at === null) {
+        return {
+          species: id ? getSpecies(db, id) : null,
+          errors: {
+            common_name: `已经有叫「${name}」的物种了。重名会让规则、封面、搜索都对不上；` +
+              '如果是同一种的另一个叫法，去那一条里加「别名」。'
+          },
+          pendingReview: []
+        }
+      }
+    }
+
+    /*
      * 必填校验走模板定义，而不是硬编码某个字段名。
      * 之前只检查 common_name，用户在「信息模板」里标的「必填」形同虚设。
      */

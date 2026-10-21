@@ -560,6 +560,17 @@ CREATE INDEX IF NOT EXISTS idx_images_log ON images(log_id);
 `
 
 /** 位置备注：写「朝南、下午西晒、架子三层、冬天暖气足」这类填表填不出来的话。 */
+/**
+ * 材料库存 + 配方「可使用」标记。
+ *
+ * 库存 = 现在手头大概还有多少（同一单位，允许小数）。
+ * 「可使用」是手动标记：材料齐了、现在就能配，或者暂时配不出来。
+ * 不自动从库存推算 —— 配方是配比，一次做多少由人定，自动判断只会猜错。
+ */
+const V20_MATERIAL_STOCK = /* sql */ `
+ALTER TABLE materials ADD COLUMN stock REAL;
+ALTER TABLE recipes ADD COLUMN available INTEGER NOT NULL DEFAULT 0;
+`
 const V19_ENV_NOTES = /* sql */ `
 ALTER TABLE environments ADD COLUMN notes TEXT;
 `
@@ -594,7 +605,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 16, name: 'image_log', sql: V16_IMAGE_LOG },
   { version: 17, name: 'safety_visibility', run: migrateSafetyVisibility },
   { version: 18, name: 'environment_images', sql: V18_ENV_IMAGES },
-  { version: 19, name: 'environment_notes', sql: V19_ENV_NOTES }
+  { version: 19, name: 'environment_notes', sql: V19_ENV_NOTES },
+  { version: 20, name: 'material_stock_recipe_available', sql: V20_MATERIAL_STOCK }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

@@ -98,11 +98,15 @@ export function mapPlantListItem(row: PlantListRow): PlantListItem {
   }
 }
 
+/** 列表排序：最近改动 / 入手时间（新→旧）/ 购入价格（贵→便宜） */
+export type PlantSort = 'updated' | 'acquired' | 'price'
+
 export interface PlantListOptions {
   query?: string
   status?: PlantStatus
   envId?: number
   speciesId?: number
+  sort?: PlantSort
   limit?: number
   offset?: number
 }
@@ -133,8 +137,32 @@ export function listPlants(db: Db, options: PlantListOptions = {}): { items: Pla
   const offset = Math.max(options.offset ?? 0, 0)
 
   const total = Number(db.scalar<number>(`SELECT COUNT(*) AS c FROM plants p ${whereSql}`, ...params) ?? 0)
+
+  /*
+   * 排序。
+   *
+   * 价格是模板里的动态字段，值在 attributes_json，查询要走 attr_index 的投影
+   * （value_num 有索引）。LEFT JOIN 只在按价格排时才加，别拖慢默认列表。
+   *
+   * NULL 一律排在最后：没填入手日期或价格的植株不该占住头部 ——
+   * 它们是"未知"，不是"最便宜/最早"。
+   */
+  const sort = options.sort ?? 'updated'
+  const priceJoin =
+    sort === 'price'
+      ? `LEFT JOIN attr_index price_idx
+           ON price_idx.owner_kind = 'plant' AND price_idx.owner_id = p.id
+          AND price_idx.field_key = 'purchase_price' AND price_idx.idx = 0`
+      : ''
+  const orderBy =
+    sort === 'acquired'
+      ? 'ORDER BY p.acquired_at IS NULL, p.acquired_at DESC, p.id DESC'
+      : sort === 'price'
+        ? 'ORDER BY price_idx.value_num IS NULL, price_idx.value_num DESC, p.id DESC'
+        : 'ORDER BY p.updated_at DESC, p.id DESC'
+
   const rows = db.all<PlantListRow>(
-    `${SELECT_BASE} ${whereSql} ORDER BY p.updated_at DESC, p.id DESC LIMIT ? OFFSET ?`,
+    `${SELECT_BASE} ${priceJoin} ${whereSql} ${orderBy} LIMIT ? OFFSET ?`,
     ...params,
     limit,
     offset

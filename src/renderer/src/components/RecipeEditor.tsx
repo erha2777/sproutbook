@@ -67,6 +67,7 @@ export function RecipeEditor({
   const [name, setName] = useState(recipe?.name ?? '')
   const [kind, setKind] = useState(recipe?.kind ?? '配土')
   const [note, setNote] = useState(recipe?.note ?? '')
+  const [available, setAvailable] = useState(recipe?.available ?? false)
   const [items, setItems] = useState<DraftItem[]>(recipe ? recipe.items.map(toDraft) : [blankItem()])
   const [materials, setMaterials] = useState<Material[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -150,6 +151,7 @@ export function RecipeEditor({
         name: newMat.name.trim(),
         kind: newMat.kind,
         unit: newMat.unit.trim() || null,
+        stock: null,
         note: null
       })
       setMaterials((prev) => [...prev, created])
@@ -185,6 +187,7 @@ export function RecipeEditor({
         name: name.trim(),
         kind: kind.trim() || '配土',
         note: note.trim() || null,
+        available,
         items: domainItems
       })
       if (Object.keys(result.errors).length > 0) {
@@ -238,6 +241,17 @@ export function RecipeEditor({
         <Field label="说明">
           <TextArea value={note} onChange={setNote} rows={2} placeholder="什么时候用、有什么注意点…" />
         </Field>
+
+        {/*
+          「可使用」是**手动标记**：材料齐了、现在就能配，就勾上。
+          不从库存自动推算 —— 配方是配比，一次做多少由人定，自动判断只会猜错。
+        */}
+        <div className="row tight" style={{ marginTop: 6 }}>
+          <label className="check-row">
+            <input type="checkbox" checked={available} onChange={(e) => setAvailable(e.target.checked)} /> 现在可以使用
+            （材料齐了）
+          </label>
+        </div>
 
         <div className="section-title">
           材料

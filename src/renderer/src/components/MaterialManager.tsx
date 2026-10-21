@@ -16,10 +16,12 @@ interface Draft {
   name: string
   kind: MaterialKind
   unit: string
+  /** 已有数量：输入框里是字符串，保存时再转数字 */
+  stock: string
   note: string
 }
 
-const BLANK: Draft = { name: '', kind: 'substrate', unit: '', note: '' }
+const BLANK: Draft = { name: '', kind: 'substrate', unit: '', stock: '', note: '' }
 
 export function MaterialManager({
   onClose,
@@ -63,11 +65,17 @@ export function MaterialManager({
     }
     setSaving(true)
     try {
+      const stock = draft.stock.trim() === '' ? null : Number(draft.stock)
+      if (stock !== null && !Number.isFinite(stock)) {
+        toast.push('已有数量要填数字（可以留空）', 'error')
+        return
+      }
       await window.api.materials.save({
         id: draft.id,
         name: draft.name.trim(),
         kind: draft.kind,
         unit: draft.unit.trim() || null,
+        stock,
         note: draft.note.trim() || null
       })
       toast.push(draft.id ? '材料已更新' : '材料已新增', 'success')
@@ -139,6 +147,16 @@ export function MaterialManager({
               <Field label="常用单位" help="留空表示按「份」计。">
                 <TextInput value={draft.unit} onChange={(v) => setDraft({ ...draft, unit: v })} placeholder="升" />
               </Field>
+              <Field
+                label="已有数量"
+                help={`现在手头大概还有多少（单位同「常用单位」）。留空 = 没记。${draft.unit ? `填数字即可，如 12.5 ${draft.unit}` : '填数字即可，如 20'}`}
+              >
+                <TextInput
+                  value={draft.stock}
+                  onChange={(v) => setDraft({ ...draft, stock: v })}
+                  placeholder="可选"
+                />
+              </Field>
               <Field label="备注">
                 <TextInput value={draft.note} onChange={(v) => setDraft({ ...draft, note: v })} placeholder="可选" />
               </Field>
@@ -171,6 +189,7 @@ export function MaterialManager({
                 <th>名称</th>
                 <th style={{ width: 90 }}>分类</th>
                 <th style={{ width: 80 }}>单位</th>
+                <th style={{ width: 90 }}>已有</th>
                 <th style={{ width: 100 }}>用于配方</th>
                 <th>备注</th>
                 <th style={{ width: 110 }}>操作</th>
@@ -184,6 +203,7 @@ export function MaterialManager({
                   </td>
                   <td className="small">{MATERIAL_KIND_LABELS[m.kind] ?? m.kind}</td>
                   <td className="small">{m.unit ?? '份'}</td>
+                  <td className="small">{m.stock === null ? <span className="muted">—</span> : m.stock}</td>
                   <td className="small">
                     {usage[m.id] ? <Badge tone="info">{usage[m.id]} 个</Badge> : <span className="muted">未使用</span>}
                   </td>
@@ -198,6 +218,7 @@ export function MaterialManager({
                             name: m.name,
                             kind: m.kind,
                             unit: m.unit ?? '',
+                            stock: m.stock === null ? '' : String(m.stock),
                             note: m.note ?? ''
                           })
                         }

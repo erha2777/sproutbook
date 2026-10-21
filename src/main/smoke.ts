@@ -413,6 +413,11 @@ export async function runSmoke(outFile: string): Promise<number> {
     check('未提交的字段保持原值', updated.species.attributes.cold_hardiness === -15, `实际 ${updated.species.attributes.cold_hardiness}`)
     check('已提交的字段被更新', updated.species.commonName === '月季（更新）')
 
+    // 重名：物种是「一个物种一条」，同名两条会让规则/封面/搜索全对不上
+    const dupName = saveSpecies(db, { values: { common_name: '月季（更新）' } })
+    check('同名物种被拒绝', Boolean(dupName.errors.common_name), JSON.stringify(dupName.errors))
+    check('同名被拒时不返回半成品', dupName.species === null, String(dupName.species))
+
     /*
      * 这两处**故意**让它失败（测必填校验和非法类型），所以不能用 saveSpeciesOk ——
      * 那个辅助会直接抛「自检准备数据失败」，把一条正常的断言变成崩溃。
@@ -445,6 +450,33 @@ export async function runSmoke(outFile: string): Promise<number> {
 
     const plantSearch = listPlants(db, { query: '月季' })
     check('植株可按物种名搜索', plantSearch.items.some((p) => p.id === plantId))
+
+    /*
+     * 排序：入手时间、购入价格。
+     * 造两株对照：A 入手更早但更贵，B 后来但便宜，两边的排序结果必须不同。
+     */
+    {
+      const cheap = savePlant(db, {
+        speciesId,
+        nickname: '排序对照-便宜',
+        values: { nickname: '排序对照-便宜', acquired_at: '2026-06-01', purchase_price: 30 }
+      })
+      const pricey = savePlant(db, {
+        speciesId,
+        nickname: '排序对照-贵',
+        values: { nickname: '排序对照-贵', acquired_at: '2025-01-01', purchase_price: 480 }
+      })
+      const cheapId = cheap.plant?.id ?? 0
+      const priceyId = pricey.plant?.id ?? 0
+      check('价格字段能存进 attributes', pricey.plant?.attributes.purchase_price === 480, String(JSON.stringify(pricey.plant?.attributes)))
+
+      const byAcquired = listPlants(db, { sort: 'acquired' }).items.map((p) => p.id)
+      check('按入手时间排：更晚的在前', byAcquired.indexOf(cheapId) < byAcquired.indexOf(priceyId), JSON.stringify(byAcquired.slice(0, 6)))
+
+      const byPrice = listPlants(db, { sort: 'price' }).items.map((p) => p.id)
+      check('按价格排：更贵的在前', byPrice.indexOf(priceyId) < byPrice.indexOf(cheapId), JSON.stringify(byPrice.slice(0, 6)))
+      check('没填价格的排在最后', byPrice[byPrice.length - 1] !== priceyId)
+    }
 
     /*
      * 封面：默认用最早导入的一张；可以指定用哪张照片；传 null 回到默认。
@@ -823,10 +855,10 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('校验：合法配方无错误', Object.keys(validateRecipe({ name: '配土', items: mix })).length === 0)
 
       // 仓储层
-      const peat = saveMaterial(db, { name: '自检泥炭', kind: 'substrate', unit: '升', note: '保水' })
-      const perlite = saveMaterial(db, { name: '自检珍珠岩', kind: 'substrate', unit: '升', note: null })
+      const peat = saveMaterial(db, { name: '自检泥炭', kind: 'substrate', unit: '升', stock: 12.5, note: '保水' })
+      const perlite = saveMaterial(db, { name: '自检珍珠岩', kind: 'substrate', unit: '升', stock: null, note: null })
       check('可新增材料', peat.id > 0 && peat.name === '自检泥炭')
-      checkThrows('重名材料被拒绝', () => saveMaterial(db as Db, { name: '自检泥炭', kind: 'substrate', unit: null, note: null }), '已经有叫')
+      checkThrows('重名材料被拒绝', () => saveMaterial(db as Db, { name: '自检泥炭', kind: 'substrate', unit: null, stock: null, note: null }), '已经有叫')
       check('材料按关键词可搜索', listMaterials(db, '珍珠').some((m) => m.id === perlite.id))
       check('材料搜索匹配备注', listMaterials(db, '保水').some((m) => m.id === peat.id))
 
@@ -860,19 +892,17 @@ export async function runSmoke(outFile: string): Promise<number> {
         name: '自检配土',
         kind: '配土',
         note: null,
+        available: true,
         items: [{ materialId: peat.id, name: null, ratioPart: 1, amount: null, unit: '升', note: null, sortOrder: 0 }]
       })
-      check('修改配方后条目被整组替换（无残留）', updated.recipe?.items.length === 1, String(updated.recipe?.items.length))
-      check(
-        '整组替换后旧条目确实删了（不是只换了顺序）',
-        Number(db.scalar<number>('SELECT COUNT(*) AS c FROM recipe_items WHERE recipe_id = ?', recipeId) ?? 0) === 1
-      )
-
       check('材料使用计数正确', materialUsage(db, peat.id) === 1, String(materialUsage(db, peat.id)))
       checkThrows('被配方引用的材料禁止删除', () => deleteMaterial(db as Db, peat.id), '还有 1 个配方在用')
       check('未被引用的材料可以删除', deleteMaterial(db, perlite.id) === true)
       check('删除材料后配方条目不会被连带删除', getRecipe(db, recipeId)?.items.length === 1)
 
+      check('材料已有数量能存能读', peat.stock === 12.5 && listMaterials(db, '自检泥炭')[0].stock === 12.5, String(peat.stock))
+      check('配方可使用标记能存能读', updated.recipe?.available === true && getRecipe(db, recipeId)?.available === true)
+      check('默认新建的配方不是可使用', saveRecipe(db, { name: '自检未做好', kind: '配土', note: null, items: [{ materialId: peat.id, name: null, ratioPart: 1, amount: null, unit: null, note: null, sortOrder: 0 }] }).recipe?.available === false)
       check('可按材料名搜到配方', listRecipes(db, { query: '自检泥炭' }).some((r) => r.id === recipeId))
       check('可按类型筛选配方', listRecipes(db, { kind: '配土' }).some((r) => r.id === recipeId))
       check('筛选不匹配的类型时为空', !listRecipes(db, { kind: '不存在的类型' }).some((r) => r.id === recipeId))

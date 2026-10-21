@@ -237,6 +237,8 @@ export interface Material {
   kind: MaterialKind
   /** 常用单位（升 / 克 / 毫升）。留空表示按「份」计。 */
   unit: string | null
+  /** 现在手头大概还有多少（单位同 unit）。null = 没记。 */
+  stock: number | null
   note: string | null
 }
 
@@ -272,6 +274,8 @@ export interface Recipe {
   /** 配土 / 肥料 / 药剂 …（自由文本，给出常用建议值） */
   kind: string
   note: string | null
+  /** 手动标记「现在能做 / 材料齐了」。不自动推算，见 schema 里的说明。 */
+  available: boolean
   items: RecipeItem[]
   createdAt: string
   archivedAt: string | null
@@ -282,6 +286,7 @@ export interface RecipeInput {
   name: string
   kind: string
   note: string | null
+  available?: boolean
   items: RecipeItem[]
 }
 

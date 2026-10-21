@@ -22,6 +22,7 @@ interface MaterialRow {
   name: string
   kind: string
   unit: string | null
+  stock: number | null
   note: string | null
 }
 
@@ -31,6 +32,7 @@ function mapMaterial(row: MaterialRow): Material {
     name: row.name,
     kind: row.kind as Material['kind'],
     unit: row.unit,
+    stock: row.stock ?? null,
     note: row.note
   }
 }
@@ -65,10 +67,11 @@ export function saveMaterial(db: Db, input: MaterialInput): Material {
 
   if (input.id) {
     db.run(
-      'UPDATE materials SET name = ?, kind = ?, unit = ?, note = ? WHERE id = ?',
+      'UPDATE materials SET name = ?, kind = ?, unit = ?, stock = ?, note = ? WHERE id = ?',
       name,
       input.kind,
       input.unit,
+      input.stock ?? null,
       input.note,
       input.id
     )
@@ -78,10 +81,11 @@ export function saveMaterial(db: Db, input: MaterialInput): Material {
   }
 
   const r = db.run(
-    'INSERT INTO materials (name, kind, unit, note) VALUES (?, ?, ?, ?)',
+    'INSERT INTO materials (name, kind, unit, stock, note) VALUES (?, ?, ?, ?, ?)',
     name,
     input.kind,
     input.unit,
+    input.stock ?? null,
     input.note
   )
   const created = getMaterial(db, Number(r.lastInsertRowid))
@@ -119,6 +123,7 @@ interface RecipeRow {
   name: string
   kind: string
   note: string | null
+  available: number
   created_at: string
   archived_at: string | null
 }
@@ -169,6 +174,7 @@ function mapRecipe(db: Db, row: RecipeRow, names: Map<number, string>): RecipeLi
     name: row.name,
     kind: row.kind,
     note: row.note,
+    available: row.available === 1,
     items,
     createdAt: row.created_at,
     archivedAt: row.archived_at,
@@ -240,10 +246,24 @@ export function saveRecipe(db: Db, input: RecipeInput): SaveRecipeResult {
     const kind = input.kind.trim() || '配土'
     let id = input.id ?? null
 
+    const available = input.available ? 1 : 0
     if (id) {
-      db.run('UPDATE recipes SET name = ?, kind = ?, note = ? WHERE id = ?', name, kind, input.note, id)
+      db.run(
+        'UPDATE recipes SET name = ?, kind = ?, note = ?, available = ? WHERE id = ?',
+        name,
+        kind,
+        input.note,
+        available,
+        id
+      )
     } else {
-      const r = db.run('INSERT INTO recipes (name, kind, note) VALUES (?, ?, ?)', name, kind, input.note)
+      const r = db.run(
+        'INSERT INTO recipes (name, kind, note, available) VALUES (?, ?, ?, ?)',
+        name,
+        kind,
+        input.note,
+        available
+      )
       id = Number(r.lastInsertRowid)
     }
 

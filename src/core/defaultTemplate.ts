@@ -307,6 +307,14 @@ const plantFields: Seed[] = [
   },
   { key: 'acquired_at', label: '入手 / 播种日期', groupName: '基础', type: 'date', helpText: '生长进度与养护计划的时间基准。' },
   {
+    key: 'purchase_price',
+    label: '购入价格',
+    groupName: '基础',
+    type: 'number',
+    unit: '元',
+    helpText: '买这株花了多少钱（连同运费就一起算）。列表里可以按它排序，翻账时有用。'
+  },
+  {
     key: 'cultivation',
     label: '栽种方式',
     groupName: '基础',

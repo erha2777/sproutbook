@@ -67,7 +67,14 @@ export function GardenPage({
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<'' | PlantStatus>('')
   const [envId, setEnvId] = useState<string>('')
-  const [view, setView] = useState<'scene' | 'list'>('scene')
+  /*
+   * 默认打开「列表」。
+   *
+   * 花园视图是用来"看状态"的，列表视图是用来"找某一株 / 对账"的 ——
+   * 后者是每日更常用的入口，花园可以点一下切过去。
+   */
+  const [view, setView] = useState<'scene' | 'list'>('list')
+  const [sort, setSort] = useState<'updated' | 'acquired' | 'price'>('updated')
   const [editing, setEditing] = useState<PlantListItem | 'new' | null>(null)
 
   const debouncedQuery = useDebounced(query)
@@ -79,7 +86,8 @@ export function GardenPage({
         window.api.plants.list({
           query: debouncedQuery || undefined,
           status: status || undefined,
-          envId: envId ? Number(envId) : undefined
+          envId: envId ? Number(envId) : undefined,
+          sort
         }),
         window.api.plants.stats(currentMonth()),
         window.api.env.list(),
@@ -112,7 +120,7 @@ export function GardenPage({
     } finally {
       setLoading(false)
     }
-  }, [debouncedQuery, status, envId, toast])
+  }, [debouncedQuery, status, envId, sort, toast])
 
   useEffect(() => {
     void reload()
@@ -121,6 +129,15 @@ export function GardenPage({
   const envOptions = useMemo(
     () => [{ value: '', label: '全部位置' }, ...environments.map((e) => ({ value: String(e.id), label: e.name }))],
     [environments]
+  )
+
+  const sortOptions = useMemo(
+    () => [
+      { value: 'updated', label: '最近改动' },
+      { value: 'acquired', label: '入手时间（新→旧）' },
+      { value: 'price', label: '购入价格（贵→便宜）' }
+    ],
+    []
   )
 
   const statusOptions = useMemo(
@@ -421,6 +438,15 @@ export function GardenPage({
             <div style={{ flex: '0 1 150px', minWidth: 120 }}>
               <SelectInput value={envId} onChange={(v) => patch({ envId: v })} options={envOptions} />
             </div>
+            {view === 'list' ? (
+              <div style={{ flex: '0 1 190px', minWidth: 150 }} title="列表排序方式">
+                <SelectInput
+                  value={sort}
+                  onChange={(v) => setSort(v as 'updated' | 'acquired' | 'price')}
+                  options={sortOptions}
+                />
+              </div>
+            ) : null}
             <div className="toolbar-right">
             {/*
               视图切换用分段控件，而不是两个主按钮。
@@ -581,6 +607,10 @@ function PlantCard({ plant, onClick }: { plant: PlantListItem; onClick: () => vo
           </Badge>
           {plant.envName ? <Badge tone="info">{plant.envName}</Badge> : <Badge tone="muted">未分配位置</Badge>}
           {plant.acquiredAt ? <Badge tone="muted">{plant.acquiredAt}</Badge> : null}
+          {/* 购入价格：填了才显示，没填的人不会看到一排「¥—」 */}
+          {typeof plant.attributes.purchase_price === 'number' ? (
+            <Badge tone="muted">¥ {plant.attributes.purchase_price}</Badge>
+          ) : null}
         </div>
       </div>
     </div>

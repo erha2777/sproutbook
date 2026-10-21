@@ -559,6 +559,115 @@ export function Modal({
 }
 
 // ---------------------------------------------------------------------------
+// 可搜索下拉
+// ---------------------------------------------------------------------------
+
+/**
+ * 带搜索框的下拉。用于选项可能上百条的地方（物种库就是这样）。
+ *
+ * 原生 `<select>` 只能靠首字符跳转，中文名更是没法跳 —— 物种多到几十个之后
+ * 「所属物种」这一格基本只能滚。这里改成：点开先看到全部，输入任意片段即时过滤。
+ *
+ * 只是**过滤**，不是模糊匹配算法：按 include 匹配（忽略大小写与首尾空格），
+ * 这样行为可预期 —— 输「月季」能出「月季（更新）」，输「季月」不会出。
+ */
+export function SearchSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  invalid,
+  disabled,
+  emptyHint
+}: {
+  value: string
+  onChange: (value: string) => void
+  options: Array<{ value: string; label: string }>
+  placeholder?: string
+  invalid?: boolean
+  disabled?: boolean
+  emptyHint?: string
+}): ReactNode {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const selected = options.find((o) => o.value === value) ?? null
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return options
+    return options.filter((o) => o.label.toLowerCase().includes(q))
+  }, [options, query])
+
+  const close = (): void => {
+    setOpen(false)
+    setQuery('')
+  }
+
+  return (
+    <div className={cx('search-select', invalid && 'invalid', disabled && 'disabled')}>
+      <input
+        className="pixel-input"
+        value={open ? query : (selected?.label ?? '')}
+        placeholder={open ? (selected ? `当前：${selected.label}` : '输入关键字筛选…') : (placeholder ?? '（未选择）')}
+        disabled={disabled}
+        onFocus={() => {
+          setOpen(true)
+          setQuery('')
+        }}
+        onChange={(e) => {
+          setOpen(true)
+          setQuery(e.target.value)
+        }}
+        onBlur={() => {
+          // 让点击选项先发生：onMouseDown 已经 preventDefault，这里的延时只是兜底
+          window.setTimeout(close, 120)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            close()
+            ;(e.target as HTMLInputElement).blur()
+          }
+          if (e.key === 'Enter' && filtered.length > 0) {
+            onChange(filtered[0].value)
+            close()
+          }
+        }}
+      />
+      {open && !disabled ? (
+        <ul className="search-select-menu" role="listbox">
+          <li
+            className={cx('search-select-item', 'muted', value === '' && 'on')}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              onChange('')
+              close()
+            }}
+          >
+            （未关联）
+          </li>
+          {filtered.map((o) => (
+            <li
+              key={o.value}
+              className={cx('search-select-item', o.value === value && 'on')}
+              role="option"
+              aria-selected={o.value === value}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                onChange(o.value)
+                close()
+              }}
+            >
+              {o.label}
+            </li>
+          ))}
+          {filtered.length === 0 ? <li className="search-select-empty">{emptyHint ?? '没有匹配的选项'}</li> : null}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // 提示
 // ---------------------------------------------------------------------------
 

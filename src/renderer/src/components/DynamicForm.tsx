@@ -9,7 +9,7 @@ import type { ReactNode } from 'react'
 import type { FieldDefinition, FieldValue, NumberRange } from '@core/types'
 import { normalizeMonths } from '@core/fieldTypes'
 import { isFieldVisible } from '@core/attributes'
-import { CheckChips, Checkbox, Field, MonthSetInput, NumberRangeInput, SelectInput, TagInput, TextArea, TextInput, Badge, cx } from './ui'
+import { CheckChips, Checkbox, Field, MonthSetInput, NumberRangeInput, SearchSelect, SelectInput, TagInput, TextArea, TextInput, Badge, cx } from './ui'
 
 export type FormValues = Record<string, unknown>
 
@@ -90,6 +90,23 @@ function FieldValueInput({ def, value, onChange, disabled, invalid, context }: F
 
     case 'relation': {
       const options = (def.relationTarget ? context?.relations?.[def.relationTarget] : undefined) ?? []
+      const mapped = options.map((o) => ({ value: String(o.id), label: o.label }))
+      /*
+       * 物种动辄几十上百条，用可搜索下拉；位置一般只有几个，保持原生下拉更省事。
+       */
+      if (def.relationTarget === 'species') {
+        return (
+          <SearchSelect
+            value={value === null || value === undefined ? '' : String(value)}
+            onChange={(v) => onChange(v === '' ? null : Number(v))}
+            placeholder={options.length === 0 ? '（暂无可选项）' : '点这里搜索物种…'}
+            emptyHint="没有匹配的物种，换个关键字试试"
+            invalid={invalid}
+            disabled={disabled || options.length === 0}
+            options={mapped}
+          />
+        )
+      }
       return (
         <SelectInput
           value={value === null || value === undefined ? '' : String(value)}
@@ -97,7 +114,7 @@ function FieldValueInput({ def, value, onChange, disabled, invalid, context }: F
           placeholder={options.length === 0 ? '（暂无可选项）' : '（未关联）'}
           invalid={invalid}
           disabled={disabled || options.length === 0}
-          options={options.map((o) => ({ value: String(o.id), label: o.label }))}
+          options={mapped}
         />
       )
     }
