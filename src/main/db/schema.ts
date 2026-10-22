@@ -572,6 +572,10 @@ const V20_MATERIAL_STOCK = /* sql */ `
 ALTER TABLE materials ADD COLUMN stock REAL;
 ALTER TABLE recipes ADD COLUMN available INTEGER NOT NULL DEFAULT 0;
 `
+/** 材料单价：每单位的价钱（元）。用来估「配一次土大概多少钱」。 */
+const V22_MATERIAL_PRICE = /* sql */ `
+ALTER TABLE materials ADD COLUMN price REAL;
+`
 const V19_ENV_NOTES = /* sql */ `
 ALTER TABLE environments ADD COLUMN notes TEXT;
 `
@@ -608,7 +612,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 18, name: 'environment_images', sql: V18_ENV_IMAGES },
   { version: 19, name: 'environment_notes', sql: V19_ENV_NOTES },
   { version: 20, name: 'material_stock_recipe_available', sql: V20_MATERIAL_STOCK },
-  { version: 21, name: 'plant_status_options', run: migratePlantStatusOptions }
+  { version: 21, name: 'plant_status_options', run: migratePlantStatusOptions },
+  { version: 22, name: 'material_price', sql: V22_MATERIAL_PRICE }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

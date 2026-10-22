@@ -23,6 +23,7 @@ interface MaterialRow {
   kind: string
   unit: string | null
   stock: number | null
+  price: number | null
   note: string | null
 }
 
@@ -33,6 +34,7 @@ function mapMaterial(row: MaterialRow): Material {
     kind: row.kind as Material['kind'],
     unit: row.unit,
     stock: row.stock ?? null,
+    price: row.price ?? null,
     note: row.note
   }
 }
@@ -67,11 +69,12 @@ export function saveMaterial(db: Db, input: MaterialInput): Material {
 
   if (input.id) {
     db.run(
-      'UPDATE materials SET name = ?, kind = ?, unit = ?, stock = ?, note = ? WHERE id = ?',
+      'UPDATE materials SET name = ?, kind = ?, unit = ?, stock = ?, price = ?, note = ? WHERE id = ?',
       name,
       input.kind,
       input.unit,
       input.stock ?? null,
+      input.price ?? null,
       input.note,
       input.id
     )
@@ -81,11 +84,12 @@ export function saveMaterial(db: Db, input: MaterialInput): Material {
   }
 
   const r = db.run(
-    'INSERT INTO materials (name, kind, unit, stock, note) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO materials (name, kind, unit, stock, price, note) VALUES (?, ?, ?, ?, ?, ?)',
     name,
     input.kind,
     input.unit,
     input.stock ?? null,
+    input.price ?? null,
     input.note
   )
   const created = getMaterial(db, Number(r.lastInsertRowid))

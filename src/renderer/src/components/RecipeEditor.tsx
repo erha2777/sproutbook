@@ -152,6 +152,7 @@ export function RecipeEditor({
         kind: newMat.kind,
         unit: newMat.unit.trim() || null,
         stock: null,
+        price: null,
         note: null
       })
       setMaterials((prev) => [...prev, created])

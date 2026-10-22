@@ -884,10 +884,10 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('校验：合法配方无错误', Object.keys(validateRecipe({ name: '配土', items: mix })).length === 0)
 
       // 仓储层
-      const peat = saveMaterial(db, { name: '自检泥炭', kind: 'substrate', unit: '升', stock: 12.5, note: '保水' })
-      const perlite = saveMaterial(db, { name: '自检珍珠岩', kind: 'substrate', unit: '升', stock: null, note: null })
+      const peat = saveMaterial(db, { name: '自检泥炭', kind: 'substrate', unit: '升', stock: 12.5, price: 3.8, note: '保水' })
+      const perlite = saveMaterial(db, { name: '自检珍珠岩', kind: 'substrate', unit: '升', stock: null, price: null, note: null })
       check('可新增材料', peat.id > 0 && peat.name === '自检泥炭')
-      checkThrows('重名材料被拒绝', () => saveMaterial(db as Db, { name: '自检泥炭', kind: 'substrate', unit: null, stock: null, note: null }), '已经有叫')
+      checkThrows('重名材料被拒绝', () => saveMaterial(db as Db, { name: '自检泥炭', kind: 'substrate', unit: null, stock: null, price: null, note: null }), '已经有叫')
       check('材料按关键词可搜索', listMaterials(db, '珍珠').some((m) => m.id === perlite.id))
       check('材料搜索匹配备注', listMaterials(db, '保水').some((m) => m.id === peat.id))
 
@@ -930,6 +930,8 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('删除材料后配方条目不会被连带删除', getRecipe(db, recipeId)?.items.length === 1)
 
       check('材料已有数量能存能读', peat.stock === 12.5 && listMaterials(db, '自检泥炭')[0].stock === 12.5, String(peat.stock))
+      check('材料单价能存能读', peat.price === 3.8 && listMaterials(db, '自检泥炭')[0].price === 3.8, String(peat.price))
+      check('改单价也生效', saveMaterial(db, { id: peat.id, name: peat.name, kind: peat.kind, unit: peat.unit, stock: peat.stock, price: 4.5, note: peat.note }).price === 4.5)
       check('配方可使用标记能存能读', updated.recipe?.available === true && getRecipe(db, recipeId)?.available === true)
       check('默认新建的配方不是可使用', saveRecipe(db, { name: '自检未做好', kind: '配土', note: null, items: [{ materialId: peat.id, name: null, ratioPart: 1, amount: null, unit: null, note: null, sortOrder: 0 }] }).recipe?.available === false)
       check('可按材料名搜到配方', listRecipes(db, { query: '自检泥炭' }).some((r) => r.id === recipeId))

@@ -255,6 +255,8 @@ export interface Material {
   unit: string | null
   /** 现在手头大概还有多少（单位同 unit）。null = 没记。 */
   stock: number | null
+  /** 单价：每单位多少钱（元）。null = 没记。 */
+  price: number | null
   note: string | null
 }
 

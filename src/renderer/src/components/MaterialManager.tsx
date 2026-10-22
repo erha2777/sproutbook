@@ -18,10 +18,12 @@ interface Draft {
   unit: string
   /** 已有数量：输入框里是字符串，保存时再转数字 */
   stock: string
+  /** 单价（元 / 单位） */
+  price: string
   note: string
 }
 
-const BLANK: Draft = { name: '', kind: 'substrate', unit: '', stock: '', note: '' }
+const BLANK: Draft = { name: '', kind: 'substrate', unit: '', stock: '', price: '', note: '' }
 
 export function MaterialManager({
   onClose,
@@ -70,12 +72,18 @@ export function MaterialManager({
         toast.push('已有数量要填数字（可以留空）', 'error')
         return
       }
+      const price = draft.price.trim() === '' ? null : Number(draft.price)
+      if (price !== null && !Number.isFinite(price)) {
+        toast.push('单价要填数字（可以留空）', 'error')
+        return
+      }
       await window.api.materials.save({
         id: draft.id,
         name: draft.name.trim(),
         kind: draft.kind,
         unit: draft.unit.trim() || null,
         stock,
+        price,
         note: draft.note.trim() || null
       })
       toast.push(draft.id ? '材料已更新' : '材料已新增', 'success')
@@ -157,6 +165,16 @@ export function MaterialManager({
                   placeholder="可选"
                 />
               </Field>
+              <Field
+                label="单价"
+                help={`每单位多少钱（元）。留空 = 没记。${draft.unit ? `按「${draft.unit}」算，如 3.8` : '按「份」算，如 3.8'}`}
+              >
+                <TextInput
+                  value={draft.price}
+                  onChange={(v) => setDraft({ ...draft, price: v })}
+                  placeholder="可选"
+                />
+              </Field>
               <Field label="备注">
                 <TextInput value={draft.note} onChange={(v) => setDraft({ ...draft, note: v })} placeholder="可选" />
               </Field>
@@ -190,6 +208,7 @@ export function MaterialManager({
                 <th style={{ width: 90 }}>分类</th>
                 <th style={{ width: 80 }}>单位</th>
                 <th style={{ width: 90 }}>已有</th>
+                <th style={{ width: 90 }}>单价</th>
                 <th style={{ width: 100 }}>用于配方</th>
                 <th>备注</th>
                 <th style={{ width: 110 }}>操作</th>
@@ -204,6 +223,7 @@ export function MaterialManager({
                   <td className="small">{MATERIAL_KIND_LABELS[m.kind] ?? m.kind}</td>
                   <td className="small">{m.unit ?? '份'}</td>
                   <td className="small">{m.stock === null ? <span className="muted">—</span> : m.stock}</td>
+                  <td className="small">{m.price === null ? <span className="muted">—</span> : `¥${m.price}`}</td>
                   <td className="small">
                     {usage[m.id] ? <Badge tone="info">{usage[m.id]} 个</Badge> : <span className="muted">未使用</span>}
                   </td>
@@ -219,6 +239,7 @@ export function MaterialManager({
                             kind: m.kind,
                             unit: m.unit ?? '',
                             stock: m.stock === null ? '' : String(m.stock),
+                            price: m.price === null ? '' : String(m.price),
                             note: m.note ?? ''
                           })
                         }
