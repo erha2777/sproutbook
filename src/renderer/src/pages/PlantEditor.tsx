@@ -43,6 +43,8 @@ export function PlantEditorModal({
 
   const [defs, setDefs] = useState<FieldDefinition[]>([])
   const [speciesList, setSpeciesList] = useState<SpeciesListItem[]>([])
+  /** 已有植株分类，给「分类」那格做建议 */
+  const [categories, setCategories] = useState<string[]>([])
   const [values, setValues] = useState<FormValues>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [speciesQuery, setSpeciesQuery] = useState('')
@@ -95,20 +97,28 @@ export function PlantEditorModal({
           k,
           `${PLANT_STATUS_ICONS[k]} ${PLANT_STATUS_LABELS[k]}`
         ])
-      )
+      ),
+      /*
+       * 分类是自由词，但"已有分类"要能直接挑 —— 不然同一个类会被写成
+       * 「月季类」「月季」「月季分类」三份，筛选就没意义了。
+       * 仍然允许输入新的（见 SearchSelect 的 allowCustom）。
+       */
+      suggestions: { category: categories }
     }),
-    [environments, speciesList]
+    [environments, speciesList, categories]
   )
 
   useEffect(() => {
     void (async () => {
       try {
-        const [fieldDefs, species] = await Promise.all([
+        const [fieldDefs, species, cats] = await Promise.all([
           window.api.fields.list('plant'),
-          window.api.species.list({ limit: 500 })
+          window.api.species.list({ limit: 500 }),
+          window.api.plants.categories()
         ])
         setDefs(fieldDefs)
         setSpeciesList(species.items)
+        setCategories(cats)
 
         const initial: FormValues = {}
         if (plant) {

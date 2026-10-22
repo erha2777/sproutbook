@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 通用像素风 UI 组件。
  * 刻意保持极简：不引入 UI 框架，全部用受控组件 + 原生元素。
  */
@@ -578,7 +578,8 @@ export function SearchSelect({
   placeholder,
   invalid,
   disabled,
-  emptyHint
+  emptyHint,
+  allowCustom = false
 }: {
   value: string
   onChange: (value: string) => void
@@ -587,6 +588,11 @@ export function SearchSelect({
   invalid?: boolean
   disabled?: boolean
   emptyHint?: string
+  /**
+   * 允许把输入框里的文字当成新值（分类、标签这类"用户可以造词"的字段）。
+   * 关着的时候只能从列表里挑 —— 那是关联物种这类"必须已存在"的场景。
+   */
+  allowCustom?: boolean
 }): ReactNode {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -598,6 +604,15 @@ export function SearchSelect({
     return options.filter((o) => o.label.toLowerCase().includes(q))
   }, [options, query])
 
+  /** 输入的内容不在现有选项里 → 菜单顶部给一条「用它」 */
+  const customCandidate = (() => {
+    if (!allowCustom) return null
+    const q = query.trim()
+    if (!q) return null
+    if (options.some((o) => o.label === q || o.value === q)) return null
+    return q
+  })()
+
   const close = (): void => {
     setOpen(false)
     setQuery('')
@@ -608,7 +623,7 @@ export function SearchSelect({
       <input
         className="pixel-input"
         value={open ? query : (selected?.label ?? '')}
-        placeholder={open ? (selected ? `当前：${selected.label}` : '输入关键字筛选…') : (placeholder ?? '（未选择）')}
+        placeholder={open ? (selected ? `当前：${selected.label}` : (allowCustom ? '输入筛选，或直接写新的' : '输入关键字筛选…')) : (placeholder ?? '（未选择）')}
         disabled={disabled}
         onFocus={() => {
           setOpen(true)
@@ -627,9 +642,18 @@ export function SearchSelect({
             close()
             ;(e.target as HTMLInputElement).blur()
           }
-          if (e.key === 'Enter' && filtered.length > 0) {
-            onChange(filtered[0].value)
-            close()
+          if (e.key === 'Enter') {
+            const exact = filtered.find((o) => o.label === query.trim() || o.value === query.trim())
+            if (exact) {
+              onChange(exact.value)
+              close()
+            } else if (customCandidate) {
+              onChange(customCandidate)
+              close()
+            } else if (filtered.length > 0) {
+              onChange(filtered[0].value)
+              close()
+            }
           }
         }}
       />
@@ -643,8 +667,20 @@ export function SearchSelect({
               close()
             }}
           >
-            （未关联）
+            {allowCustom ? '（留空）' : '（未关联）'}
           </li>
+          {customCandidate ? (
+            <li
+              className="search-select-item search-select-custom"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                onChange(customCandidate)
+                close()
+              }}
+            >
+              使用「{customCandidate}」
+            </li>
+          ) : null}
           {filtered.map((o) => (
             <li
               key={o.value}

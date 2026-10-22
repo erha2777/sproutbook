@@ -26,6 +26,8 @@ export interface FieldContext {
   relations?: Record<string, Array<{ id: number; label: string }>>
   /** 值 → 显示名。只影响显示，不影响存储 */
   labels?: Record<string, string>
+  /** 按字段 key 给出「已有值」建议（仍允许自由输入），如植株分类 */
+  suggestions?: Record<string, string[]>
 }
 
 interface FieldValueInputProps {
@@ -178,7 +180,27 @@ function FieldValueInput({ def, value, onChange, disabled, invalid, context }: F
       )
 
     case 'link':
-    default:
+    default: {
+      /*
+       * 文本字段也可以给"已有值"建议（如植株分类）。
+       * 仍然允许自由输入 —— 建议只是省打字，不是白名单：
+       * 第一次写「月季类」的时候它还不存在，不能因此拦着不让填。
+       */
+      const suggestions = context?.suggestions?.[def.key]
+      if (suggestions && suggestions.length > 0) {
+        return (
+          <SearchSelect
+            value={typeof value === 'string' ? value : ''}
+            onChange={(v) => onChange(v === '' ? null : v)}
+            placeholder={def.helpText ?? '可以直接输入新的'}
+            emptyHint="没有匹配的，按 Enter 用你输入的内容"
+            invalid={invalid}
+            disabled={disabled}
+            allowCustom
+            options={suggestions.map((s) => ({ value: s, label: s }))}
+          />
+        )
+      }
       return (
         <TextInput
           value={typeof value === 'string' ? value : ''}
@@ -188,6 +210,7 @@ function FieldValueInput({ def, value, onChange, disabled, invalid, context }: F
           invalid={invalid}
         />
       )
+    }
   }
 }
 

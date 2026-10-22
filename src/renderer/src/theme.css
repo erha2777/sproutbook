@@ -3919,3 +3919,10 @@ html.tex-panel.tex-panel-slice .modal-footer {
   font-size: 12px;
   color: var(--ink-soft);
 }
+
+/* 「使用『输入的内容』」这一条要显眼一点：它是唯一的"造新词"入口 */
+.search-select-custom {
+  color: #2f4f2a;
+  font-weight: 700;
+  border-bottom: 1px dashed rgba(60, 90, 40, 0.4);
+}
