@@ -202,7 +202,23 @@ export interface Species {
   updatedAt: string
 }
 
-export type PlantStatus = 'growing' | 'dormant' | 'sick' | 'dead' | 'gifted'
+/**
+ * 植株状态：**人观察到的当前状态**，需要手动设置。
+ *
+ * 和「物候阶段」分开：阶段由物种花期 + 日期自动推算（见 core/phase.ts），
+ * 这里记的是你亲眼看到的事实 —— 它可能比日历更准（阳台比露台晚开两周），
+ * 也可能完全不在日历上（这盆突然烂根了）。
+ */
+export type PlantStatus =
+  | 'seed'
+  | 'growing'
+  | 'budding'
+  | 'blooming'
+  | 'recovering'
+  | 'sick'
+  | 'dormant'
+  | 'dead'
+  | 'gifted'
 
 export interface Plant {
   id: number

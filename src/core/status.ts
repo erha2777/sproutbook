@@ -9,18 +9,30 @@
 
 import type { PlantStatus } from './types'
 
+/*
+ * 顺序就是下拉里的顺序：从"还没发芽"到"送人"，按生命周期排。
+ * 状态是**手动**的观察结果；物候阶段另有自动推算（core/phase.ts）。
+ */
 export const PLANT_STATUS_LABELS: Record<PlantStatus, string> = {
-  growing: '生长中',
+  seed: '种子 / 种球（未发芽）',
+  growing: '发芽 / 生长',
+  budding: '有花芽',
+  blooming: '开花',
+  recovering: '缓苗',
+  sick: '病虫害',
   dormant: '休眠',
-  sick: '有状况',
   dead: '已枯死',
   gifted: '已送人'
 }
 
 export const PLANT_STATUS_ICONS: Record<PlantStatus, string> = {
+  seed: '🌰',
   growing: '🌿',
-  dormant: '💤',
-  sick: '🤒',
+  budding: '🔍',
+  blooming: '🌸',
+  recovering: '🩹',
+  sick: '🐛',
+  dormant: '😴',
   dead: '🥀',
   gifted: '🎁'
 }

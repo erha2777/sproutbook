@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 端到端自检。
  *
  * 刻意**不依赖 electron** —— 只用 node:sqlite + 文件系统，因此：
@@ -80,6 +80,7 @@ import {
 } from '../core/sprite'
 import { WEATHER_ICON_KINDS, WEATHER_ICON_SIZE, buildWeatherIcon } from '../core/weatherIcon'
 import { THEME_BACKDROP, resolveBackdrops } from '../core/media'
+import { deriveCarePhase } from '../core/phase'
 import { defaultFieldDefinitions } from '../core/defaultTemplate'
 import {
   addDays,
@@ -425,6 +426,24 @@ export async function runSmoke(outFile: string): Promise<number> {
      */
     const missing = saveSpecies(db, { values: { scientific_name: 'X' } })
     check('缺少必填字段被拒绝', Object.keys(missing.errors).length > 0, JSON.stringify(missing.errors))
+
+    /*
+     * 物候阶段：**自动推算**，不再是手动标记。
+     * 状态压过日历（阳台比露台晚开两周），日历压过"什么都没写"。
+     */
+    {
+      const phaseOf = (input: Parameters<typeof deriveCarePhase>[0]) => deriveCarePhase(input).phase
+      check('阶段：状态「种子」直接是 seed', phaseOf({ status: 'seed', today: '2026-05-01' }) === 'seed')
+      check('阶段：状态「缓苗」压过花期', phaseOf({ status: 'recovering', bloomMonths: [5], today: '2026-05-01' }) === 'recovering')
+      check('阶段：状态「病虫害」是 pest', phaseOf({ status: 'sick', bloomMonths: [5], today: '2026-05-01' }) === 'pest')
+      check('阶段：当月开花就推算成 blooming', phaseOf({ bloomMonths: [4, 5, 6], today: '2026-05-10' }) === 'blooming')
+      check('阶段：下个月开花推成 budding', phaseOf({ bloomMonths: [6], today: '2026-05-10' }) === 'budding')
+      check('阶段：12 月的下个月是 1 月', phaseOf({ bloomMonths: [1], today: '2026-12-10' }) === 'budding')
+      check('阶段：休眠月份推成 dormant', phaseOf({ dormancyMonths: [1, 2], today: '2026-01-10' }) === 'dormant')
+      check('阶段：都不沾边就是 growing', phaseOf({ bloomMonths: [6], today: '2026-02-10' }) === 'growing')
+      check('阶段：枯死不再谈物候', phaseOf({ status: 'dead', bloomMonths: [5], today: '2026-05-01' }) === null)
+      check('阶段：说明里写清依据（不是内部键名）', deriveCarePhase({ bloomMonths: [5], today: '2026-05-01' }).reason.includes('开花'), deriveCarePhase({ bloomMonths: [5], today: '2026-05-01' }).reason)
+    }
     check('校验失败时 species 为 null（不是 id:0 的假对象）', missing.species === null, String(missing.species))
 
     // --- 非法类型输入不会写入脏数据 ---
@@ -2916,17 +2935,22 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('休眠期没有追肥任务', !inDormant.some((t) => t.title === '自检阶段规则'))
       check('休眠期仍保留不限阶段的任务', inDormant.some((t) => t.title === '自检无阶段规则'))
 
-      // 生成时确实按植株阶段过滤
-      setPlantPhase(db, pid, 'dormant')
+      /*
+       * 生成时按**状态推出来的阶段**过滤。
+       *
+       * 阶段不再由人手标：这里改的是植株「状态」，阶段由 deriveCarePhase 算出来
+       * （状态=休眠 → 阶段=休眠），限定生长期的规则随之失效。
+       */
+      db.run("UPDATE plants SET status = 'dormant' WHERE id = ?", pid)
       const genDormant = generateTasksForPlant(db, pid, 2026, { today: '2026-01-01' })
       const listDormant = listCareTasks(db, { plantId: pid })
-      check('生成时按植株阶段过滤', !listDormant.some((t) => t.title === '自检阶段规则'), JSON.stringify(genDormant))
+      check('状态休眠时限定生长期的规则不生效', !listDormant.some((t) => t.title === '自检阶段规则'), JSON.stringify(genDormant))
       check('生成时保留可生效的规则', listDormant.some((t) => t.title === '自检无阶段规则'))
 
-      setPlantPhase(db, pid, 'growing')
+      db.run("UPDATE plants SET status = 'growing' WHERE id = ?", pid)
       generateTasksForPlant(db, pid, 2026, { today: '2026-01-01' })
       check(
-        '改成生长期后追肥任务出现',
+        '状态改回生长后追肥任务出现',
         listCareTasks(db, { plantId: pid }).some((t) => t.title === '自检阶段规则')
       )
 
@@ -2938,34 +2962,22 @@ export async function runSmoke(outFile: string): Promise<number> {
     {
       const base = { today: '2026-06-15' }
 
-      check('枯死是事实，盖过一切', deriveGrowthStage({ ...base, status: 'dead', phase: 'blooming', bloomMonths: [6] }).stage === 'withered')
-      check('生病同样盖过人工标记', deriveGrowthStage({ ...base, status: 'sick', phase: 'growing' }).stage === 'sick')
+      check('枯死是事实，盖过一切', deriveGrowthStage({ ...base, status: 'dead', bloomMonths: [6] }).stage === 'withered')
+      check('病虫害盖过花期推算', deriveGrowthStage({ ...base, status: 'sick', bloomMonths: [6] }).stage === 'sick')
       check('状态休眠优先于月份', deriveGrowthStage({ ...base, status: 'dormant' }).stage === 'dormant')
       check('推导来源标为 status', deriveGrowthStage({ ...base, status: 'dead' }).source === 'status')
 
-      // 人工标记优先于月份推算：同一个月里，南阳台的可能已经现蕾、北窗台的还没动
-      check(
-        '人工标记优先于开花月份',
-        deriveGrowthStage({ ...base, phase: 'growing', bloomMonths: [6] }).stage === 'growing'
-      )
-      check('推导来源标为 phase', deriveGrowthStage({ ...base, phase: 'blooming' }).source === 'phase')
-      // 新增阶段要落到画面上已有的两个阶段：种子 → seed、病虫害 → sick
-      check('种子/种球期画成 seed', deriveGrowthStage({ ...base, phase: 'seed' }).stage === 'seed')
-      check('病虫害期画成 sick', deriveGrowthStage({ ...base, phase: 'pest' }).stage === 'sick')
-      check(
-        '阶段的说明用中文而不是内部键名',
-        deriveGrowthStage({ ...base, phase: 'blooming' }).reason.includes('花期') &&
-          !deriveGrowthStage({ ...base, phase: 'blooming' }).reason.includes('blooming'),
-        deriveGrowthStage({ ...base, phase: 'blooming' }).reason
-      )
+      // 阶段不再由人标：种子/缓苗/有花芽/开花都来自**状态**，其余按物种月份推算
+      check('状态「种子/种球」画成 seed', deriveGrowthStage({ ...base, status: 'seed' }).stage === 'seed')
+      check('状态「病虫害」画成 sick', deriveGrowthStage({ ...base, status: 'sick' }).stage === 'sick')
+      check('状态「有花芽」画成 budding', deriveGrowthStage({ ...base, status: 'budding' }).stage === 'budding')
+      check('状态「开花」画成 blooming', deriveGrowthStage({ ...base, status: 'blooming' }).stage === 'blooming')
+      check('状态「开花」压过休眠月份', deriveGrowthStage({ ...base, status: 'blooming', dormancyMonths: [6] }).stage === 'blooming')
       // 缓苗期有自己的阶段。第一版把它映射成「幼苗」，结果一株成熟的朱顶红
       // 只要标了缓苗期就被画成两像素的嫩芽 —— 缓苗是临时状态，不是「这株还小」
-      check(
-        '缓苗期不是幼苗（不能画成小苗）',
-        deriveGrowthStage({ ...base, phase: 'recovering' }).stage === 'recovering',
-        deriveGrowthStage({ ...base, phase: 'recovering' }).stage
-      )
-      check('缓苗中保持成株高度', growthLook('recovering').stem >= growthLook('growing').stem)
+      check('状态「缓苗」画成 recovering', deriveGrowthStage({ ...base, status: 'recovering' }).stage === 'recovering')
+      check('缓苗时不会因为入手时间被画成幼苗', deriveGrowthStage({ ...base, status: 'recovering', acquiredAt: '2026-06-05' }).stage === 'recovering')
+      check('阶段说明用中文而不是内部键名', deriveGrowthStage({ ...base, status: 'blooming' }).reason.includes('开花'), deriveGrowthStage({ ...base, status: 'blooming' }).reason)
       check('缓苗中比幼苗高得多', growthLook('recovering').stem > growthLook('sprout').stem + 2)
       check('缓苗中是叶少而不是掉光', growthLook('recovering').leaves <= 1 && !growthLook('recovering').bare)
       check('缓苗中比「有状况」气色好', growthLook('recovering').wither < growthLook('sick').wither)

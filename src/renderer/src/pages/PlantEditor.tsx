@@ -300,17 +300,6 @@ export function PlantEditorModal({
         ) : null}
 
         {/*
-          详情与编辑合并：上面是这一株的现状（阶段 / 物候 / 下一件事 / 生成计划），
-          下面是可改的字段和图片。看和改在同一个弹窗里。
-        */}
-        {detail ? (
-          <Panel flat>
-            <div className="section-title">现状</div>
-            {detail}
-          </Panel>
-        ) : null}
-
-        {/*
           图片放在字段表单**上面**：改植株时先看「长什么样」，
           照片也是最先想改的东西；字段一多，图片压在最下面要滚很久。
         */}
@@ -342,6 +331,17 @@ export function PlantEditorModal({
           onChange={setValue}
           context={fieldContext}
         />
+        {/*
+          现状放在最下面：它是"看一眼"的信息（阶段、下一件事），
+          改字段和图片才是打开弹窗的主要目的 —— 先让能改的东西在前面。
+          阶段是自动推算的，不能点。
+        */}
+        {detail ? (
+          <Panel flat>
+            <div className="section-title">现状</div>
+            {detail}
+          </Panel>
+        ) : null}
       </div>
 
     </Modal>

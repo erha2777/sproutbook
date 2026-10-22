@@ -1,19 +1,17 @@
 /**
- * 生长阶段推导。
+ * 生长阶段推导（花园视图画成什么样）。
  *
- * 花园视图要回答一个很朴素的问题：**这盆现在长到哪一步了？**
+ * 现在只有两层输入：
+ *  1. **植株状态**：人观察到的事实（枯死、病虫害、缓苗、有花芽、正开花…）
+ *  2. **物候阶段**：由 `core/phase.ts` 的 `deriveCarePhase` 从
+ *     「状态 + 物种花期 / 休眠月份 + 今天」推出来
  *
- * 输入来自三个地方，优先级从硬到软：
- *  1. 植株状态（枯死、生病）—— 这是事实，盖过一切
- *  2. 物候阶段 —— 你亲眼看到的，比任何推算都准
- *  3. 开花月份 / 休眠月份 / 入手日期 —— 没人工标记时才靠推算
- *
- * 之所以要分优先级：同一个月里，南阳台的可能已经现蕾、北窗台的还没动。
- * 纯按月份推算会让花园长得一模一样，那这个视图就没有意义了。
+ * 以前还允许"人工标记阶段"，和状态职责重叠 —— 标记的「花期」和实际状态能互相打架。
+ * 现在阶段一律自动算，状态才是手动的那个。
  */
 
 import type { CarePhase, PlantStatus } from './types'
-import { CARE_PHASE_LABELS } from './care'
+import { deriveCarePhase } from './phase'
 
 // ---------------------------------------------------------------------------
 // 阶段
@@ -42,12 +40,11 @@ export const GROWTH_STAGE_LABELS: Record<GrowthStage, string> = {
   withered: '枯死'
 }
 
-/** 推导结果的来源，界面上要说清楚「这是推算的还是你标的」。 */
-export type GrowthSource = 'status' | 'phase' | 'bloom' | 'dormancy' | 'age' | 'default'
+/** 推导结果的来源，界面上要说清楚「这是按什么算的」。 */
+export type GrowthSource = 'status' | 'bloom' | 'dormancy' | 'age' | 'default'
 
 export const GROWTH_SOURCE_LABELS: Record<GrowthSource, string> = {
   status: '按植株状态',
-  phase: '按你标记的阶段',
   bloom: '按开花月份推算',
   dormancy: '按休眠月份推算',
   age: '按入手时间推算',
@@ -94,7 +91,7 @@ function daysSince(iso: string | null | undefined, today: string): number | null
 }
 
 /**
- * 物候阶段 → 生长阶段的直接映射。人标了就以人的为准。
+ * 物候阶段 → 生长阶段的直接映射。
  *
  * 注意「缓苗期」有自己的阶段，**不是幼苗**。
  * 第一版把它映射成 sprout，结果一株成熟的朱顶红只要标了缓苗期，
@@ -119,66 +116,47 @@ export interface GrowthInput {
   bloomMonths?: number[] | null
   /** 物种的休眠月份（1~12） */
   dormancyMonths?: number[] | null
-  /** 植株状态 */
+  /** 植株状态：手工观察到的那个 */
   status?: PlantStatus | null
-  /** 人工标记的物候阶段 */
-  phase?: CarePhase | null
   /** 入手 / 播种日期 YYYY-MM-DD */
   acquiredAt?: string | null
   /** 今天，便于自检注入固定日期 */
   today: string
 }
 
+/**
+ * 阶段不再由人标，统一走 `deriveCarePhase`：
+ * 状态（枯死 / 缓苗 / 病虫害 / 有花芽 / 开花 / 休眠）优先，其次按物种花期推算。
+ * 入手不久的另画成幼苗，避免刚买的苗直接显示成成株。
+ */
 export function deriveGrowthStage(input: GrowthInput): GrowthResult {
-  const today = input.today
-  const month = Number(today.slice(5, 7))
+  const derived = deriveCarePhase({
+    status: input.status,
+    bloomMonths: input.bloomMonths,
+    dormancyMonths: input.dormancyMonths,
+    today: input.today
+  })
 
-  // 1) 植株状态是事实，盖过一切推算
-  if (input.status === 'dead') {
-    return { stage: 'withered', source: 'status', reason: '植株状态记为「已枯死」' }
-  }
-  if (input.status === 'sick') {
-    return { stage: 'sick', source: 'status', reason: '植株状态记为「有状况」' }
-  }
-  if (input.status === 'dormant') {
-    return { stage: 'dormant', source: 'status', reason: '植株状态记为「休眠」' }
+  if (!derived.phase) {
+    // 枯死 / 送人：枯死照旧画枯枝，送人按生长期（不再出现在花园里）
+    if (input.status === 'dead') return { stage: 'withered', source: 'status', reason: derived.reason }
+    return { stage: 'growing', source: 'status', reason: derived.reason }
   }
 
-  // 2) 人工标记的物候阶段 —— 你亲眼看到的，比月份推算准
-  if (input.phase) {
-    return {
-      stage: PHASE_TO_STAGE[input.phase],
-      source: 'phase',
-      // 说中文。第一版这里直接拼了内部键名，界面上出现「你标记为「blooming」阶段」
-      reason: `你标记为「${CARE_PHASE_LABELS[input.phase]}」`
+  const source: GrowthSource = derived.source === 'status' || derived.source === 'bloom' || derived.source === 'dormancy'
+    ? derived.source
+    : 'default'
+
+  // 刚入手不久且推出来是生长期：画成幼苗（否则刚买的苗和养了三年的一样大）
+  if (derived.phase === 'growing') {
+    const age = daysSince(input.acquiredAt, input.today)
+    if (age !== null && age >= 0 && age <= SPROUT_DAYS) {
+      return { stage: 'sprout', source: 'age', reason: `入手才 ${age} 天` }
     }
   }
 
-  // 3) 按月份推算
-  const bloom = input.bloomMonths ?? []
-  const dormancy = input.dormancyMonths ?? []
-
-  if (bloom.includes(month)) {
-    return { stage: 'blooming', source: 'bloom', reason: `${month} 月在开花期内` }
-  }
-  // 下个月要开花，这个月该现蕾了。跨年时 12 月的下一个月是 1 月。
-  const nextMonth = month === 12 ? 1 : month + 1
-  if (bloom.includes(nextMonth) && !dormancy.includes(month)) {
-    return { stage: 'budding', source: 'bloom', reason: `下个月（${nextMonth} 月）进入开花期` }
-  }
-  if (dormancy.includes(month)) {
-    return { stage: 'dormant', source: 'dormancy', reason: `${month} 月在休眠期内` }
-  }
-
-  // 4) 刚入手不久，当成幼苗
-  const age = daysSince(input.acquiredAt, today)
-  if (age !== null && age >= 0 && age <= SPROUT_DAYS) {
-    return { stage: 'sprout', source: 'age', reason: `入手才 ${age} 天` }
-  }
-
-  return { stage: 'growing', source: 'default', reason: '没有特殊标记，按生长期显示' }
+  return { stage: PHASE_TO_STAGE[derived.phase], source, reason: derived.reason }
 }
-
 // ---------------------------------------------------------------------------
 // 渲染参数
 // ---------------------------------------------------------------------------
@@ -411,3 +389,4 @@ export function describeEffectiveHeight(input: EffectiveHeightInput): string {
   const scale = Math.round(sizeScaleFor(cm) * 100)
   return `${text}（${HEIGHT_BASIS_LABELS[basis]} · 显示 ${scale}%）`
 }
+

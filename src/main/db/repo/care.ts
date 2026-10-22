@@ -39,7 +39,9 @@ import {
   summarizeTasks,
   todayIso
 } from '../../../core/care'
-import type { CarePhase } from '../../../core/types'
+import type { CarePhase, PlantStatus } from '../../../core/types'
+import { deriveCarePhase } from '../../../core/phase'
+import { readMonthSet } from '../../../core/growth'
 
 // ---------------------------------------------------------------------------
 // 规则库
@@ -710,16 +712,36 @@ export function generateTasksForPlant(
   } = {}
 ): CareGenerateResult {
   return db.transaction(() => {
-    const plant = db.get<{ id: number; nickname: string; species_id: number | null; phase: string | null }>(
-      'SELECT id, nickname, species_id, phase FROM plants WHERE id = ? AND archived_at IS NULL',
-      plantId
-    )
+    const plant = db.get<{
+      id: number
+      nickname: string
+      species_id: number | null
+      status: string
+      phase: string | null
+    }>('SELECT id, nickname, species_id, status, phase FROM plants WHERE id = ? AND archived_at IS NULL', plantId)
     if (!plant) return { created: 0, kept: 0, removed: 0, plants: 0 }
 
-    const speciesName = plant.species_id
-      ? (db.get<{ common_name: string }>('SELECT common_name FROM species WHERE id = ?', plant.species_id)
-          ?.common_name ?? null)
+    const speciesRow = plant.species_id
+      ? db.get<{ common_name: string; attributes_json: string }>(
+          'SELECT common_name, attributes_json FROM species WHERE id = ?',
+          plant.species_id
+        )
       : null
+    const speciesName = speciesRow?.common_name ?? null
+    const speciesAttrs = speciesRow ? (JSON.parse(speciesRow.attributes_json || '{}') as Record<string, unknown>) : {}
+
+    /*
+     * 阶段是**算出来的**：状态（人观察的）+ 物种花期 / 休眠月份 + 今天。
+     *
+     * 以前读 plants.phase —— 那列是人手点的，和状态能互相打架
+     * （状态写「有花芽」、阶段还停在「生长期」）。现在界面和任务生成都用同一个纯函数。
+     */
+    const derived = deriveCarePhase({
+      status: plant.status as PlantStatus,
+      bloomMonths: readMonthSet(speciesAttrs.bloom_months),
+      dormancyMonths: readMonthSet(speciesAttrs.dormancy_months),
+      today: options.today ?? todayIso()
+    })
 
     const rules = listCareRules(db, { hemisphere: options.hemisphere ?? 'N' })
     const allGenerated = generateTasks(rules, speciesName, year, {
@@ -727,8 +749,8 @@ export function generateTasksForPlant(
       defaultWindowDays: options.windowDays ?? 15,
       // 按植株错开锚点日：否则七株的任务全挤在同一天，月历就没法看了
       spreadSeed: plantId,
-      // 植株当前阶段决定「限定阶段的规则」是否生效 —— 这就是停用的实现
-      phase: isCarePhase(plant.phase) ? plant.phase : null
+      // 算出来的阶段决定「限定阶段的规则」是否生效 —— 这就是停用的实现
+      phase: derived.phase
     })
 
     /*

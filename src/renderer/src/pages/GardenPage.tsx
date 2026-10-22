@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Environment, PlantStatus, Species } from '@core/types'
-import type { CareTaskListItem, PlantListItem, PlantListItemStats, PlantPhaseInfo } from '@shared/api'
+import type { CareTaskListItem, PlantListItem, PlantListItemStats } from '@shared/api'
 import {
   GROWTH_SOURCE_LABELS,
   GROWTH_STAGE_LABELS,
@@ -23,17 +23,8 @@ import {
   readMonthSet,
   sizeScaleFor
 } from '@core/growth'
-import {
-  CARE_ACTION_ICONS,
-  CARE_PHASE_HINTS,
-  CARE_PHASE_ICONS,
-  CARE_PHASE_LABELS,
-  CARE_PHASE_OPTIONS,
-  dueDescription,
-  phaseAgeDays,
-  urgencyOf
-} from '@core/care'
-import type { CarePhase } from '@core/types'
+import { CARE_ACTION_ICONS, CARE_PHASE_ICONS, CARE_PHASE_LABELS, dueDescription, urgencyOf } from '@core/care'
+import { deriveCarePhase } from '@core/phase'
 import { flowerColorForSpecies } from '@core/sprite'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
 import { todayIso } from '@core/care'
@@ -60,7 +51,6 @@ export function GardenPage({
   const [speciesList, setSpeciesList] = useState<Species[]>([])
   /** 每株最近一条待办，场景里直接标出来「这盆该做什么」 */
   const [nextTask, setNextTask] = useState<Record<number, CareTaskListItem>>({})
-  const [phases, setPhases] = useState<Record<number, PlantPhaseInfo>>({})
   /** 读取失败的原因。和「确实没有数据」是两回事 —— 不能都显示成空态 */
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -110,8 +100,6 @@ export function GardenPage({
       }
       setNextTask(byPlant)
 
-      const infos = await Promise.all(list.items.map((p) => window.api.care.plantPhase(p.id)))
-      setPhases(Object.fromEntries(infos.map((i) => [i.plantId, i])))
     } catch (error) {
       const msg = error instanceof Error ? error.message : '未知错误'
       // 记下来，页面主体要显示「读取失败」而不是「还没有植物」
@@ -247,60 +235,23 @@ export function GardenPage({
   }
 
   /**
-   * 就地标记物候阶段。
-   *
-   * 和养护计划页那个「标记阶段」做的是同一件事，包括**标记完立刻重新生成任务** ——
-   * 限定该阶段的规则（缓苗 / 暴雨后救苗）不必再手动建，标完就出现在待办里。
-   * 这才是「事件触发」的意思：事件（转缓苗期）一发生，该做的事自己冒出来。
-   *
-   * 原来这里只写了一句「到『养护计划』页标记后，这里会更准」——
-   * 又是指着别处说话。事情就在这一株身上，就地做就行了。
-   */
-  const markPhase = async (plantId: number, phase: CarePhase | null): Promise<void> => {
-    try {
-      const year = new Date().getFullYear()
-      /*
-       * 先问一句：这一株今年有计划吗？
-       *
-       * 没有就**不生成**。标记阶段是"记录现状"，不是"替我排计划" ——
-       * 一株刚建、还没排过计划的花，切个阶段就凭空多出整年的任务，
-       * 用户会觉得应用自作主张。
-       */
-      const hadPlan = await window.api.care.hasPlan(plantId, year)
-      const info = await window.api.care.setPlantPhase(plantId, phase, null)
-      setPhases((prev) => ({ ...prev, [plantId]: info }))
-      if (hadPlan) {
-        // 有计划的才重排：阶段一变，限定该阶段的规则就该生效/失效
-        await window.api.care.generate(plantId, year)
-      }
-      // 「下一件事」也要跟着刷新（阶段一变就可能有新任务，或旧任务失效）
-      await refreshNextTask(plantId)
-      if (!phase) {
-        toast.push('已清除阶段标记', 'success')
-      } else if (hadPlan) {
-        toast.push(`已标记为「${CARE_PHASE_LABELS[phase]}」，相关任务已重新生成`, 'success')
-      } else {
-        toast.push(`已标记为「${CARE_PHASE_LABELS[phase]}」（这株还没有计划，不生成任务）`, 'success')
-      }
-    } catch (error) {
-      toast.push(`标记失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
-    }
-  }
-
   /**
-   * 「现状」块：阶段与依据、物候标记、下一件事、按株生成计划。
+   * 「现状」块：自动推算的物候阶段、状态摘要、下一件事、按株生成计划。
    *
-   * 它跟着**编辑弹窗**一起出现 —— 原来详情是另一个弹窗，看阶段和改信息
-   * 要来回切两个框。合并以后「看这一株」和「改这一株」是同一个地方。
+   * 阶段**不再让人点**：它在哪个时期由物种花期 + 今天的日期决定，
+   * 人手改只会和真实情况打架。能手动的是「状态」（本株信息里那一格）。
+   * 这一块在编辑弹窗的最下面，属于"看一眼"的信息，不挡着改东西。
    */
   const renderDetail = (plant: PlantListItem): ReactNode => {
     const g = growthOf(plant)
-    const info = phases[plant.id]
-    // 手动标记的阶段持续了几天（和养护计划页用的是同一个纯函数）
-    const age = phaseAgeDays(info?.changedAt)
+    const derived = deriveCarePhase({
+      status: plant.status,
+      bloomMonths: g.bloomMonths,
+      dormancyMonths: g.dormancyMonths,
+      today: todayIso()
+    })
     const result = deriveGrowthStage({
       status: plant.status,
-      phase: info?.phase ?? null,
       bloomMonths: g.bloomMonths,
       dormancyMonths: g.dormancyMonths,
       acquiredAt: plant.acquiredAt,
@@ -310,63 +261,20 @@ export function GardenPage({
     return (
       <div>
         <div className="row tight" style={{ flexWrap: 'wrap' }}>
-          <Badge tone="ok">🌱 {GROWTH_STAGE_LABELS[result.stage]}</Badge>
-          <span className="small muted">
-            {GROWTH_SOURCE_LABELS[result.source]} —— {result.reason}
-          </span>
+          <Badge tone="ok">
+            {derived.phase ? `${CARE_PHASE_ICONS[derived.phase]} ${CARE_PHASE_LABELS[derived.phase]}` : '—'}
+          </Badge>
+          <span className="small muted">物候阶段（自动推算）：{derived.reason}</span>
+        </div>
+        <div className="small muted" style={{ marginTop: 4 }}>
+          花园里按「{GROWTH_STAGE_LABELS[result.stage]}」画：{GROWTH_SOURCE_LABELS[result.source]} —— {result.reason}
         </div>
         <div className="small muted" style={{ marginTop: 4 }}>
           {plant.species?.commonName ?? '未关联物种'}
           {g.habit ? ` · ${g.habit}` : ''}
           {` · ${g.heightText}`}
           {plant.envName ? ` · ${plant.envName}` : ''}
-          {` · ${PLANT_STATUS_ICONS[plant.status]} ${PLANT_STATUS_LABELS[plant.status]}`}
-        </div>
-        <div style={{ marginTop: 8 }}>
-          <div className="small" style={{ marginBottom: 4 }}>
-            物候阶段：
-            {info?.phase ? (
-              <>
-                <b>
-                  {' '}
-                  {CARE_PHASE_ICONS[info.phase]} {CARE_PHASE_LABELS[info.phase]}
-                </b>
-                {age !== null ? (
-                  <span
-                    className={`small ${age >= 45 ? 'phase-age stale' : 'muted'}`}
-                    title={`标记于 ${info?.changedAt?.slice(0, 10) ?? ''}`}
-                  >
-                    {' '}
-                    已 {age} 天{age >= 45 ? '，要不要重新看看？' : ''}
-                  </span>
-                ) : null}
-              </>
-            ) : (
-              <span className="muted"> 还没标记（标记后，限定该阶段的规则才会生效）</span>
-            )}
-          </div>
-          <div className="row tight" style={{ flexWrap: 'wrap' }}>
-            {CARE_PHASE_OPTIONS.map((opt) => (
-              <Button
-                key={opt.value}
-                size="small"
-                variant={info?.phase === opt.value ? 'primary' : undefined}
-                onClick={() => void markPhase(plant.id, opt.value as CarePhase)}
-                title={CARE_PHASE_HINTS[opt.value as CarePhase]}
-              >
-                {CARE_PHASE_ICONS[opt.value as CarePhase]} {CARE_PHASE_LABELS[opt.value as CarePhase]}
-              </Button>
-            ))}
-            {info?.phase ? (
-              <Button
-                size="small"
-                onClick={() => void markPhase(plant.id, null)}
-                title="清除标记。限定阶段的规则会随之失效"
-              >
-                清除
-              </Button>
-            ) : null}
-          </div>
+          {` · 状态：${PLANT_STATUS_ICONS[plant.status]} ${PLANT_STATUS_LABELS[plant.status]}`}
         </div>
         <div className="row tight" style={{ marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="small">
@@ -520,10 +428,8 @@ export function GardenPage({
             <div className="garden-scene">
               {gardenItems.map((plant) => {
                 const g = growthOf(plant)
-                const phase = phases[plant.id]?.phase ?? null
                 const result = deriveGrowthStage({
                   status: plant.status,
-                  phase,
                   bloomMonths: g.bloomMonths,
                   dormancyMonths: g.dormancyMonths,
                   acquiredAt: plant.acquiredAt,
