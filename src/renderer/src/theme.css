@@ -3926,3 +3926,21 @@ html.tex-panel.tex-panel-slice .modal-footer {
   font-weight: 700;
   border-bottom: 1px dashed rgba(60, 90, 40, 0.4);
 }
+/* ---- 问问 AI ---- */
+.ask-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ask-ai-answer {
+  border: 2px solid var(--wood-outline);
+  background: var(--wood-panel-light);
+  padding: 10px 12px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.ask-ai-text {
+  white-space: pre-wrap;
+  line-height: 1.75;
+  font-size: 13px;
+}

@@ -34,6 +34,7 @@ import {
   addImage,
   archiveEnvironment,
   deleteImage,
+  getEnvironment,
   getSetting,
   listEnvironments,
   listImages,
@@ -80,6 +81,12 @@ import {
   updateCareTask
 } from '../db/repo/care'
 import type { CareLogPatch, CareTaskPatch, CareTaskQuery } from '../../shared/api'
+import { formatFieldValue } from '../../core/fieldTypes'
+import { buildAskPlantMessages, buildPlantDossier } from '../../core/plantDossier'
+import { deriveCarePhase } from '../../core/phase'
+import { readMonthSet } from '../../core/growth'
+import { CARE_PHASE_LABELS, logKindLabel, todayIso } from '../../core/care'
+import { PLANT_STATUS_LABELS } from '../../core/status'
 import type { CareHemisphere, CarePhase, CareRuleInput, CareTaskInput } from '../../core/types'
 import {
   applyImport,
@@ -1251,6 +1258,152 @@ function registerAiIpc(): void {
     controller.abort()
     runningAi.delete(requestId)
     return true
+  })
+
+  /*
+   * 问问 AI：拿一株的完整档案 + 用户的问题问模型。
+   *
+   * 和「AI 补全」「识图」不同的地方：那两条是**写数据**的（要逐字段确认），
+   * 这条只是**问问题**，不写任何字段 —— 所以没有 pendingReview 那一套，直接返回答案。
+   * 每次调用照样进 ai_runs 审计表（kind: plant-qa），出问题能复盘它看到了什么。
+   */
+  handle('ai:askPlant', async (payload: { requestId: string; plantId: number; question: string }) => {
+    const fail = (message: string) => ({ ok: false as const, answer: '', model: null, message })
+
+    const question = String(payload.question ?? '').trim()
+    if (!question) return fail('先写一个问题。')
+
+    const db = getDb()
+    const settings = readAiSettings(db)
+    const apiKey = getApiKey()
+    if (!apiKey) return fail('还没有配置 API Key。到「设置 → AI 配置」填一个就能用。')
+    const model = (settings.chatModel ?? '').trim()
+    if (!model) return fail('还没有配置对话模型。到「设置 → AI 配置」填一个。')
+
+    const plant = getPlant(db, payload.plantId)
+    if (!plant) return fail('这一株已经不在了。')
+    const species = plant.speciesId ? getSpecies(db, plant.speciesId) : null
+    const env = plant.envId ? getEnvironment(db, plant.envId) : null
+
+    // 字段 label 让人看得懂：档案是给模型读的，键名对它没意义
+    const plantDefs = loadFieldDefinitions(db, 'plant', true)
+    const speciesDefs = loadFieldDefinitions(db, 'species', true)
+    const formatAttrs = (
+      defs: typeof plantDefs,
+      values: Record<string, unknown>
+    ): Array<{ label: string; value: string }> =>
+      defs
+        .filter((def) => !def.columnName)
+        .map((def) => {
+          const raw = values[def.key] as Parameters<typeof formatFieldValue>[1] | undefined
+          if (raw === null || raw === undefined) return null
+          let text = ''
+          try {
+            text = formatFieldValue(def, raw)
+          } catch {
+            text = String(raw)
+          }
+          return { label: def.label, value: text }
+        })
+        .filter((row): row is { label: string; value: string } => row !== null && row.value.trim() !== '')
+
+    // 物候阶段用和界面一致的推算，避免"档案说花期、任务按生长期生成"这种自相矛盾
+    const speciesAttrs = (species?.attributes ?? {}) as Record<string, unknown>
+    const phase = deriveCarePhase({
+      status: plant.status,
+      bloomMonths: readMonthSet(speciesAttrs.bloom_months),
+      dormancyMonths: readMonthSet(speciesAttrs.dormancy_months),
+      today: todayIso()
+    })
+
+    const tasks = listCareTasks(db, { plantId: plant.id, status: 'open' }).slice(0, 12)
+    const logs = listCareLogs(db, { plantId: plant.id, limit: 10 })
+
+    const dossier = buildPlantDossier({
+      plant: {
+        nickname: plant.nickname,
+        category: plant.category,
+        statusLabel: PLANT_STATUS_LABELS[plant.status] ?? plant.status,
+        phaseLabel: phase.phase ? CARE_PHASE_LABELS[phase.phase] : null,
+        phaseReason: phase.reason,
+        acquiredAt: plant.acquiredAt,
+        potSize: plant.potSize,
+        cultivation:
+          typeof plant.attributes.cultivation === 'string' ? (plant.attributes.cultivation as string) : null,
+        heightCm:
+          typeof plant.attributes.actual_height_cm === 'number' ? (plant.attributes.actual_height_cm as number) : null,
+        ageYears: typeof plant.attributes.age_years === 'number' ? (plant.attributes.age_years as number) : null,
+        price:
+          typeof plant.attributes.purchase_price === 'number' ? (plant.attributes.purchase_price as number) : null,
+        notes: plant.notes,
+        attributes: formatAttrs(plantDefs, plant.attributes as Record<string, unknown>)
+      },
+      species: species
+        ? {
+            commonName: species.commonName,
+            scientificName: species.scientificName,
+            family: species.family,
+            genus: species.genus,
+            aliases: species.aliases ?? [],
+            attributes: formatAttrs(speciesDefs, speciesAttrs)
+          }
+        : null,
+      env: env
+        ? {
+            name: env.name,
+            light: env.lightLevel,
+            lightHours: env.lightHours,
+            location: [env.province, env.city, env.district].filter(Boolean).join(' / ') || null,
+            notes: env.notes
+          }
+        : null,
+      tasks: tasks.map((t) => ({ title: t.title, dueDate: t.dueDate, status: t.status })),
+      logs: logs
+        .filter((l) => (l.content ?? '').trim() !== '' || l.kind)
+        .map((l) => ({
+          date: l.logDate,
+          kind: logKindLabel(l.kind),
+          content: (l.content ?? '').trim() || '（没有文字，只有照片）'
+        })),
+      today: todayIso()
+    })
+
+    const messages = buildAskPlantMessages(dossier, question)
+    const controller = new AbortController()
+    runningAi.set(payload.requestId, controller)
+    try {
+      const outcome = await chat({
+        baseUrl: settings.baseUrl,
+        apiKey,
+        model,
+        messages: [
+          { role: 'system', content: messages.system },
+          { role: 'user', content: messages.user }
+        ],
+        temperature: settings.temperature,
+        timeoutMs: Math.max(settings.timeoutMs ?? 60000, 90000),
+        maxRetries: settings.maxRetries,
+        signal: controller.signal
+      })
+      recordAiRun(db, {
+        kind: 'plant-qa',
+        baseUrl: settings.baseUrl,
+        model: outcome.model || model,
+        promptVersion: 'plant-qa-1',
+        input: { plantId: plant.id, question, dossier },
+        output: { answer: outcome.content },
+        status: outcome.ok ? 'ok' : 'error',
+        error: outcome.error ?? null,
+        usage: outcome.usage,
+        durationMs: outcome.durationMs
+      })
+      if (!outcome.ok) return fail(outcome.error ?? 'AI 没有返回内容。')
+      const answer = outcome.content.trim()
+      if (!answer) return fail('AI 返回了空内容，换个问法或检查模型设置。')
+      return { ok: true as const, answer, model: outcome.model || model, message: null }
+    } finally {
+      runningAi.delete(payload.requestId)
+    }
   })
 
 

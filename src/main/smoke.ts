@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 端到端自检。
  *
  * 刻意**不依赖 electron** —— 只用 node:sqlite + 文件系统，因此：
@@ -83,6 +83,7 @@ import { THEME_BACKDROP, resolveBackdrops } from '../core/media'
 import { PLANT_STATUS_ORDER } from '../core/status'
 import { deriveCarePhase } from '../core/phase'
 import { searchSelectView } from '../core/searchSelect'
+import { buildAskPlantMessages, buildPlantDossier } from '../core/plantDossier'
 import { defaultFieldDefinitions } from '../core/defaultTemplate'
 import {
   addDays,
@@ -478,6 +479,65 @@ export async function runSmoke(outFile: string): Promise<number> {
 
       const prefix = searchSelectView({ value: '月季', query: '多', open: true, options: opts, allowCustom: true })
       check('输入前缀时回车先选已有项', prefix.enterPick === '多肉类', String(prefix.enterPick))
+
+    /*
+     * 「问问 AI」的档案拼装。
+     * 提示词可以改，但"哪些信息必须带上、空字段不能占位、超长要截断"是硬要求 ——
+     * 漏一个字段，模型就会开始瞎猜。
+     */
+    {
+      const dossier = buildPlantDossier({
+        today: '2026-10-22',
+        plant: {
+          nickname: '前院莫利纳尔',
+          category: '月季',
+          statusLabel: '发芽 / 生长',
+          phaseLabel: '花期',
+          phaseReason: '10 月在开花期内',
+          acquiredAt: '2026-04-18',
+          potSize: '25 cm',
+          cultivation: '地栽',
+          heightCm: 62,
+          ageYears: 2,
+          price: 88,
+          notes: '春天满园赠品',
+          attributes: [{ label: '叶色', value: '深绿' }]
+        },
+        species: {
+          commonName: '月季莫利纳尔',
+          scientificName: 'Rosa Molineux',
+          family: '蔷薇科',
+          genus: '蔷薇属',
+          aliases: ['莫利纳尔'],
+          attributes: [{ label: '耐寒', value: '-15 ℃' }]
+        },
+        env: { name: '前院', light: '全日照', lightHours: 6, location: '浙江省 / 某市', notes: '东南角' },
+        tasks: [
+          { title: '冬季控水', dueDate: '2026-11-01', status: 'pending' },
+          { title: '春季换盆', dueDate: '2026-03-01', status: 'done' }
+        ],
+        logs: [{ date: '2026-10-20', kind: '浇水', content: '浇透一次' }]
+      })
+      check('档案带昵称与分类', dossier.includes('前院莫利纳尔') && dossier.includes('月季'))
+      check('档案带物种知识', dossier.includes('Rosa Molineux') && dossier.includes('蔷薇科'))
+      check('档案带养护位置', dossier.includes('前院') && dossier.includes('6 小时'))
+      check('档案带物候阶段和依据', dossier.includes('花期') && dossier.includes('10 月在开花期内'))
+      check('档案带未完成任务，不带已完成的', dossier.includes('冬季控水') && !dossier.includes('春季换盆'))
+      check('档案带最近日志', dossier.includes('浇透一次'))
+      check('空字段不占位（没填的不出现冒号空值）', !dossier.includes('()') && !dossier.includes('：；'))
+
+      const long = buildPlantDossier({
+        today: '2026-10-22',
+        plant: { nickname: '长档案', statusLabel: '生长', notes: '备注'.repeat(300) },
+        logs: Array.from({ length: 10 }, (_, i) => ({ date: '2026-01-01', kind: '浇水', content: `第 ${i} 次` + '浇水记录'.repeat(40) })),
+        maxChars: 1200
+      })
+      check('档案超长会截断并说明', long.length <= 1300 && long.includes('已省略'), String(long.length))
+
+      const messages = buildAskPlantMessages(dossier, '现在要不要施肥？')
+      check('系统提示词要求只依据档案', messages.system.includes('只根据档案') || messages.system.includes('不要编造'))
+      check('用户消息里有档案和问题', messages.user.includes('前院莫利纳尔') && messages.user.includes('现在要不要施肥？'))
+    }
     }
 
     }

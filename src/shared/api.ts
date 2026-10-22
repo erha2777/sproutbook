@@ -202,6 +202,16 @@ export interface SproutbookApi {
      * 用户取消选择时 ok 为 false、message 为「没有选择图片。」。
      */
     identifyFile(payload: { requestId: string; hint?: string }): Promise<AiIdentifyResult>
+    /**
+     * 拿一株的完整档案问问题。只读不写：不产生待确认字段，不改任何数据。
+     * requestId 用于取消；失败时 message 是给人看的原因。
+     */
+    askPlant(payload: { requestId: string; plantId: number; question: string }): Promise<{
+      ok: boolean
+      answer: string
+      model: string | null
+      message: string | null
+    }>
     cancel(requestId: string): Promise<boolean>
   }
   fields: {

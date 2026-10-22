@@ -31,6 +31,7 @@ import { todayIso } from '@core/care'
 import { PlantSprite } from '../components/PlantSprite'
 import { Badge, Button, EmptyState, LoadFailure, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 import { PlantEditorModal } from './PlantEditor'
+import { AskAiModal } from '../components/AskAiModal'
 
 
 /** 地块里精灵的最大边长（比例 1.0 时）。比格子略小，留出边距。 */
@@ -69,6 +70,8 @@ export function GardenPage({
   const [category, setCategory] = useState('')
   const [categories, setCategories] = useState<string[]>([])
   const [editing, setEditing] = useState<PlantListItem | 'new' | null>(null)
+  /** 「问问 AI」弹窗 */
+  const [asking, setAsking] = useState(false)
 
   const debouncedQuery = useDebounced(query)
 
@@ -405,6 +408,9 @@ export function GardenPage({
                 信息模板
               </Button>
             ) : null}
+            <Button size="small" onClick={() => setAsking(true)} title="选一株，基于它的全部档案问 AI">
+              问问 AI
+            </Button>
             <Button variant="primary" onClick={() => setEditing('new')}>
               ＋ 新增植株
             </Button>
@@ -499,6 +505,8 @@ export function GardenPage({
 
 
       </div>
+
+      {asking ? <AskAiModal plants={items} onClose={() => setAsking(false)} /> : null}
 
       {editing ? (
         <PlantEditorModal
