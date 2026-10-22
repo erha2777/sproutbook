@@ -2,6 +2,30 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.46.1] - 2026-10-22
+
+### 修：任务栏还是 Electron 的默认图标
+
+用户：「还是这样」（截图里任务栏那颗原子核）。
+
+两个原因叠在一起：
+
+1. **任务栏图标不是从 exe 资源读的**。打包版只靠 `win.icon` 嵌进 exe 的图标，
+   Windows 11 的任务栏按钮却取窗口图标，取不到就用 Electron 的默认图标。
+2. **图标缓存**。就算换对了，Explorer 不重启也不会刷新。
+
+#### 改法
+
+- `electron-builder.yml` 的 `extraFiles` 把 `build/icon.png` 放到 **exe 同级目录**
+  （不放 asar：`nativeImage.createFromPath` 读 asar 内路径不保证成功，读失败会静默退回默认图标）
+- 主进程 `loadWindowIcon()` 打包版读 exe 同级、开发版读仓库 `build/`；
+  创建窗口时传 `icon`，创建后再 `setIcon()` 一次（无边框窗口上构造参数偶尔不生效）
+- 读失败会写一行 `窗口图标读取失败` 进 `startup.log`，以后不用猜
+
+#### 怎么验证
+
+重启 Explorer（或注销重登）再启动应用，任务栏变成花盆图标 —— 实测确认。
+README 的常见问题里补了这一条（换图标后快捷方式 / 任务栏仍是旧的）。
 ## [1.46.0] - 2026-10-22
 
 ### 应用图标

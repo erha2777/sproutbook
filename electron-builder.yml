@@ -45,6 +45,9 @@ win:
   extraFiles:
     - from: build/Sproutbook-compat.cmd
       to: Sproutbook-compat.cmd
+    # 窗口图标：主进程从 exe 同级目录读它（asar 里的路径 nativeImage 读不稳）
+    - from: build/icon.png
+      to: icon.png
 
 nsis:
   oneClick: false

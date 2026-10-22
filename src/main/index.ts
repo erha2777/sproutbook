@@ -9,9 +9,9 @@
  *   4. 最后才创建窗口 —— 保证界面出现时数据层已经就绪
  */
 
-import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, nativeImage, shell } from 'electron'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { closeDatabase, dataDir, dbFilePath, getLastReport, imagesDir, initDatabase } from './db'
 import { registerIpc } from './ipc'
 import { handleImageProtocol, registerImageScheme } from './services/images'
@@ -237,7 +237,34 @@ if (!instanceLock.ok) {
 
 let mainWindow: BrowserWindow | null = null
 
+/**
+ * 窗口图标。
+ *
+ * 打包版读 **exe 旁边**的 icon.png（electron-builder 的 extraFiles 放进来的），
+ * 开发版读仓库里的 build/icon.png。
+ *
+ * 为什么不从 asar 里读：`nativeImage.createFromPath` 对 asar 内的路径不保证可用，
+ * 读失败就静默退回 Electron 的默认图标 —— 这正是任务栏那颗原子核的来路。
+ * 放在真实文件系统上，路径一定读得到。
+ */
+function loadWindowIcon(): Electron.NativeImage | null {
+  const candidates = app.isPackaged
+    ? [join(dirname(app.getPath('exe')), 'icon.png')]
+    : [join(app.getAppPath(), 'build', 'icon.png')]
+  for (const file of candidates) {
+    try {
+      const image = nativeImage.createFromPath(file)
+      if (!image.isEmpty()) return image
+    } catch {
+      // 换下一个候选
+    }
+  }
+  logStartup('窗口图标读取失败', { candidates })
+  return null
+}
+
 function createWindow(): void {
+  const windowIcon = loadWindowIcon()
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 880,
@@ -248,13 +275,16 @@ function createWindow(): void {
     title: 'Sproutbook',
     autoHideMenuBar: true,
     /*
-     * 开发模式的任务栏图标。
+     * 窗口图标。
      *
-     * 打包版用 exe 自带的图标（electron-builder 已经把 build/icon.ico 嵌进可执行文件），
-     * 但 `electron .` 启动的是 Electron 本身的 exe，不指定就显示 Electron 的默认图标。
-     * build/ 不进 asar，所以只在开发模式下按 appPath 找。
+     * **打包版也要显式给**：exe 里虽然嵌了图标（electron-builder 的 win.icon），
+     * 但窗口用的是 Chromium 的窗口类图标，Windows 11 上实测会退回 Electron 的默认图标
+     * （任务栏那颗原子核），而不是 exe 里的资源。
+     *
+     * 所以把同一张 png 也打进 asar（electron-builder files 里加了 build/icon.png），
+     * 用 nativeImage 读出来传给 BrowserWindow —— dev 与打包版走同一条路径。
      */
-    ...(app.isPackaged ? {} : { icon: join(app.getAppPath(), 'build', 'icon.png') }),
+    ...(windowIcon ? { icon: windowIcon } : {}),
     /*
      * 无边框 + 自制标题栏（渲染层 TitleBar）。
      * 原生标题栏是系统灰白样式，和像素风不搭；macOS 用 hiddenInset 保留
@@ -269,6 +299,15 @@ function createWindow(): void {
       spellcheck: false
     }
   })
+
+  /*
+   * 再显式设一次窗口图标。
+   *
+   * 构造参数里的 icon 在 Windows 上偶尔不生效（尤其无边框窗口），
+   * 任务栏就会退回 Electron 的默认图标。setIcon 是直接作用在窗口上的，
+   * 更稳；两处都设，幂等。
+   */
+  if (windowIcon) mainWindow.setIcon(windowIcon)
 
   /**
    * 窗口显示策略。
