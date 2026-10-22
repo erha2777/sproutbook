@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 端到端自检。
  *
  * 刻意**不依赖 electron** —— 只用 node:sqlite + 文件系统，因此：
@@ -82,6 +82,7 @@ import { WEATHER_ICON_KINDS, WEATHER_ICON_SIZE, buildWeatherIcon } from '../core
 import { THEME_BACKDROP, resolveBackdrops } from '../core/media'
 import { PLANT_STATUS_ORDER } from '../core/status'
 import { deriveCarePhase } from '../core/phase'
+import { searchSelectView } from '../core/searchSelect'
 import { defaultFieldDefinitions } from '../core/defaultTemplate'
 import {
   addDays,
@@ -451,6 +452,34 @@ export async function runSmoke(outFile: string): Promise<number> {
       const statusField = defaultFieldDefinitions().find((d) => d.ownerKind === 'plant' && d.key === 'status')
       check('状态字段覆盖全部 9 个状态', PLANT_STATUS_ORDER.every((k) => statusField?.options?.includes(k)), JSON.stringify(statusField?.options))
       check('状态选项顺序与展示顺序一致', JSON.stringify(statusField?.options) === JSON.stringify(PLANT_STATUS_ORDER), JSON.stringify(statusField?.options))
+
+    /*
+     * 可搜索下拉的取值逻辑。
+     * 这里钉住的是一个真实 bug：允许自定义时，值不在选项里 → 收起后显示成空，
+     * 用户以为"回车没保存"。
+     */
+    {
+      const opts = [
+        { value: '月季', label: '月季' },
+        { value: '多肉类', label: '多肉类' }
+      ]
+      const closed = searchSelectView({ value: '草花', query: '', open: false, options: opts, allowCustom: true })
+      check('自定义值收起后显示它自己（不能显示空）', closed.display === '草花', closed.display)
+      const closedStrict = searchSelectView({ value: '草花', query: '', open: false, options: opts, allowCustom: false })
+      check('不允许自定义时，选项外的值显示为空', closedStrict.display === '', closedStrict.display)
+
+      const typed = searchSelectView({ value: '月季', query: '草花', open: true, options: opts, allowCustom: true })
+      check('输入新值时给「使用它」的入口', typed.customCandidate === '草花')
+      check('回车采纳新值', typed.enterPick === '草花', String(typed.enterPick))
+
+      const exact = searchSelectView({ value: '月季', query: '月季', open: true, options: opts, allowCustom: true })
+      check('完全匹配时回车选已有项（不造新词）', exact.enterPick === '月季', String(exact.enterPick))
+      check('完全匹配时没有"使用它"入口', exact.customCandidate === null)
+
+      const prefix = searchSelectView({ value: '月季', query: '多', open: true, options: opts, allowCustom: true })
+      check('输入前缀时回车先选已有项', prefix.enterPick === '多肉类', String(prefix.enterPick))
+    }
+
     }
 
     }

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 通用像素风 UI 组件。
  * 刻意保持极简：不引入 UI 框架，全部用受控组件 + 原生元素。
  */
@@ -7,6 +7,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ChangeEvent, ReactNode } from 'react'
 import { formatMonthSet, normalizeMonths } from '@core/fieldTypes'
 import { PixelIcon } from './PixelIcon'
+import { searchSelectView } from '@core/searchSelect'
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
@@ -596,22 +597,12 @@ export function SearchSelect({
 }): ReactNode {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  /*
+   * 「显示什么 / 回车选什么」交给 core 的纯函数，自检能钉住。
+   * 这里踩过坑：允许自定义时值可能不在选项里，用 find 取显示文字会拿到空。
+   */
+  const view = searchSelectView({ value, query, open, options, allowCustom })
   const selected = options.find((o) => o.value === value) ?? null
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return options
-    return options.filter((o) => o.label.toLowerCase().includes(q))
-  }, [options, query])
-
-  /** 输入的内容不在现有选项里 → 菜单顶部给一条「用它」 */
-  const customCandidate = (() => {
-    if (!allowCustom) return null
-    const q = query.trim()
-    if (!q) return null
-    if (options.some((o) => o.label === q || o.value === q)) return null
-    return q
-  })()
 
   const close = (): void => {
     setOpen(false)
@@ -622,8 +613,12 @@ export function SearchSelect({
     <div className={cx('search-select', invalid && 'invalid', disabled && 'disabled')}>
       <input
         className="pixel-input"
-        value={open ? query : (selected?.label ?? '')}
-        placeholder={open ? (selected ? `当前：${selected.label}` : (allowCustom ? '输入筛选，或直接写新的' : '输入关键字筛选…')) : (placeholder ?? '（未选择）')}
+        value={view.display}
+        placeholder={
+          open
+            ? (allowCustom ? '输入筛选，或直接写新的（回车确认）' : (selected ? `当前：${selected.label}` : '输入关键字筛选…'))
+            : (placeholder ?? '（未选择）')
+        }
         disabled={disabled}
         onFocus={() => {
           setOpen(true)
@@ -643,15 +638,8 @@ export function SearchSelect({
             ;(e.target as HTMLInputElement).blur()
           }
           if (e.key === 'Enter') {
-            const exact = filtered.find((o) => o.label === query.trim() || o.value === query.trim())
-            if (exact) {
-              onChange(exact.value)
-              close()
-            } else if (customCandidate) {
-              onChange(customCandidate)
-              close()
-            } else if (filtered.length > 0) {
-              onChange(filtered[0].value)
+            if (view.enterPick !== null) {
+              onChange(view.enterPick)
               close()
             }
           }
@@ -669,19 +657,19 @@ export function SearchSelect({
           >
             {allowCustom ? '（留空）' : '（未关联）'}
           </li>
-          {customCandidate ? (
+          {view.customCandidate ? (
             <li
               className="search-select-item search-select-custom"
               onMouseDown={(e) => {
                 e.preventDefault()
-                onChange(customCandidate)
+                onChange(view.customCandidate ?? '')
                 close()
               }}
             >
-              使用「{customCandidate}」
+              使用「{view.customCandidate}」
             </li>
           ) : null}
-          {filtered.map((o) => (
+          {view.filtered.map((o) => (
             <li
               key={o.value}
               className={cx('search-select-item', o.value === value && 'on')}
@@ -696,7 +684,7 @@ export function SearchSelect({
               {o.label}
             </li>
           ))}
-          {filtered.length === 0 ? <li className="search-select-empty">{emptyHint ?? '没有匹配的选项'}</li> : null}
+          {view.filtered.length === 0 ? <li className="search-select-empty">{emptyHint ?? '没有匹配的选项'}</li> : null}
         </ul>
       ) : null}
     </div>
