@@ -2,6 +2,33 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.43.1] - 2026-10-22
+
+### 修：填了分类，重新打开植株时那一格是空的
+
+用户：「分类了之后打开没有」。
+
+数据其实**存上了**（数据库里那一株的 `category` 就是「月季」，列表角标也在），
+问题出在打开编辑弹窗时：`PlantEditor` 初始化表单是手动把系统列一个个搬进去的 ——
+
+```ts
+initial.nickname = plant.nickname
+initial.species_id = plant.speciesId
+initial.env_id = plant.envId
+initial.status = plant.status
+initial.acquired_at = plant.acquiredAt   // ← 到这儿就停了
+```
+
+1.43.0 新加的 `category` 也是系统列，不在 `attributes` 里，于是这块**没人搬**，
+那一格永远显示空 —— 看起来就像"分类没保存"。
+
+#### 改法
+
+- 补上 `if (plant.category) initial.category = plant.category`，并写清注释：
+  系统列不写在 attributes 里，新增系统列时这里必须同步
+- 自检 +2：`getPlant()` 单株读取也要带出分类、和列表读到的值一致
+  （渲染层的初始值没法在自检里测，但能保证"读得到"这一半不出错）
+  859 → **861**
 ## [1.43.0] - 2026-10-22
 
 ### 植株加「分类」，列表可按它筛选

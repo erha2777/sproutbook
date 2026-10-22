@@ -118,6 +118,11 @@ export function PlantEditorModal({
           initial.species_id = plant.speciesId
           initial.env_id = plant.envId
           initial.status = plant.status
+          /*
+           * 分类也是系统列。漏了这一步的后果是：保存成功、列表角标也在，
+           * 但再打开编辑时那一格是空的 —— 看起来就像"分类没存上"。
+           */
+          if (plant.category) initial.category = plant.category
           if (plant.acquiredAt) initial.acquired_at = plant.acquiredAt
           if (plant.potSize) initial.pot_size = plant.potSize
         } else {

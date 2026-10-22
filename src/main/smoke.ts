@@ -34,7 +34,7 @@ import { buildIdentifyMessages, parseIdentifyResponse } from './services/ai/iden
 import { chat } from './services/ai/client'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
-import { archivePlant, listPlantCategories, listPlants, plantStats, savePlant, setPlantCover } from './db/repo/plants'
+import { archivePlant, getPlant, listPlantCategories, listPlants, plantStats, savePlant, setPlantCover } from './db/repo/plants'
 import { addImage, archiveEnvironment, getEnvironment, getSetting, listCorruptSettings, listEnvironments, listImages, saveEnvironment, setSetting } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
@@ -499,6 +499,8 @@ export async function runSmoke(outFile: string): Promise<number> {
         JSON.stringify(byCat.map((p) => p.category))
       )
       check('分类下拉能读到它', listPlantCategories(db).includes('月季类'), JSON.stringify(listPlantCategories(db)))
+      check('单株读取也带出分类', getPlant(db, catSaved.plant?.id ?? 0)?.category === '月季类')
+      check('按 id 读回来的分类和列表一致', getPlant(db, catSaved.plant?.id ?? 0)?.category === catSaved.plant?.category)
       check('别的分类为空', listPlants(db, { category: '不存在的分类' }).items.length === 0)
       check(
         '按分类名也能搜索（并进 search_blob）',
