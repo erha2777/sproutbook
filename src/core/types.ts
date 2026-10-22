@@ -226,6 +226,8 @@ export interface Plant {
   nickname: string
   envId: number | null
   status: PlantStatus
+  /** 用户自己分的类（「月季类」「多肉类」），列表按它筛选 */
+  category: string | null
   acquiredAt: string | null
   potSize: string | null
   attributes: Record<string, FieldValue>

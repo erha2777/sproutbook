@@ -1,4 +1,4 @@
-/**
+﻿/**
  * preload：唯一的渲染进程 ↔ 主进程通道。
  *
  * 安全约束：
@@ -83,6 +83,7 @@ const api: SproutbookApi = {
   },
   plants: {
     list: (options) => call('plants:list', options ?? {}),
+      categories: () => call('plants:categories'),
     save: (payload) => call('plants:save', payload),
     setCover: (plantId, imageId) => call('plants:cover', plantId, imageId ?? null),
     remove: (id) => call('plants:delete', id),

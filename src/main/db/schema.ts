@@ -573,6 +573,11 @@ ALTER TABLE materials ADD COLUMN stock REAL;
 ALTER TABLE recipes ADD COLUMN available INTEGER NOT NULL DEFAULT 0;
 `
 /** 材料单价：每单位的价钱（元）。用来估「配一次土大概多少钱」。 */
+/** 植株分类：用户自己分的类（「月季类」「多肉类」），列表按它筛选。 */
+const V23_PLANT_CATEGORY = /* sql */ `
+ALTER TABLE plants ADD COLUMN category TEXT;
+CREATE INDEX idx_plants_category ON plants(category);
+`
 const V22_MATERIAL_PRICE = /* sql */ `
 ALTER TABLE materials ADD COLUMN price REAL;
 `
@@ -613,7 +618,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 19, name: 'environment_notes', sql: V19_ENV_NOTES },
   { version: 20, name: 'material_stock_recipe_available', sql: V20_MATERIAL_STOCK },
   { version: 21, name: 'plant_status_options', run: migratePlantStatusOptions },
-  { version: 22, name: 'material_price', sql: V22_MATERIAL_PRICE }
+  { version: 22, name: 'material_price', sql: V22_MATERIAL_PRICE },
+  { version: 23, name: 'plant_category', sql: V23_PLANT_CATEGORY }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

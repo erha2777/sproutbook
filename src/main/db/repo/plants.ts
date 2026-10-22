@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 植株仓储（实例层）—— 用户实际养的那一株。
  */
 
@@ -13,6 +13,7 @@ export interface PlantRow {
   nickname: string
   env_id: number | null
   status: string
+  category: string | null
   acquired_at: string | null
   pot_size: string | null
   substrate_recipe_id: number | null
@@ -63,6 +64,7 @@ function mapPlant(row: PlantRow): Plant {
     nickname: row.nickname,
     envId: row.env_id,
     status: row.status as PlantStatus,
+    category: row.category ?? null,
     acquiredAt: row.acquired_at,
     potSize: row.pot_size,
     attributes: jsonObject(row.attributes_json),
@@ -106,6 +108,8 @@ export interface PlantListOptions {
   status?: PlantStatus
   envId?: number
   speciesId?: number
+  /** 分类筛选：用户自己分的类；传空串表示「未分类」 */
+  category?: string
   sort?: PlantSort
   limit?: number
   offset?: number
@@ -130,6 +134,14 @@ export function listPlants(db: Db, options: PlantListOptions = {}): { items: Pla
   if (typeof options.speciesId === 'number') {
     where.push('p.species_id = ?')
     params.push(options.speciesId)
+  }
+  if (options.category !== undefined) {
+    // '' = 未分类：单独用一个筛选入口，不要把"没填"混进某个分类里
+    if (options.category === '') where.push('(p.category IS NULL OR p.category = \'\')')
+    else {
+      where.push('p.category = ?')
+      params.push(options.category)
+    }
   }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
@@ -168,6 +180,16 @@ export function listPlants(db: Db, options: PlantListOptions = {}): { items: Pla
     offset
   )
   return { items: rows.map(mapPlantListItem), total }
+}
+
+
+/** 现有分类（去重、去空）。筛选下拉用它，避免手打错字。 */
+export function listPlantCategories(db: Db): string[] {
+  return db
+    .all<{ category: string }>(
+      "SELECT DISTINCT category FROM plants WHERE archived_at IS NULL AND category IS NOT NULL AND category <> '' ORDER BY category"
+    )
+    .map((row) => row.category)
 }
 
 export function getPlant(db: Db, id: number): PlantListItem | null {
@@ -284,6 +306,12 @@ export function savePlant(db: Db, input: SavePlantInput): SavePlantResult {
     const status =
       input.status ??
       ((fromCol('status') as PlantStatus | undefined) ?? (existingRow?.status as PlantStatus | undefined) ?? 'growing')
+    /*
+     * 分类是用户自己的词（「月季类」「多肉类」），只做 trim：
+     * 空串按"没分类"存 null，方便筛选时用 IS NULL 表示"未分类"。
+     */
+    const rawCategory = 'category' in col ? col.category : existingRow?.category
+    const category = typeof rawCategory === 'string' && rawCategory.trim() ? rawCategory.trim() : null
     const acquiredAt = (col.acquired_at as string | undefined) ?? existingRow?.acquired_at ?? null
     const potSize = (col.pot_size as string | undefined) ?? existingRow?.pot_size ?? null
     const notes = input.notes !== undefined ? input.notes : (existingRow?.notes ?? null)
@@ -291,7 +319,7 @@ export function savePlant(db: Db, input: SavePlantInput): SavePlantResult {
     const speciesName = speciesId
       ? (db.scalar<string>('SELECT common_name FROM species WHERE id = ?', speciesId) ?? '')
       : ''
-    const searchBlob = [nickname, speciesName, notes ?? '', potSize ?? '']
+    const searchBlob = [nickname, speciesName, category ?? '', notes ?? '', potSize ?? '']
       .concat(Object.values(mergedAttrs).map((v) => (Array.isArray(v) ? v.join(' ') : String(v ?? ''))))
       .join(' ')
       .toLowerCase()
@@ -301,13 +329,14 @@ export function savePlant(db: Db, input: SavePlantInput): SavePlantResult {
     let savedId = id
     if (savedId) {
       db.run(
-        `UPDATE plants SET species_id=?, nickname=?, env_id=?, status=?, acquired_at=?, pot_size=?,
+        `UPDATE plants SET species_id=?, nickname=?, env_id=?, status=?, category=?, acquired_at=?, pot_size=?,
            attributes_json=?, notes=?, search_blob=?, updated_at=datetime('now')
          WHERE id=?`,
         speciesId,
         nickname,
         envId,
         status,
+        category,
         acquiredAt,
         potSize,
         JSON.stringify(mergedAttrs),
@@ -317,12 +346,13 @@ export function savePlant(db: Db, input: SavePlantInput): SavePlantResult {
       )
     } else {
       const r = db.run(
-        `INSERT INTO plants (species_id, nickname, env_id, status, acquired_at, pot_size, attributes_json, notes, search_blob)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO plants (species_id, nickname, env_id, status, category, acquired_at, pot_size, attributes_json, notes, search_blob)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         speciesId,
         nickname,
         envId,
         status,
+        category,
         acquiredAt,
         potSize,
         JSON.stringify(mergedAttrs),

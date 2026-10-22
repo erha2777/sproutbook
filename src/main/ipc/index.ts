@@ -1,4 +1,4 @@
-﻿/**
+/**
  * IPC 注册中心。
  *
  * 统一约定：
@@ -29,7 +29,7 @@ import {
   updateField
 } from '../db/repo/fields'
 import { archiveSpecies, familyStats, getSpecies, listSpecies, saveSpecies, verifySpeciesFields } from '../db/repo/species'
-import { archivePlant, getPlant, listPlants, plantStats, savePlant, setPlantCover } from '../db/repo/plants'
+import { archivePlant, getPlant, listPlantCategories, listPlants, plantStats, savePlant, setPlantCover } from '../db/repo/plants'
 import {
   addImage,
   archiveEnvironment,
@@ -784,6 +784,7 @@ function registerSpeciesIpc(): void {
 
 function registerPlantIpc(): void {
   handle('plants:list', (options: Parameters<typeof listPlants>[1]) => listPlants(getDb(), options ?? {}))
+  handle('plants:categories', () => listPlantCategories(getDb()))
 
 
   handle('plants:save', (payload: Parameters<typeof savePlant>[1]) => savePlant(getDb(), payload))

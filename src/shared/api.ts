@@ -240,11 +240,15 @@ export interface SproutbookApi {
       status?: PlantStatus
       envId?: number
       speciesId?: number
+      /** 分类筛选：'' = 未分类 */
+      category?: string
       /** 最近改动 / 入手时间 / 购入价格 */
       sort?: 'updated' | 'acquired' | 'price'
       limit?: number
       offset?: number
     }): Promise<{ items: PlantListItem[]; total: number }>
+    /** 现有分类（去重、去空），给筛选下拉用 */
+    categories(): Promise<string[]>
     save(payload: {
       id?: number
       speciesId?: number | null

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 端到端自检。
  *
  * 刻意**不依赖 electron** —— 只用 node:sqlite + 文件系统，因此：
@@ -34,7 +34,7 @@ import { buildIdentifyMessages, parseIdentifyResponse } from './services/ai/iden
 import { chat } from './services/ai/client'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
-import { archivePlant, listPlants, plantStats, savePlant, setPlantCover } from './db/repo/plants'
+import { archivePlant, listPlantCategories, listPlants, plantStats, savePlant, setPlantCover } from './db/repo/plants'
 import { addImage, archiveEnvironment, getEnvironment, getSetting, listCorruptSettings, listEnvironments, listImages, saveEnvironment, setSetting } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
@@ -479,6 +479,35 @@ export async function runSmoke(outFile: string): Promise<number> {
 
     const plantSearch = listPlants(db, { query: '月季' })
     check('植株可按物种名搜索', plantSearch.items.some((p) => p.id === plantId))
+
+    /*
+     * 分类是用户自己的词：两株不同物种也可以都归到「月季类」。
+     * 存在 plants.category 这一列（不是动态字段），筛选直接走 SQL。
+     */
+    {
+      const catSaved = savePlant(db, {
+        speciesId,
+        nickname: '分类对照株',
+        values: { nickname: '分类对照株', category: '  月季类  ' }
+      })
+      check('分类能存下来（首尾空格被去掉）', catSaved.plant?.category === '月季类', String(catSaved.plant?.category))
+      const byCat = listPlants(db, { category: '月季类' }).items
+      check('按分类筛得到这一株', byCat.some((p) => p.id === catSaved.plant?.id), String(byCat.length))
+      check(
+        '按分类筛不会带出别的株',
+        byCat.every((p) => p.category === '月季类'),
+        JSON.stringify(byCat.map((p) => p.category))
+      )
+      check('分类下拉能读到它', listPlantCategories(db).includes('月季类'), JSON.stringify(listPlantCategories(db)))
+      check('别的分类为空', listPlants(db, { category: '不存在的分类' }).items.length === 0)
+      check(
+        '按分类名也能搜索（并进 search_blob）',
+        listPlants(db, { query: '月季类' }).items.some((p) => p.id === catSaved.plant?.id)
+      )
+      // 清空分类：空串 = 未分类，能被「未分类」筛出来
+      savePlant(db, { id: catSaved.plant?.id, speciesId, nickname: '分类对照株', values: { category: '' } })
+      check('清空分类后是未分类', listPlants(db, { category: '' }).items.some((p) => p.id === catSaved.plant?.id))
+    }
 
     /*
      * 排序：入手时间、购入价格。

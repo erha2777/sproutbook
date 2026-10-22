@@ -298,6 +298,13 @@ const plantFields: Seed[] = [
     helpText: '位置档案决定了光照匹配与霜冻预警。可在「设置 → 养护位置」里维护。'
   },
   {
+    key: 'category',
+    label: '分类',
+    groupName: '基础',
+    type: 'text',
+    helpText: '你自己分的类，比如「月季类」「多肉类」。不同物种也能归到同一类，列表里可以按它筛选。'
+  },
+  {
     key: 'status',
     label: '状态',
     groupName: '基础',
@@ -370,6 +377,7 @@ export const SYSTEM_COLUMNS: Record<string, string> = {
   species_id: 'species_id',
   env_id: 'env_id',
   status: 'status',
+  category: 'category',
   acquired_at: 'acquired_at'
 }
 

@@ -65,6 +65,9 @@ export function GardenPage({
    */
   const [view, setView] = useState<'scene' | 'list'>('list')
   const [sort, setSort] = useState<'updated' | 'acquired' | 'price'>('updated')
+  /** 分类筛选：'' = 全部，'__none__' = 未分类（和真实分类名不会撞） */
+  const [category, setCategory] = useState('')
+  const [categories, setCategories] = useState<string[]>([])
   const [editing, setEditing] = useState<PlantListItem | 'new' | null>(null)
 
   const debouncedQuery = useDebounced(query)
@@ -72,23 +75,26 @@ export function GardenPage({
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [list, stat, envs, species, openTasks] = await Promise.all([
+      const [list, stat, envs, species, openTasks, cats] = await Promise.all([
         window.api.plants.list({
           query: debouncedQuery || undefined,
           status: status || undefined,
           envId: envId ? Number(envId) : undefined,
+          category: category === '' ? undefined : category === '__none__' ? '' : category,
           sort
         }),
         window.api.plants.stats(currentMonth()),
         window.api.env.list(),
         window.api.species.list({ limit: 500 }),
-        window.api.care.tasks({ status: 'open' })
+        window.api.care.tasks({ status: 'open' }),
+        window.api.plants.categories()
       ])
       setLoadError(null)
       setItems(list.items)
       setStats(stat)
       setEnvironments(envs)
       setSpeciesList(species.items)
+      setCategories(cats)
 
       // 每株只留最近的一条待办：地块上放不下更多，也没必要
       const byPlant: Record<number, CareTaskListItem> = {}
@@ -108,7 +114,7 @@ export function GardenPage({
     } finally {
       setLoading(false)
     }
-  }, [debouncedQuery, status, envId, sort, toast])
+  }, [debouncedQuery, status, envId, category, sort, toast])
 
   useEffect(() => {
     void reload()
@@ -117,6 +123,17 @@ export function GardenPage({
   const envOptions = useMemo(
     () => [{ value: '', label: '全部位置' }, ...environments.map((e) => ({ value: String(e.id), label: e.name }))],
     [environments]
+  )
+
+
+  /** 分类下拉：全部 / 未分类 / 现有分类（按名字排） */
+  const categoryOptions = useMemo(
+    () => [
+      { value: '', label: '全部分类' },
+      { value: '__none__', label: '未分类' },
+      ...categories.map((c) => ({ value: c, label: c }))
+    ],
+    [categories]
   )
 
   const sortOptions = useMemo(
@@ -346,6 +363,9 @@ export function GardenPage({
             <div style={{ flex: '0 1 150px', minWidth: 120 }}>
               <SelectInput value={envId} onChange={(v) => patch({ envId: v })} options={envOptions} />
             </div>
+            <div style={{ flex: '0 1 150px', minWidth: 130 }} title="按分类筛选（分类在植株详情里自己填）">
+              <SelectInput value={category} onChange={setCategory} options={categoryOptions} />
+            </div>
             {view === 'list' ? (
               <div style={{ flex: '0 1 190px', minWidth: 150 }} title="列表排序方式">
                 <SelectInput
@@ -512,6 +532,7 @@ function PlantCard({ plant, onClick }: { plant: PlantListItem; onClick: () => vo
             {PLANT_STATUS_LABELS[plant.status]}
           </Badge>
           {plant.envName ? <Badge tone="info">{plant.envName}</Badge> : <Badge tone="muted">未分配位置</Badge>}
+          {plant.category ? <Badge tone="info">{plant.category}</Badge> : null}
           {plant.acquiredAt ? <Badge tone="muted">{plant.acquiredAt}</Badge> : null}
           {/* 购入价格：填了才显示，没填的人不会看到一排「¥—」 */}
           {typeof plant.attributes.purchase_price === 'number' ? (
