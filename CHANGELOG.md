@@ -2,6 +2,34 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.46.0] - 2026-10-22
+
+### 应用图标
+
+用户：「你能帮应用设计个图标 logo 吗」。
+
+之前打包日志里一直有一行 `default Electron icon is used reason=application icon is not set` ——
+exe、开始菜单、任务栏全是 Electron 的默认图标。
+
+#### 设计
+
+像素风「陶土花盆 + 一株两片叶子的嫩芽」，配色跟应用一致（木头色描边 + 嫩绿 + 陶土）。
+垫一块**浅米色圆角底板**：透明图标在深色桌面上轮廓会糊，垫底之后 16px 也立得住。
+
+为什么是花盆不是书：16px 下「书」只剩一条横杠，「盆 + 芽」的轮廓还认得出。
+
+#### 实现
+
+- `scripts/make-app-icon.py`：**程序化生成**（和皮肤、天气图标一样，仓库里不放二进制母版）
+  - 32×32 母版，全部档位最近邻放大（16/24/32/48/64/128/256/512）
+  - 先画填充，再由蒙版外扩减自身得到 1px 描边 —— 比手描更稳
+  - 输出 `build/icon.png`（512）、`build/icon.ico`（多尺寸）和 `.cache/app-icon-preview.png`
+  - 预览图分**浅色 / 深色**两行，同一组尺寸并排看
+- `electron-builder.yml`：`win.icon: build/icon.ico`、`linux.icon: build/icon.png`
+- 开发模式给 BrowserWindow 指定 `build/icon.png`，`electron .` 时任务栏也是这个图标
+
+验证方式：打包后用 `ExtractAssociatedIcon` 从 exe 里取出来看（确实换掉了），
+打包日志里那行 `default Electron icon is used` 也消失了。
 ## [1.45.0] - 2026-10-22
 
 ### 「我的花园」加「问问 AI」

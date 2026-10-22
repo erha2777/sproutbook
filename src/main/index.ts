@@ -248,6 +248,14 @@ function createWindow(): void {
     title: 'Sproutbook',
     autoHideMenuBar: true,
     /*
+     * 开发模式的任务栏图标。
+     *
+     * 打包版用 exe 自带的图标（electron-builder 已经把 build/icon.ico 嵌进可执行文件），
+     * 但 `electron .` 启动的是 Electron 本身的 exe，不指定就显示 Electron 的默认图标。
+     * build/ 不进 asar，所以只在开发模式下按 appPath 找。
+     */
+    ...(app.isPackaged ? {} : { icon: join(app.getAppPath(), 'build', 'icon.png') }),
+    /*
      * 无边框 + 自制标题栏（渲染层 TitleBar）。
      * 原生标题栏是系统灰白样式，和像素风不搭；macOS 用 hiddenInset 保留
      * 红绿灯按钮，Windows / Linux 完全自己画。

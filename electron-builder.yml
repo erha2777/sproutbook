@@ -32,6 +32,8 @@ files:
 asar: true
 
 win:
+  # 应用图标：build/icon.ico（由 scripts/make-app-icon.py 生成，16~256 多尺寸）
+  icon: build/icon.ico
   target:
     - target: nsis
       arch: [x64]
@@ -65,6 +67,7 @@ mac:
   artifactName: ${productName}-${version}-mac-${arch}.${ext}
 
 linux:
+  icon: build/icon.png
   target:
     - AppImage
   category: Utility
