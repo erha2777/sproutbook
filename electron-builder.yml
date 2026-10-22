@@ -48,6 +48,11 @@ win:
     # 窗口图标：主进程从 exe 同级目录读它（asar 里的路径 nativeImage 读不稳）
     - from: build/icon.png
       to: icon.png
+    # 图标文件也放一份：桌面快捷方式可以显式指向它。
+    # 指向「另一个文件」能让 Windows 的图标缓存换一个 key ——
+    # 否则快捷方式会一直显示创建时缓存下来的旧图标（Electron 的原子核）。
+    - from: build/icon.ico
+      to: icon.ico
 
 nsis:
   oneClick: false
