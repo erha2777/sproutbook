@@ -453,6 +453,20 @@ Sproutbook.exe --no-sandbox --disable-gpu
 
 把它发出来通常一眼就能定位。
 
+### 换了图标，但桌面快捷方式还是旧的默认图标
+
+这是 Windows 的图标缓存，不是图标没打进去。快捷方式的图标在创建时会被缓存，
+之后即使 exe 换了图标也还显示旧的。
+
+```powershell
+# 1) 删掉旧快捷方式，再重新创建（右键 exe → 发送到 → 桌面快捷方式）
+# 2) 刷新资源管理器的图标缓存
+ie4uinit.exe -show
+```
+
+仍然不刷新时：注销重登，或重启资源管理器（任务管理器里重启 `explorer.exe`）。
+用安装包安装的话，安装程序会新建快捷方式，一般不会遇到这个问题。
+
 **Windows 提示「已保护你的电脑」/ macOS 提示「已损坏」**
 安装包没有代码签名，这是正常现象。Windows：点「更多信息 → 仍要运行」。
 macOS：右键点图标选「打开」，或执行 `xattr -dr com.apple.quarantine /Applications/Sproutbook.app`。
