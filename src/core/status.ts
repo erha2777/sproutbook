@@ -51,6 +51,24 @@ export const PLANT_STATUS_KEYS: Record<string, PlantStatus> = (() => {
   return map
 })()
 
+/**
+ * 状态的展示顺序：从"还没发芽"到"送人"。
+ *
+ * 数据库里的 `field_definitions.options_json` 存的就是这个数组 ——
+ * **加新状态必须同时改这里和那条字段定义**，否则下拉里看不到
+ * （迁移 v21 会把老库的 5 项换成这一份）。
+ */
+export const PLANT_STATUS_ORDER: PlantStatus[] = [
+  'seed',
+  'growing',
+  'budding',
+  'blooming',
+  'recovering',
+  'sick',
+  'dormant',
+  'dead',
+  'gifted'
+]
 /** 供下拉框使用：带图标的选项。 */
 export const PLANT_STATUS_OPTIONS: Array<{ value: PlantStatus; label: string }> = (
   Object.keys(PLANT_STATUS_LABELS) as PlantStatus[]

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 端到端自检。
  *
  * 刻意**不依赖 electron** —— 只用 node:sqlite + 文件系统，因此：
@@ -80,6 +80,7 @@ import {
 } from '../core/sprite'
 import { WEATHER_ICON_KINDS, WEATHER_ICON_SIZE, buildWeatherIcon } from '../core/weatherIcon'
 import { THEME_BACKDROP, resolveBackdrops } from '../core/media'
+import { PLANT_STATUS_ORDER } from '../core/status'
 import { deriveCarePhase } from '../core/phase'
 import { defaultFieldDefinitions } from '../core/defaultTemplate'
 import {
@@ -443,6 +444,15 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('阶段：都不沾边就是 growing', phaseOf({ bloomMonths: [6], today: '2026-02-10' }) === 'growing')
       check('阶段：枯死不再谈物候', phaseOf({ status: 'dead', bloomMonths: [5], today: '2026-05-01' }) === null)
       check('阶段：说明里写清依据（不是内部键名）', deriveCarePhase({ bloomMonths: [5], today: '2026-05-01' }).reason.includes('开花'), deriveCarePhase({ bloomMonths: [5], today: '2026-05-01' }).reason)
+
+    // 状态的选项存活在 field_definitions 里（不是代码），加状态时两处必须同时改：
+    // 忘了改模板 → 老库下拉里看不到新状态（用户就是这么发现的）
+    {
+      const statusField = defaultFieldDefinitions().find((d) => d.ownerKind === 'plant' && d.key === 'status')
+      check('状态字段覆盖全部 9 个状态', PLANT_STATUS_ORDER.every((k) => statusField?.options?.includes(k)), JSON.stringify(statusField?.options))
+      check('状态选项顺序与展示顺序一致', JSON.stringify(statusField?.options) === JSON.stringify(PLANT_STATUS_ORDER), JSON.stringify(statusField?.options))
+    }
+
     }
     check('校验失败时 species 为 null（不是 id:0 的假对象）', missing.species === null, String(missing.species))
 

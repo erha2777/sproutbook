@@ -8,6 +8,7 @@
  */
 
 import type { Db } from './connection'
+import { PLANT_STATUS_ORDER } from '../../core/status'
 
 export interface Migration {
   version: number
@@ -606,7 +607,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 17, name: 'safety_visibility', run: migrateSafetyVisibility },
   { version: 18, name: 'environment_images', sql: V18_ENV_IMAGES },
   { version: 19, name: 'environment_notes', sql: V19_ENV_NOTES },
-  { version: 20, name: 'material_stock_recipe_available', sql: V20_MATERIAL_STOCK }
+  { version: 20, name: 'material_stock_recipe_available', sql: V20_MATERIAL_STOCK },
+  { version: 21, name: 'plant_status_options', run: migratePlantStatusOptions }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */
@@ -637,3 +639,39 @@ export function migrateSafetyVisibility(db: Db): void {
 }
 
 export const LATEST_VERSION = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0)
+/**
+ * 把「状态」字段的选项补成新的 9 项。
+ *
+ * 状态的选项存在 `field_definitions.options_json`，是**首次启动时种下的一份数据** ——
+ * `seedFieldDefinitions` 只补缺失字段、不会覆盖已有字段，所以老库升级后
+ * 下拉里仍然只有「生长 / 休眠 / 有状况 / 枯死 / 送人」五项（用户就是这么发现的）。
+ *
+ * 这里只动这一条系统字段，并且只在"新选项没齐"时覆盖：
+ * 已经是新的就不碰（幂等）。
+ */
+function migratePlantStatusOptions(db: Db): void {
+  const row = db.get<{ id: number; options_json: string | null }>(
+    "SELECT id, options_json FROM field_definitions WHERE owner_kind = 'plant' AND key = 'status'"
+  )
+  if (!row) return
+  let parsed: unknown = []
+  try {
+    parsed = JSON.parse(row.options_json ?? '[]')
+  } catch {
+    parsed = []
+  }
+  const existing = Array.isArray(parsed) ? parsed.map(String) : []
+  if (!PLANT_STATUS_ORDER.every((key) => existing.includes(key))) {
+    db.run('UPDATE field_definitions SET options_json = ? WHERE id = ?', JSON.stringify(PLANT_STATUS_ORDER), row.id)
+  }
+
+  // 说明文案一起换掉（只在还是旧文案时改，不覆盖用户自己写的）
+  const help = db.get<{ help_text: string | null }>('SELECT help_text FROM field_definitions WHERE id = ?', row.id)
+  if (help?.help_text === '决定花园里那一株显示成什么样子。') {
+    db.run(
+      'UPDATE field_definitions SET help_text = ? WHERE id = ?',
+      '你观察到的当前状态：还没发芽、正在长、有花芽、开花、缓苗、病虫害…… 花园里按它画。',
+      row.id
+    )
+  }
+}

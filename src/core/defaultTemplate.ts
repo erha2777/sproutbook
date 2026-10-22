@@ -31,6 +31,7 @@ import {
   LEAF_SHAPE_OPTIONS,
   SPREAD_OPTIONS
 } from './sprite'
+import { PLANT_STATUS_ORDER } from './status'
 
 type Seed = Omit<NewFieldDefinition, 'ownerKind'>
 
@@ -301,9 +302,10 @@ const plantFields: Seed[] = [
     label: '状态',
     groupName: '基础',
     type: 'select',
-    // 选项是存储值（英文键）；显示名由渲染层映射，见 lib/util.ts 的 PLANT_STATUS_LABELS
-    options: ['growing', 'dormant', 'sick', 'dead', 'gifted'],
-    helpText: '决定花园里那一株显示成什么样子。'
+    // 选项是存储值（英文键）；显示名由渲染层映射，见 lib/util.ts 的 PLANT_STATUS_LABELS。
+    // 顺序与 PLANT_STATUS_ORDER 一致；物候阶段是另一套（自动推算），不要混进来。
+    options: [...PLANT_STATUS_ORDER],
+    helpText: '你观察到的当前状态：还没发芽、正在长、有花芽、开花、缓苗、病虫害…… 花园里按它画。'
   },
   { key: 'acquired_at', label: '入手 / 播种日期', groupName: '基础', type: 'date', helpText: '生长进度与养护计划的时间基准。' },
   {
