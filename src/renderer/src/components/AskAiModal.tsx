@@ -1,12 +1,15 @@
 /**
  * 「问问 AI」弹窗：选一株 + 问一个问题，模型基于**这一株的全部档案**回答。
  *
- * 和「AI 补全」不同，这里不写任何字段 —— 纯问答。所以界面只有：
- * 选植株 → 写问题（或点一个常见问题）→ 看答案。
+ * 和「AI 补全」不同，这里不写任何字段 —— 纯问答。
+ *
+ * 照片：可以勾选这一株的图片（植株相册 + 养护记录里的），随问题一起发给模型。
+ * 只勾了文字不勾图也能问 —— 模型看不看图，取决于有没有勾。
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import type { CareLog, ImageRecord } from '@core/types'
 import type { PlantListItem } from '@shared/api'
 import { Button, Field, Modal, Notice, Spinner, TextArea, useToast } from './ui'
 import { SearchSelect } from './ui'
@@ -18,6 +21,22 @@ const PRESETS = [
   '叶子发黄可能是什么原因？',
   '这个状态正常吗？接下来要做什么？'
 ]
+
+/** 一次最多带 8 张：再多既贵又没必要，模型也看不过来（和主进程的上限一致） */
+const MAX_PHOTOS = 8
+
+/** 候选照片：可能是植株相册里的，也可能是某条养护记录里的 */
+interface PhotoOption {
+  id: number
+  path: string
+  thumbPath: string | null
+  /** 来自哪里：相册 / 某天的养护记录 */
+  from: string
+}
+
+function photoSrc(photo: { path: string; thumbPath: string | null }): string {
+  return `plantimg://local/${encodeURIComponent(photo.thumbPath ?? photo.path)}`
+}
 
 export function AskAiModal({
   plants,
@@ -32,6 +51,10 @@ export function AskAiModal({
   const [asking, setAsking] = useState(false)
   const [answer, setAnswer] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** 这一株能带的照片（相册 + 养护记录），以及勾中的 id */
+  const [photos, setPhotos] = useState<PhotoOption[]>([])
+  const [picked, setPicked] = useState<number[]>([])
+  const [loadingPhotos, setLoadingPhotos] = useState(false)
 
   const options = useMemo(
     () =>
@@ -44,6 +67,63 @@ export function AskAiModal({
         .sort((a, b) => a.label.localeCompare(b.label, 'zh')),
     [plants]
   )
+
+  /* 换植株时重新拉它的照片（相册 + 最近的养护记录），并清空勾选 */
+  useEffect(() => {
+    const id = Number(plantId)
+    if (!plantId || !Number.isFinite(id)) {
+      setPhotos([])
+      setPicked([])
+      return
+    }
+    let alive = true
+    setLoadingPhotos(true)
+    void (async () => {
+      try {
+        const [album, logs] = await Promise.all([
+          window.api.images.list({ plantId: id }),
+          window.api.care.logs(id, 100)
+        ])
+        if (!alive) return
+        const fromAlbum: PhotoOption[] = (album as ImageRecord[]).map((img) => ({
+          id: img.id,
+          path: img.path,
+          thumbPath: img.thumbPath,
+          from: '植株相册'
+        }))
+        const fromLogs: PhotoOption[] = (logs as CareLog[])
+          .filter((log) => log.images.length > 0)
+          .flatMap((log) =>
+            log.images.map((img) => ({
+              id: img.id,
+              path: img.path,
+              thumbPath: img.thumbPath,
+              from: `养护记录 ${log.logDate}`
+            }))
+          )
+        setPhotos([...fromAlbum, ...fromLogs])
+        setPicked([])
+      } catch {
+        if (alive) setPhotos([])
+      } finally {
+        if (alive) setLoadingPhotos(false)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [plantId])
+
+  const togglePhoto = (id: number): void => {
+    setPicked((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id)
+      if (prev.length >= MAX_PHOTOS) {
+        toast.push(`一次最多带 ${MAX_PHOTOS} 张照片`, 'error')
+        return prev
+      }
+      return [...prev, id]
+    })
+  }
 
   const ask = async (): Promise<void> => {
     if (!plantId) {
@@ -61,7 +141,8 @@ export function AskAiModal({
       const result = await window.api.ai.askPlant({
         requestId: `ask-${Date.now()}`,
         plantId: Number(plantId),
-        question: question.trim()
+        question: question.trim(),
+        imageIds: picked
       })
       if (result.ok) {
         setAnswer(result.answer)
@@ -82,7 +163,8 @@ export function AskAiModal({
       footer={
         <>
           <span className="small muted">
-            会把这一株的档案（物种、位置、状态、阶段、未完成任务、最近日志）一起发给你配置的 AI 服务。
+            会把这一株的档案（物种、位置、状态、阶段、未完成任务、最近日志）
+            {picked.length > 0 ? `和 ${picked.length} 张照片` : ''}一起发给你配置的 AI 服务。
           </span>
           <span className="spacer" />
           <Button onClick={onClose}>关闭</Button>
@@ -118,6 +200,39 @@ export function AskAiModal({
             </Button>
           ))}
         </div>
+
+        {plantId ? (
+          <Field
+            label={`带上照片（选填，最多 ${MAX_PHOTOS} 张${picked.length > 0 ? `，已选 ${picked.length}` : ''}）`}
+            help="勾两张叶子的近照、一张整盆照，模型能判断的东西多得多。不勾也能问。"
+          >
+            {loadingPhotos ? (
+              <Spinner label="正在读取照片…" />
+            ) : photos.length === 0 ? (
+              <div className="small muted">这一株还没有照片（相册和养护记录里都没有）。</div>
+            ) : (
+              <div className="ask-ai-photos">
+                {photos.map((photo) => {
+                  const on = picked.includes(photo.id)
+                  return (
+                    <button
+                      key={photo.id}
+                      type="button"
+                      className={`ask-ai-photo${on ? ' on' : ''}`}
+                      title={on ? `取消选择（${photo.from}）` : `选这张（${photo.from}）`}
+                      onClick={() => togglePhoto(photo.id)}
+                      disabled={asking}
+                    >
+                      <img src={photoSrc(photo)} alt="" />
+                      <span className="ask-ai-photo-from">{photo.from}</span>
+                      {on ? <span className="ask-ai-photo-check">✓</span> : null}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </Field>
+        ) : null}
 
         {asking ? (
           <Spinner label="正在读这一株的档案并组织回答…" />

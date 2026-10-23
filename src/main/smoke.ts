@@ -538,6 +538,10 @@ export async function runSmoke(outFile: string): Promise<number> {
       const messages = buildAskPlantMessages(dossier, '现在要不要施肥？')
       check('系统提示词要求只依据档案', messages.system.includes('只根据档案') || messages.system.includes('不要编造'))
       check('用户消息里有档案和问题', messages.user.includes('前院莫利纳尔') && messages.user.includes('现在要不要施肥？'))
+      const withPhotos = buildAskPlantMessages(dossier, '帮我看看叶子', 3)
+      check('带照片时提示里写明张数', withPhotos.user.includes('3 张'), withPhotos.user.slice(-160))
+      check('带照片时提醒看叶色/虫斑/盆土', withPhotos.user.includes('叶子颜色') && withPhotos.user.includes('盆土'))
+      check('没有照片时不出现照片段', !messages.user.includes('随消息附上的照片'))
     }
     }
 

@@ -184,9 +184,19 @@ export interface AskPlantMessages {
   user: string
 }
 
-export function buildAskPlantMessages(dossier: string, question: string): AskPlantMessages {
+export function buildAskPlantMessages(
+  dossier: string,
+  question: string,
+  /** 随消息附上的照片数量；0 / 省略表示纯文本提问 */
+  imageCount = 0
+): AskPlantMessages {
+  const photoNote =
+    imageCount > 0
+      ? `\n\n【随消息附上的照片】\n共 ${imageCount} 张，都是这株植物的照片（植株相册或养护记录里选的）。\n` +
+        '看照片时请注意：叶子颜色与形态、有没有斑点/虫、盆土干湿、枝条状态。看不清楚就说明看不清，不要猜。'
+      : ''
   return {
     system: ASK_PLANT_SYSTEM_PROMPT,
-    user: `【这株植物的档案】\n${dossier}\n\n【问题】\n${question.trim()}`
+    user: `【这株植物的档案】\n${dossier}${photoNote}\n\n【问题】\n${question.trim()}`
   }
 }

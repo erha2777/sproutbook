@@ -110,6 +110,7 @@ import type {
 import { autofillSpecies } from '../services/ai/autofill'
 import { identifyPlant } from '../services/ai/identify'
 import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } from '../services/ai/client'
+import type { ChatContentPart } from '../services/ai/client'
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
 import { importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
 import { listMusic } from '../services/music'
@@ -1282,7 +1283,7 @@ function registerAiIpc(): void {
    * 这条只是**问问题**，不写任何字段 —— 所以没有 pendingReview 那一套，直接返回答案。
    * 每次调用照样进 ai_runs 审计表（kind: plant-qa），出问题能复盘它看到了什么。
    */
-  handle('ai:askPlant', async (payload: { requestId: string; plantId: number; question: string }) => {
+  handle('ai:askPlant', async (payload: { requestId: string; plantId: number; question: string; imageIds?: number[] }) => {
     const fail = (message: string) => ({ ok: false as const, answer: '', model: null, message })
 
     const question = String(payload.question ?? '').trim()
@@ -1292,13 +1293,46 @@ function registerAiIpc(): void {
     const settings = readAiSettings(db)
     const apiKey = getApiKey()
     if (!apiKey) return fail('还没有配置 API Key。到「设置 → AI 配置」填一个就能用。')
-    const model = (settings.chatModel ?? '').trim()
-    if (!model) return fail('还没有配置对话模型。到「设置 → AI 配置」填一个。')
+    const chatModel = (settings.chatModel ?? '').trim()
+    const visionModel = (settings.visionModel ?? '').trim()
 
     const plant = getPlant(db, payload.plantId)
     if (!plant) return fail('这一株已经不在了。')
     const species = plant.speciesId ? getSpecies(db, plant.speciesId) : null
     const env = plant.envId ? getEnvironment(db, plant.envId) : null
+
+    /*
+     * 选中的照片：植株相册里的，或者这株的养护记录里挂的。
+     * 只认这两类 —— 不能让界面塞任意 image id 进来读别的植株的照片。
+     * 最多 8 张：再多既贵又没必要，模型也看不过来。
+     */
+    const requested = (Array.isArray(payload.imageIds) ? payload.imageIds : [])
+      .filter((id) => Number.isFinite(id))
+      .slice(0, 24)
+    const imageParts: ChatContentPart[] = []
+    if (requested.length > 0) {
+      const rows = db.all<{ id: number; plant_id: number | null; log_id: number | null; path: string }>(
+        `SELECT id, plant_id, log_id, path FROM images WHERE id IN (${requested.map(() => '?').join(',')})`,
+        ...requested
+      )
+      const ownLogIds = new Set(
+        db
+          .all<{ id: number }>('SELECT id FROM care_logs WHERE plant_id = ?', plant.id)
+          .map((r) => r.id)
+      )
+      for (const row of rows) {
+        if (imageParts.length >= 8) break
+        const allowed = row.plant_id === plant.id || (row.log_id !== null && ownLogIds.has(row.log_id))
+        if (!allowed) continue
+        const file = join(imagesDir(), row.path)
+        if (!existsSync(file)) continue
+        imageParts.push({ type: 'image_url', image_url: { url: prepareImageDataUrl(file) } })
+      }
+    }
+
+    // 带图就必须用能看图的模型；没配视觉模型时沿用对话模型（deepseek-flash 本身就能读图）
+    const model = imageParts.length > 0 ? visionModel || chatModel : chatModel
+    if (!model) return fail('还没有配置对话模型。到「设置 → AI 配置」填一个。')
 
     // 字段 label 让人看得懂：档案是给模型读的，键名对它没意义
     const plantDefs = loadFieldDefinitions(db, 'plant', true)
@@ -1383,7 +1417,9 @@ function registerAiIpc(): void {
       today: todayIso()
     })
 
-    const messages = buildAskPlantMessages(dossier, question)
+    const messages = buildAskPlantMessages(dossier, question, imageParts.length)
+    const userContent: string | ChatContentPart[] =
+      imageParts.length > 0 ? [{ type: 'text', text: messages.user }, ...imageParts] : messages.user
     const controller = new AbortController()
     runningAi.set(payload.requestId, controller)
     try {
@@ -1393,7 +1429,7 @@ function registerAiIpc(): void {
         model,
         messages: [
           { role: 'system', content: messages.system },
-          { role: 'user', content: messages.user }
+          { role: 'user', content: userContent }
         ],
         temperature: settings.temperature,
         timeoutMs: Math.max(settings.timeoutMs ?? 60000, 90000),
@@ -1405,7 +1441,7 @@ function registerAiIpc(): void {
         baseUrl: settings.baseUrl,
         model: outcome.model || model,
         promptVersion: 'plant-qa-1',
-        input: { plantId: plant.id, question, dossier },
+        input: { plantId: plant.id, question, dossier, imageCount: imageParts.length, imageIds: requested },
         output: { answer: outcome.content },
         status: outcome.ok ? 'ok' : 'error',
         error: outcome.error ?? null,

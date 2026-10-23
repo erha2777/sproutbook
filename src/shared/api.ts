@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 渲染进程可用的 API 契约。
  *
  * preload 负责实现，renderer 只依赖这个接口 —— 这样两端永远不会因为通道名写错而静默失败：
@@ -213,7 +213,13 @@ export interface SproutbookApi {
      * 拿一株的完整档案问问题。只读不写：不产生待确认字段，不改任何数据。
      * requestId 用于取消；失败时 message 是给人看的原因。
      */
-    askPlant(payload: { requestId: string; plantId: number; question: string }): Promise<{
+    askPlant(payload: {
+      requestId: string
+      plantId: number
+      question: string
+      /** 要一起发给模型的照片（植株相册 / 养护记录里的）；最多 8 张 */
+      imageIds?: number[]
+    }): Promise<{
       ok: boolean
       answer: string
       model: string | null
