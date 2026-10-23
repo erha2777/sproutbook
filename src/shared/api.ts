@@ -149,15 +149,24 @@ export interface SproutbookApi {
      * 按季节分子目录的，season 就是那一季；顶层曲子 season 为 null。
      */
     music(): Promise<Array<{ name: string; file: string; season: MusicSeason | null; url: string }>>
-    /** 弹文件对话框添加音乐（复制进 <userData>/textures/music） */
-    importMusic(): Promise<{
+    /**
+     * 弹文件对话框添加音乐，复制进自选目录（没选就是数据目录）。
+     * season 传 'spring' 这类就落进对应季节子文件夹，和曲库的目录结构保持一致。
+     */
+    importMusic(season?: string | null): Promise<{
       canceled: boolean
       tracks: Array<{ name: string; file: string; season: MusicSeason | null; url: string }>
     }>
-    /** 删掉一首，返回剩余列表 */
-    removeMusic(name: string): Promise<
+    /** 删掉一首（参数是相对曲库的路径），返回剩余列表 */
+    removeMusic(file: string): Promise<
       Array<{ name: string; file: string; season: MusicSeason | null; url: string }>
     >
+    /** 音乐目录：custom 为 null 表示用默认的数据目录 */
+    musicDir(): Promise<{ custom: string | null; upload: string; dirs: string[] }>
+    /** 选一个目录当曲库；取消时 canceled = true */
+    pickMusicDir(): Promise<{ canceled: boolean; custom: string | null; upload: string; dirs: string[] }>
+    /** 恢复默认目录（数据目录下的 textures/music） */
+    resetMusicDir(): Promise<{ custom: string | null; upload: string; dirs: string[] }>
     /** 用户自己放的背景图（<userData>/textures/backgrounds，已缩到 1600 内的 data URL） */
     backdrops(): Promise<Array<{ name: string; url: string }>>
     /** 单独取某一张背景（列表里没有时兜底） */

@@ -12,7 +12,9 @@
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell } from 'electron'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { closeDatabase, dataDir, dbFilePath, getLastReport, imagesDir, initDatabase } from './db'
+import { closeDatabase, dataDir, dbFilePath, getDb, getLastReport, imagesDir, initDatabase } from './db'
+import { getSetting } from './db/repo/misc'
+import { setCustomMusicDir } from './services/music'
 import { registerIpc } from './ipc'
 import { handleImageProtocol, registerImageScheme } from './services/images'
 import { handleMusicProtocol, registerMusicScheme } from './services/music'
@@ -597,6 +599,16 @@ app.whenReady().then(async () => {
     registerIpc()
     handleImageProtocol()
 handleMusicProtocol()
+    /*
+     * 自选的音乐目录要在创建窗口**之前**生效：
+     * 协议处理器和列表都依赖它，晚一步就会出现「这一轮读的还是旧目录」。
+     */
+    try {
+      const custom = getSetting<string | null>(getDb(), 'music.dir', null)
+      setCustomMusicDir(typeof custom === 'string' && custom.trim() ? custom : null)
+    } catch (error) {
+      logStartup('音乐目录读取失败', error)
+    }
 
     if (!isDev) Menu.setApplicationMenu(null)
 

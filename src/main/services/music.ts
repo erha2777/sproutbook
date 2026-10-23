@@ -33,10 +33,34 @@ export interface MusicTrack {
   url: string
 }
 
+/**
+ * 用户自选的音乐目录（settings 里的 `music.dir`）。
+ *
+ * 协议处理器是全局注册的、拿不到 db，所以这里用模块变量：
+ * 启动时和设置页改动时由 IPC 层调用 `setCustomMusicDir` 同步过来。
+ */
+let customMusicDir: string | null = null
+
+export function setCustomMusicDir(dir: string | null): void {
+  customMusicDir = dir && dir.trim() ? dir.trim() : null
+}
+
+export function getCustomMusicDir(): string | null {
+  return customMusicDir
+}
+
+/** 当前生效的音乐目录（自选的排最前：同名的曲子优先用那里的） */
 export function musicDirs(): string[] {
-  const dirs = [join(app.getPath('userData'), 'textures', 'music')]
+  const dirs: string[] = []
+  if (customMusicDir) dirs.push(customMusicDir)
+  dirs.push(join(app.getPath('userData'), 'textures', 'music'))
   if (!app.isPackaged) dirs.push(join(app.getAppPath(), 'textures', 'music'))
-  return dirs
+  return [...new Set(dirs)]
+}
+
+/** 上传往哪儿放：自选目录优先，没有就用数据目录 */
+export function musicUploadDir(): string {
+  return customMusicDir ?? join(app.getPath('userData'), 'textures', 'music')
 }
 
 /** ready 之前调用 */

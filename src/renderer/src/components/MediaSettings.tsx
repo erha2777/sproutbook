@@ -2,40 +2,70 @@
  * 设置页的「声音与背景」。
  *
  * 音乐和背景图都放在 <userData>/textures 下（见 main/services/media.ts），
- * 这里负责：上传、选择、删除。选中的名字存进 settings（media.prefs），
- * 改完 dispatch 一个 window 事件，App 那边重跑加载 —— 不用把播放器状态提上来。
+ * 音乐目录可以改到任意文件夹（曲库可能放在项目目录 / 网盘里）。
+ * 这里负责：选目录、上传（可按季节放进子文件夹）、选曲、删除。
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { SEASON_LABELS, SEASON_ORDER } from '@core/music'
+import type { MusicSeason } from '@core/music'
 import { THEME_BACKDROP } from '@core/media'
 import { Button, Notice, cx, useToast } from './ui'
 
 interface Track {
   name: string
+  file: string
+  season: MusicSeason | null
   url: string
 }
+
+interface MediaPrefs {
+  musicTrack: string | null
+  backdrop: string | null
+  musicMode: 'season-random' | 'season-rotate' | 'single'
+  musicVolume: number
+}
+
+interface MusicDirState {
+  custom: string | null
+  upload: string
+  dirs: string[]
+}
+
+/** 上传目标：'' = 直接放曲库根目录（不分季节） */
+const UPLOAD_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: '不分季节（曲库根目录）' },
+  ...SEASON_ORDER.map((s) => ({ value: s, label: `${SEASON_LABELS[s]}季` }))
+]
 
 export function MediaSettings({ themePreview = null }: { themePreview?: string | null }): ReactNode {
   const toast = useToast()
   const [tracks, setTracks] = useState<Track[]>([])
-  const [backdrops, setBackdrops] = useState<Track[]>([])
-  const [prefs, setPrefs] = useState<{ musicTrack: string | null; backdrop: string | null }>({
+  const [backdrops, setBackdrops] = useState<Array<{ name: string; url: string }>>([])
+  const [prefs, setPrefs] = useState<MediaPrefs>({
     musicTrack: null,
-    backdrop: null
+    backdrop: null,
+    musicMode: 'season-random',
+    musicVolume: 0.3
   })
+  const [dirState, setDirState] = useState<MusicDirState>({ custom: null, upload: '', dirs: [] })
+  // 默认传到「其他（Other）」：和曲库现在的组织方式一致（四季各一个文件夹 + 其他）
+  const [uploadSeason, setUploadSeason] = useState('other')
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async (): Promise<void> => {
     try {
-      const [t, b, p] = await Promise.all([
+      const [t, b, p, d] = await Promise.all([
         window.api.app.music(),
         window.api.app.backdrops(),
-        window.api.app.mediaPrefs()
+        window.api.app.mediaPrefs(),
+        window.api.app.musicDir()
       ])
       setTracks(t)
       setBackdrops(b)
       setPrefs(p)
+      setDirState(d)
     } catch {
       // 读不到就显示空列表
     }
@@ -50,8 +80,11 @@ export function MediaSettings({ themePreview = null }: { themePreview?: string |
     window.dispatchEvent(new Event('sproutbook:media'))
   }
 
-  const pickTrack = async (name: string | null): Promise<void> => {
-    const next = await window.api.app.setMediaPrefs({ musicTrack: name })
+  const pickTrack = async (file: string | null): Promise<void> => {
+    // 选具体某首 = 单曲循环；选「当季随机」= 清掉单曲并回到默认模式
+    const next = await window.api.app.setMediaPrefs(
+      file === null ? { musicTrack: null, musicMode: 'season-random' } : { musicTrack: file, musicMode: 'single' }
+    )
     setPrefs(next)
     notify()
   }
@@ -62,12 +95,33 @@ export function MediaSettings({ themePreview = null }: { themePreview?: string |
     notify()
   }
 
+  const pickMusicDir = async (): Promise<void> => {
+    try {
+      const r = await window.api.app.pickMusicDir()
+      if (r.canceled) return
+      setDirState({ custom: r.custom, upload: r.upload, dirs: r.dirs })
+      await load()
+      notify()
+      toast.push('音乐目录已切换', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : '切换失败', 'error')
+    }
+  }
+
+  const resetMusicDir = async (): Promise<void> => {
+    const r = await window.api.app.resetMusicDir()
+    setDirState(r)
+    await load()
+    notify()
+  }
+
   const importMusic = async (): Promise<void> => {
     setBusy(true)
     try {
-      const r = await window.api.app.importMusic()
+      const r = await window.api.app.importMusic(uploadSeason || null)
       if (!r.canceled) {
-        toast.push(`已添加 ${r.tracks.length} 首`, 'success')
+        const where = uploadSeason ? `${SEASON_LABELS[uploadSeason as MusicSeason]}季的文件夹` : '曲库根目录'
+        toast.push(`已添加，放到${where}`, 'success')
         await load()
         notify()
       }
@@ -78,8 +132,9 @@ export function MediaSettings({ themePreview = null }: { themePreview?: string |
     }
   }
 
-  const removeMusic = async (name: string): Promise<void> => {
-    const r = await window.api.app.removeMusic(name)
+  const removeMusic = async (track: Track): Promise<void> => {
+    if (!window.confirm(`删除「${track.name}」？文件会一起删掉。`)) return
+    const r = await window.api.app.removeMusic(track.file)
     setTracks(r)
     await load()
     notify()
@@ -109,6 +164,16 @@ export function MediaSettings({ themePreview = null }: { themePreview?: string |
     notify()
   }
 
+  /** 按季节分组渲染曲库（和 textures/music 的目录结构一致） */
+  const groups: Array<{ key: string; label: string; items: Track[] }> = [
+    ...SEASON_ORDER.map((season) => ({
+      key: season,
+      label: `${SEASON_LABELS[season]}季`,
+      items: tracks.filter((t) => t.season === season)
+    })),
+    { key: 'none', label: '不分季节', items: tracks.filter((t) => t.season === null) }
+  ].filter((g) => g.items.length > 0)
+
   return (
     <div className="media-settings">
       <div className="media-block">
@@ -118,41 +183,94 @@ export function MediaSettings({ themePreview = null }: { themePreview?: string |
           <Button size="small" onClick={() => void window.api.app.openMediaDir('music')} title="在资源管理器里打开音乐目录">
             打开目录
           </Button>
+          <Button size="small" onClick={() => void pickMusicDir()}>
+            选择目录
+          </Button>
+          {dirState.custom ? (
+            <Button size="small" variant="ghost" onClick={() => void resetMusicDir()} title="回到默认的数据目录">
+              恢复默认
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="small" style={{ marginBottom: 4 }}>
+          曲库目录：<span className="mono" style={{ wordBreak: 'break-all' }}>{dirState.upload || '（未设置）'}</span>
+        </div>
+        <div className="small muted" style={{ marginBottom: 8 }}>
+          结构参考：根目录下按「春季（Spring）」「夏季（Summer）」「秋季（Fall）」「冬季（Winter）」放子文件夹，
+          顶层曲子算不分季节。当季模式下只放当前季节的曲子。
+          {dirState.dirs.length > 1 ? ` 另外还会读：${dirState.dirs.slice(1).join('，')}` : ''}
+        </div>
+
+        <div className="row tight" style={{ marginBottom: 8 }}>
+          <span className="small">上传到</span>
+          <select
+            className="pixel-select"
+            value={uploadSeason}
+            onChange={(e) => setUploadSeason(e.target.value)}
+            aria-label="上传到哪个季节"
+          >
+            {UPLOAD_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
           <Button size="small" onClick={() => void importMusic()} disabled={busy}>
             上传音乐
           </Button>
         </div>
+
         {tracks.length === 0 ? (
           <div className="small muted">
-            还没有音乐。上传 mp3 / ogg / wav 后会自动循环播放；文件放在 {`<数据目录>/textures/music`}。
+            还没有音乐。上传 mp3 / ogg / wav 后会自动按当季播放；文件放在上面的曲库目录里。
           </div>
         ) : (
-          <ul className="media-list">
-            <li className={cx('media-row', prefs.musicTrack === null && 'on')}>
-              <span className="media-name">按文件名顺序轮播第一首</span>
-              <span className="spacer" />
-              <Button size="small" variant={prefs.musicTrack === null ? 'primary' : 'default'} onClick={() => void pickTrack(null)}>
-                {prefs.musicTrack === null ? '使用中' : '用这首'}
-              </Button>
-            </li>
-            {tracks.map((track) => {
-              const on = prefs.musicTrack === track.name
-              return (
-                <li key={track.name} className={cx('media-row', on && 'on')}>
-                  <span className="media-name" title={track.name}>
-                    {track.name}
-                  </span>
-                  <span className="spacer" />
-                  <Button size="small" variant={on ? 'primary' : 'default'} onClick={() => void pickTrack(track.name)}>
-                    {on ? '使用中' : '用这首'}
-                  </Button>
-                  <Button size="small" variant="ghost" onClick={() => void removeMusic(track.name)}>
-                    删除
-                  </Button>
-                </li>
-              )
-            })}
-          </ul>
+          <>
+            <ul className="media-list">
+              <li className={cx('media-row', prefs.musicMode !== 'single' && 'on')}>
+                <span className="media-name">当季随机 / 轮播（默认）</span>
+                <span className="spacer" />
+                <Button
+                  size="small"
+                  variant={prefs.musicMode !== 'single' ? 'primary' : 'default'}
+                  onClick={() => void pickTrack(null)}
+                >
+                  {prefs.musicMode !== 'single' ? '使用中' : '用这个'}
+                </Button>
+              </li>
+            </ul>
+            {groups.map((group) => (
+              <div key={group.key} style={{ marginTop: 8 }}>
+                <div className="small muted" style={{ marginBottom: 2 }}>
+                  {group.label}（{group.items.length} 首）
+                </div>
+                <ul className="media-list">
+                  {group.items.map((track) => {
+                    const on = prefs.musicMode === 'single' && prefs.musicTrack === track.file
+                    return (
+                      <li key={track.file} className={cx('media-row', on && 'on')}>
+                        <span className="media-name" title={track.file}>
+                          {track.name}
+                        </span>
+                        <span className="spacer" />
+                        <Button
+                          size="small"
+                          variant={on ? 'primary' : 'default'}
+                          onClick={() => void pickTrack(track.file)}
+                        >
+                          {on ? '使用中' : '单曲循环'}
+                        </Button>
+                        <Button size="small" variant="ghost" onClick={() => void removeMusic(track)}>
+                          删除
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ))}
+          </>
         )}
       </div>
 

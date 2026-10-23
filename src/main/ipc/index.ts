@@ -9,6 +9,7 @@
  */
 
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron'
+import { getCustomMusicDir, listMusic, musicDirs, musicUploadDir, setCustomMusicDir } from '../services/music'
 import { logStartup } from '../startupLog'
 import { buildCarePlanHtml } from '../../core/carePlanHtml'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
@@ -113,7 +114,6 @@ import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } fro
 import type { ChatContentPart } from '../services/ai/client'
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
 import { importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
-import { listMusic } from '../services/music'
 import { EMPTY_MEDIA_PREFS, MEDIA_KEY, backdropsDir, listBackdrops, readBackdrop, type MediaPrefs } from '../services/media'
 import { normalizeMusicMode } from '../../core/music'
 import {
@@ -150,6 +150,27 @@ function readAiSettings(db: Db): AiSettings {
 
 function ok<T>(data: T): IpcResult<T> {
   return { ok: true, data }
+}
+
+
+/** settings 里存音乐目录的键 */
+const MUSIC_DIR_KEY = 'music.dir'
+
+/** 季节 → 曲库里的文件夹名（上传时用它决定落到哪一季） */
+function seasonFolderName(season: string | null): string | null {
+  const map: Record<string, string> = {
+    spring: '春季（Spring）',
+    summer: '夏季（Summer）',
+    autumn: '秋季（Fall）',
+    winter: '冬季（Winter）',
+    // 不分季节的曲子放这个文件夹（和用户曲库里的命名一致）
+    other: '其他（Other）'
+  }
+  return season && map[season] ? map[season] : null
+}
+
+function musicDirState(): { custom: string | null; upload: string; dirs: string[] } {
+  return { custom: getCustomMusicDir(), upload: musicUploadDir(), dirs: musicDirs() }
 }
 
 function fail(error: unknown): IpcResult<never> {
@@ -252,7 +273,7 @@ function registerAppIpc(): void {
   handle('app:openMediaDir', async (kind: 'music' | 'backgrounds' | 'root' = 'root') => {
     const texturesDir = join(app.getPath('userData'), 'textures')
     const target =
-      kind === 'music' ? join(texturesDir, 'music') : kind === 'backgrounds' ? backdropsDir() : texturesDir
+      kind === 'music' ? musicUploadDir() : kind === 'backgrounds' ? backdropsDir() : texturesDir
     try {
       mkdirSync(target, { recursive: true })
     } catch {
@@ -471,8 +492,47 @@ function registerAppIpc(): void {
     return { slots, slices, backgrounds, icons }
   })
 
-  /** 私有背景音乐列表（<userData>/textures/music） */
-  handle('app:music', () => listMusic())
+  /** 私有背景音乐列表：自选目录 + <userData>/textures/music（开发期还有仓库那份） */
+  handle('app:music', () => {
+    const tracks = listMusic()
+    // 曲库路径和首数记进启动日志：'为什么只有几首' 这种问题一眼能对上
+    logStartup('音乐库', {
+      count: tracks.length,
+      sources: musicDirs().map((dir) => ({
+        dir,
+        exists: existsSync(dir),
+        entries: existsSync(dir) ? readdirSync(dir).length : 0
+      }))
+    })
+    return tracks
+  })
+
+  /*
+   * 音乐目录：默认是 <userData>/textures/music，但允许指到任意文件夹
+   * （用户的曲库可能放在项目目录 / 网盘 / 移动硬盘里）。
+   * 指过去之后：列表读它、上传写到它、「打开目录」也开它。
+   */
+  handle('app:musicDir', () => ({
+    custom: getCustomMusicDir(),
+    upload: musicUploadDir(),
+    dirs: musicDirs()
+  }))
+  handle('app:pickMusicDir', async () => {
+    const result = await dialog.showOpenDialog({
+      title: '选择音乐目录',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return { canceled: true, ...musicDirState() }
+    const dir = result.filePaths[0]
+    setSetting(getDb(), MUSIC_DIR_KEY, dir)
+    setCustomMusicDir(dir)
+    return { canceled: false, ...musicDirState() }
+  })
+  handle('app:resetMusicDir', () => {
+    setSetting(getDb(), MUSIC_DIR_KEY, null)
+    setCustomMusicDir(null)
+    return musicDirState()
+  })
 
   /*
    * 音乐与背景的「上传 + 切换」。
@@ -481,8 +541,17 @@ function registerAppIpc(): void {
    * 备份、迁移、清理只要盯着这一个目录。
    * 选中的是哪一首 / 哪一张存在 settings 表里（media.prefs），重启后仍然生效。
    */
-  handle('app:importMusic', async () => {
-    const dir = join(app.getPath('userData'), 'textures', 'music')
+  /**
+   * 上传音乐。
+   *
+   * `season` 决定落到哪个子文件夹：null / '' = 直接放根目录（不分季节），
+   * 否则放进对应季节的文件夹（不存在就建）—— 和用户自己按文件夹分季的习惯一致。
+   * 目标根目录 = 自选目录（没选就是数据目录）。
+   */
+  handle('app:importMusic', async (season?: string | null) => {
+    const root = musicUploadDir()
+    const folder = seasonFolderName(season ?? null)
+    const dir = folder ? join(root, folder) : root
     mkdirSync(dir, { recursive: true })
     const result = await dialog.showOpenDialog({
       title: '添加音乐',
@@ -502,18 +571,31 @@ function registerAppIpc(): void {
     return { canceled: false, tracks: listMusic() }
   })
 
-  handle('app:removeMusic', (name: string) => {
-    const dir = resolve(join(app.getPath('userData'), 'textures', 'music'))
-    const file = resolve(join(dir, basename(String(name ?? ''))))
-    if (!file.startsWith(dir) || !existsSync(file)) return listMusic()
-    try {
-      unlinkSync(file)
-    } catch {
-      // 文件被占用就留着
+  /*
+   * 删除一首曲子。
+   * 参数是**相对曲库的路径**（可能带季节子目录），逐个曲库目录找 ——
+   * 同名文件可能在自选目录和数据目录里都有，删掉找到的第一个就够了。
+   */
+  handle('app:removeMusic', (file: string) => {
+    const relative = String(file ?? '').trim()
+    if (!relative || relative.includes('..')) return listMusic()
+    let removed = false
+    for (const dir of musicDirs()) {
+      const target = resolve(join(dir, relative))
+      if (!target.startsWith(resolve(dir))) continue
+      if (!existsSync(target)) continue
+      try {
+        unlinkSync(target)
+        removed = true
+      } catch {
+        // 文件被占用就留着，换下一个目录试
+      }
+      break
     }
+    if (!removed) return listMusic()
     // 删掉的正好是选中的那首 → 清掉偏好
     const prefs = getSetting<MediaPrefs>(getDb(), MEDIA_KEY, EMPTY_MEDIA_PREFS)
-    if (prefs.musicTrack === basename(file)) {
+    if (prefs.musicTrack === relative) {
       setSetting(getDb(), MEDIA_KEY, { ...prefs, musicTrack: null })
     }
     return listMusic()
