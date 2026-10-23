@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 养护日志页。
  *
  * 从「养护计划」里抽出来的独立页面。原因：日志是**一条时间线**，
@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareLog, CareLogImage, ImageRecord } from '@core/types'
 import { CARE_ACTION_OPTIONS, logKindLabel } from '@core/care'
-import { Badge, Button, EmptyState, Modal, Panel, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
+import { Badge, Button, EmptyState, Modal, Panel, SearchSelect, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
 import type { PlantOption } from '../components/CareTaskDialog'
 
 /**
@@ -43,6 +43,8 @@ export function LogsPage(): ReactNode {
   const [picked, setPicked] = useState<ImageRecord[]>([])
   /** 预览大图 */
   const [preview, setPreview] = useState<CareLogImage | null>(null)
+  /** 多选删除：勾中的日志 id */
+  const [selected, setSelected] = useState<number[]>([])
   /** 正在编辑的日志 id（null = 没有在编辑） */
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editKind, setEditKind] = useState('note')
@@ -154,6 +156,33 @@ export function LogsPage(): ReactNode {
     }
   }
 
+  /** 勾选 / 取消勾选一条 */
+  const toggleSelected = (id: number): void => {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  /**
+   * 批量删除。选中的记录可能已经在别处被删掉，所以以「真正删了几条」为准，
+   * 而不是一律报「已删除 N 条」。
+   */
+  const removeSelected = async (): Promise<void> => {
+    if (selected.length === 0) return
+    if (!window.confirm(`确定删除选中的 ${selected.length} 条养护日志吗？删除后无法恢复。`)) return
+    try {
+      const removed = await window.api.care.removeLogs(selected)
+      toast.push(
+        removed < selected.length
+          ? `已删除 ${removed} 条（有 ${selected.length - removed} 条已经不在了）`
+          : `已删除 ${removed} 条`,
+        removed > 0 ? 'success' : 'error'
+      )
+      setSelected([])
+      await load(plantId)
+    } catch (error) {
+      toast.push(`批量删除失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    }
+  }
+
   /*
    * 编辑一条已有记录。
    *
@@ -224,11 +253,20 @@ export function LogsPage(): ReactNode {
         {/* 手动记一笔：空态里写着「也可以随时手动记一笔」，入口就在这里 */}
         <div className="row tight" style={{ marginBottom: 8 }}>
           <div style={{ width: 200 }}>
-            <SelectInput
+            {/*
+              植株一多，原生下拉只能首字符跳转、中文根本跳不动。
+              换成可搜索的：输昵称或物种名的任意片段都能筛出来。
+            */}
+            <SearchSelect
               value={plantId}
-              onChange={setPlantId}
+              onChange={(v) => {
+                setPlantId(v)
+                setSelected([])
+              }}
               placeholder="选一株植物…"
-              options={[{ value: '', label: '全部植株' }, ...plants.map((pl) => ({ value: String(pl.id), label: pl.label }))]}
+              emptyLabel="全部植株"
+              emptyHint="没有匹配的植株"
+              options={plants.map((pl) => ({ value: String(pl.id), label: pl.label }))}
             />
           </div>
           <div style={{ width: 140 }}>
@@ -281,6 +319,23 @@ export function LogsPage(): ReactNode {
           </div>
         ) : null}
 
+        {/* 多选操作条：勾了至少一条才出现，平时不占地方 */}
+        {selected.length > 0 ? (
+          <div className="row tight" style={{ marginBottom: 8 }}>
+            <span className="small">已选 {selected.length} 条</span>
+            <Button size="small" onClick={() => setSelected(logs.map((l) => l.id))}>
+              全选当前
+            </Button>
+            <Button size="small" onClick={() => setSelected([])}>
+              取消选择
+            </Button>
+            <span className="spacer" />
+            <Button size="small" variant="primary" onClick={() => void removeSelected()}>
+              删除所选（{selected.length}）
+            </Button>
+          </div>
+        ) : null}
+
         {loading ? (
           <Spinner label="加载中…" />
         ) : logs.length === 0 ? (
@@ -296,6 +351,15 @@ export function LogsPage(): ReactNode {
               const editing = editingId === log.id
               return (
                 <div key={log.id} className="log-item">
+                  {/* 多选：编辑中的那条不参与勾选（按钮都不显示，勾了也没用） */}
+                  <input
+                    type="checkbox"
+                    className="log-check"
+                    checked={selected.includes(log.id)}
+                    disabled={editing}
+                    onChange={() => toggleSelected(log.id)}
+                    title="勾选后可批量删除"
+                  />
                   <div className="log-date">{editing ? editDate || log.logDate : log.logDate}</div>
                   <div style={{ flex: 1 }}>
                     {editing ? (

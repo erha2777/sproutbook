@@ -3944,3 +3944,15 @@ html.tex-panel.tex-panel-slice .modal-footer {
   line-height: 1.75;
   font-size: 13px;
 }
+/* 日志多选：勾选框跟日期那一行对齐，别顶到头 */
+.log-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  accent-color: #6f9a4a;
+  cursor: pointer;
+}
+.log-item:has(.log-check:checked) {
+  background: #e8f2d6;
+}

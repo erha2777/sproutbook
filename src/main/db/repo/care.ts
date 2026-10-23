@@ -1051,6 +1051,25 @@ export function deleteCareLog(db: Db, id: number): boolean {
   return Number(r.changes) > 0
 }
 
+/**
+ * 批量删除养护日志，返回真正删掉的条数。
+ *
+ * 一个事务里逐条删：某条已经不在了不该让整批失败（用户选的列表可能已经过期）。
+ * 照片文件仍然由 IPC 层负责，这里只管数据库。
+ */
+export function deleteCareLogs(db: Db, ids: number[]): number {
+  const clean = [...new Set(ids.filter((id) => Number.isFinite(id)))]
+  if (clean.length === 0) return 0
+  return db.transaction(() => {
+    let removed = 0
+    for (const id of clean) {
+      db.run('DELETE FROM images WHERE log_id = ?', id)
+      removed += Number(db.run('DELETE FROM care_logs WHERE id = ?', id).changes)
+    }
+    return removed
+  })
+}
+
 // ---------------------------------------------------------------------------
 // 概览
 // ---------------------------------------------------------------------------

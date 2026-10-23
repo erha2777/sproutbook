@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 渲染进程可用的 API 契约。
  *
  * preload 负责实现，renderer 只依赖这个接口 —— 这样两端永远不会因为通道名写错而静默失败：
@@ -58,11 +58,18 @@ export interface FieldUsageSummary {
 }
 
 export interface PlantListItemStats {
+  /** 全部未归档（含枯死） */
   total: number
+  /** 在养：未归档且不是「已枯死」 */
+  alive: number
   byStatus: Array<{ status: string; count: number }>
   byEnv: Array<{ envId: number | null; envName: string; count: number }>
   byFamily: Array<{ family: string; count: number }>
   bloomingThisMonth: number
+  /** 购入价格合计（只统计填了价格的植株） */
+  totalPrice: number
+  /** 填了价格的植株数，用来提示「还有几株没记价格」 */
+  pricedCount: number
 }
 
 export interface BackupInfo {
@@ -252,6 +259,8 @@ export interface SproutbookApi {
       speciesId?: number
       /** 分类筛选：'' = 未分类 */
       category?: string
+      /** 隐藏「已枯死」（列表默认隐藏，想看再打开） */
+      hideDead?: boolean
       /** 最近改动 / 入手时间 / 购入价格 */
       sort?: 'updated' | 'acquired' | 'price'
       limit?: number
@@ -388,7 +397,9 @@ export interface SproutbookApi {
      *
      * 照片分两个方向：`addImageIds` 是先用 images.pick 导入的新图，
      * `removeImageIds` 是要摘掉的旧图（文件由主进程一并删除）。
-     */
+      removeLog(id: number): Promise<boolean>
+      /** 批量删除（日志页多选）；返回真正删掉的条数 */
+      removeLogs(ids: number[]): Promise<number>
     updateLog(id: number, patch: CareLogPatch): Promise<CareLog | null>
     removeLog(id: number): Promise<boolean>
   }

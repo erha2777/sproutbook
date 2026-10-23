@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 植株仓储（实例层）—— 用户实际养的那一株。
  */
 
@@ -110,6 +110,8 @@ export interface PlantListOptions {
   speciesId?: number
   /** 分类筛选：用户自己分的类；传空串表示「未分类」 */
   category?: string
+  /** 隐藏「已枯死」（列表默认隐藏，想看再打开） */
+  hideDead?: boolean
   sort?: PlantSort
   limit?: number
   offset?: number
@@ -126,6 +128,13 @@ export function listPlants(db: Db, options: PlantListOptions = {}): { items: Pla
   if (options.status) {
     where.push('p.status = ?')
     params.push(options.status)
+  }
+  /*
+   * 枯死的不进列表，除非用户主动打开「显示已枯死」或显式筛 status='dead'。
+   * 这和花园视图的取舍一致：死掉的植株还在，但不该占着日常视野。
+   */
+  if (options.hideDead && !options.status) {
+    where.push("p.status <> 'dead'")
   }
   if (typeof options.envId === 'number') {
     where.push('p.env_id = ?')
@@ -378,15 +387,27 @@ export function archivePlant(db: Db, id: number): boolean {
 }
 
 export interface PlantStats {
+  /** 全部未归档（含枯死） */
   total: number
+  /** 在养：未归档且不是「已枯死」 */
+  alive: number
   byStatus: Array<{ status: string; count: number }>
   byEnv: Array<{ envId: number | null; envName: string; count: number }>
   byFamily: Array<{ family: string; count: number }>
   bloomingThisMonth: number
+  /** 购入价格合计（只统计填了价格的植株） */
+  totalPrice: number
+  /** 填了价格的植株数 */
+  pricedCount: number
 }
 
 export function plantStats(db: Db, month = new Date().getMonth() + 1): PlantStats {
   const total = Number(db.scalar<number>('SELECT COUNT(*) AS c FROM plants WHERE archived_at IS NULL') ?? 0)
+  const alive = Number(
+    db.scalar<number>(
+      "SELECT COUNT(*) AS c FROM plants WHERE archived_at IS NULL AND status <> 'dead'"
+    ) ?? 0
+  )
 
   const byStatus = db
     .all<{ status: string; count: number }>(
@@ -421,5 +442,19 @@ export function plantStats(db: Db, month = new Date().getMonth() + 1): PlantStat
     ) ?? 0
   )
 
-  return { total, byStatus, byEnv, byFamily, bloomingThisMonth }
+  /*
+   * 购入总价：直接聚合 attr_index 的数值列。
+   * 没填价格的植株没有投影行，COUNT 会自然把它们排除在外 —— 正好用来提示"还有几株没记价格"。
+   */
+  const priceRow = db.get<{ sum: number | null; count: number }>(
+    `SELECT COALESCE(SUM(a.value_num), 0) AS sum, COUNT(*) AS count
+     FROM plants p
+     JOIN attr_index a ON a.owner_kind = 'plant' AND a.owner_id = p.id
+                      AND a.field_key = 'purchase_price' AND a.idx = 0
+     WHERE p.archived_at IS NULL`
+  )
+  const totalPrice = Math.round(Number(priceRow?.sum ?? 0) * 100) / 100
+  const pricedCount = Number(priceRow?.count ?? 0)
+
+  return { total, alive, byStatus, byEnv, byFamily, bloomingThisMonth, totalPrice, pricedCount }
 }

@@ -62,6 +62,7 @@ import {
   completeCareTask,
   createCareTask,
   deleteCareLog,
+  deleteCareLogs,
   listLogImages,
   deleteCareRule,
   deleteCareTask,
@@ -1049,6 +1050,20 @@ function registerImageIpc(): void {
     const ok = deleteCareLog(getDb(), id)
     if (ok) removeImageFiles(files)
     return ok
+  })
+
+  /*
+   * 批量删除养护日志（日志页的多选删除）。
+   * 返回真正删掉的条数 —— 选中的记录可能已经被别处删掉了。
+   */
+  handle('care:log.deleteMany', (ids: number[]) => {
+    const db = getDb()
+    const clean = (Array.isArray(ids) ? ids : []).filter((id) => Number.isFinite(id))
+    if (clean.length === 0) return 0
+    const files = clean.flatMap((id) => listLogImages(db, id).flatMap((img) => [img.path, img.thumbPath]))
+    const removed = deleteCareLogs(db, clean)
+    if (removed > 0) removeImageFiles(files)
+    return removed
   })
 
   // -------------------------------------------------------------------------

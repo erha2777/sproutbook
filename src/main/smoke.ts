@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 端到端自检。
  *
  * 刻意**不依赖 electron** —— 只用 node:sqlite + 文件系统，因此：
@@ -116,6 +116,7 @@ import {
   completeCareTask,
   createCareTask,
   deleteCareLog,
+  deleteCareLogs,
   deleteCareRule,
   deleteCareTask,
   generateTasksForAll,
@@ -589,6 +590,44 @@ export async function runSmoke(outFile: string): Promise<number> {
       )
       check('分类下拉能读到它', listPlantCategories(db).includes('月季类'), JSON.stringify(listPlantCategories(db)))
       check('单株读取也带出分类', getPlant(db, catSaved.plant?.id ?? 0)?.category === '月季类')
+
+    /* 列表：隐藏已枯死 + 购入总价 + 批量删日志 */
+    {
+      const dead = savePlant(db, {
+        speciesId,
+        nickname: '枯死对照株',
+        values: { nickname: '枯死对照株', status: 'dead' }
+      })
+      const alive = savePlant(db, {
+        speciesId,
+        nickname: '在养对照株',
+        values: { nickname: '在养对照株', status: 'growing', purchase_price: 120 }
+      })
+      check('枯死植株保存成功', dead.plant?.status === 'dead')
+
+      const withDead = listPlants(db, {}).items
+      const withoutDead = listPlants(db, { hideDead: true }).items
+      check('默认列表能查到枯死的', withDead.some((p) => p.id === dead.plant?.id))
+      check('hideDead 时不含枯死的', !withoutDead.some((p) => p.id === dead.plant?.id))
+      check('hideDead 时在养的还在', withoutDead.some((p) => p.id === alive.plant?.id))
+
+      const stats = plantStats(db, 6)
+      check('统计里在养数量不含枯死', stats.alive < stats.total, `alive=${stats.alive} total=${stats.total}`)
+      check('统计里能拿到购入总价', stats.totalPrice >= 120, String(stats.totalPrice))
+      check('统计里能拿到记了价格的株数', stats.pricedCount >= 1, String(stats.pricedCount))
+
+      // 批量删日志：真的删掉，且不影响没选中的
+      const logA = addCareLog(db, { plantId: alive.plant?.id ?? 0, kind: 'note', content: '批量删除 A' })
+      const logB = addCareLog(db, { plantId: alive.plant?.id ?? 0, kind: 'note', content: '批量删除 B' })
+      const logKeep = addCareLog(db, { plantId: alive.plant?.id ?? 0, kind: 'note', content: '保留 C' })
+      const removed = deleteCareLogs(db, [logA.id, logB.id])
+      check('批量删除返回删掉的条数', removed === 2, String(removed))
+      const left = listCareLogs(db, { plantId: alive.plant?.id ?? 0 }).map((l) => l.content)
+      check('批量删除真的删掉了', !left.includes('批量删除 A') && !left.includes('批量删除 B'))
+      check('批量删除不误伤没选中的', left.includes('保留 C'), JSON.stringify(left))
+      check('批量删除空数组是安全的', deleteCareLogs(db, []) === 0)
+      check('批量删除已经删过的 id 不报错', deleteCareLogs(db, [logA.id, logKeep.id]) === 1)
+    }
       check('按 id 读回来的分类和列表一致', getPlant(db, catSaved.plant?.id ?? 0)?.category === catSaved.plant?.category)
       check('别的分类为空', listPlants(db, { category: '不存在的分类' }).items.length === 0)
       check(

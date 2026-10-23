@@ -580,7 +580,8 @@ export function SearchSelect({
   invalid,
   disabled,
   emptyHint,
-  allowCustom = false
+  allowCustom = false,
+  emptyLabel
 }: {
   value: string
   onChange: (value: string) => void
@@ -594,6 +595,11 @@ export function SearchSelect({
    * 关着的时候只能从列表里挑 —— 那是关联物种这类"必须已存在"的场景。
    */
   allowCustom?: boolean
+  /**
+   * 空选项那一行显示什么。默认「（未关联）」；筛选场景要的是「全部植株」。
+   * 传了它就不再用 allowCustom 的「（留空）」。
+   */
+  emptyLabel?: string
 }): ReactNode {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -655,7 +661,7 @@ export function SearchSelect({
               close()
             }}
           >
-            {allowCustom ? '（留空）' : '（未关联）'}
+            {emptyLabel ?? (allowCustom ? '（留空）' : '（未关联）')}
           </li>
           {view.customCandidate ? (
             <li

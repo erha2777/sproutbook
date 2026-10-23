@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 花园页 —— 植株管理。
  *
  * 两种视图，不是替代关系：
@@ -69,6 +69,8 @@ export function GardenPage({
   /** 分类筛选：'' = 全部，'__none__' = 未分类（和真实分类名不会撞） */
   const [category, setCategory] = useState('')
   const [categories, setCategories] = useState<string[]>([])
+  /** 列表默认隐藏已枯死的植株，这个开关把它放出来 */
+  const [showDead, setShowDead] = useState(false)
   const [editing, setEditing] = useState<PlantListItem | 'new' | null>(null)
   /** 「问问 AI」弹窗 */
   const [asking, setAsking] = useState(false)
@@ -84,6 +86,7 @@ export function GardenPage({
           status: status || undefined,
           envId: envId ? Number(envId) : undefined,
           category: category === '' ? undefined : category === '__none__' ? '' : category,
+          hideDead: !showDead,
           sort
         }),
         window.api.plants.stats(currentMonth()),
@@ -117,7 +120,7 @@ export function GardenPage({
     } finally {
       setLoading(false)
     }
-  }, [debouncedQuery, status, envId, category, sort, toast])
+  }, [debouncedQuery, status, envId, category, showDead, sort, toast])
 
   useEffect(() => {
     void reload()
@@ -137,6 +140,13 @@ export function GardenPage({
       ...categories.map((c) => ({ value: c, label: c }))
     ],
     [categories]
+  )
+
+
+  /** 「已枯死」有几株 —— 开关上标出来，免得用户以为数据丢了 */
+  const deadCount = useMemo(
+    () => stats?.byStatus.find((row) => row.status === 'dead')?.count ?? 0,
+    [stats]
   )
 
   const sortOptions = useMemo(
@@ -337,8 +347,13 @@ export function GardenPage({
         {stats ? (
           <div className="row">
             <div className="stat-tile">
-              <div className="num">{stats.total}</div>
+              {/* 在养 = 不含「已枯死」：死掉的植株还在库房里，但不算在养 */}
+              <div className="num">{stats.alive}</div>
               <div className="label">在养植株</div>
+            </div>
+            <div className="stat-tile" title={`${stats.pricedCount} 株记了价格，其余没填`}>
+              <div className="num">¥ {stats.totalPrice}</div>
+              <div className="label">购入总价</div>
             </div>
             <div className="stat-tile">
               <div className="num">{stats.bloomingThisMonth}</div>
@@ -369,6 +384,14 @@ export function GardenPage({
             <div style={{ flex: '0 1 150px', minWidth: 130 }} title="按分类筛选（分类在植株详情里自己填）">
               <SelectInput value={category} onChange={setCategory} options={categoryOptions} />
             </div>
+            <Button
+              size="small"
+              variant={showDead ? 'primary' : undefined}
+              onClick={() => setShowDead((v) => !v)}
+              title="已枯死的植株默认不显示；打开后一起列出"
+            >
+              {showDead ? '含已枯死' : `显示已枯死${deadCount > 0 ? `（${deadCount}）` : ''}`}
+            </Button>
             {view === 'list' ? (
               <div style={{ flex: '0 1 190px', minWidth: 150 }} title="列表排序方式">
                 <SelectInput
