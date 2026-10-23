@@ -4011,54 +4011,64 @@ html.tex-panel.tex-panel-slice .modal-footer {
   background: #3f8f2a;
   border: 1px solid #2c5f1d;
 }
-/* ---- 左上角背景音乐按钮（和喇叭并排）+ 面板 ---- */
+/* ---- 左上角唯一的声音按钮（喇叭 + 音乐合一）+ 面板 ---- */
 /*
- * 和 .global-sound 完全同一套：透明底 + 像素图标 + 悬停光晕。
- * 两颗按钮间距 30px，正好是按钮宽度 —— 看起来像一组。
+ * 以前这里是两颗并排的透明图标，看着像两个开关管同一件事。
+ * 现在一颗按钮：像素木牌底（和标题栏按钮同一套描边），
+ * 正在放歌时右下角闪一个小音符 —— 不用打开面板也知道有声音。
  */
-.global-music,
-html.tex-button .home-gear.global-music {
+.sound-ctl,
+html.tex-button .home-gear.sound-ctl {
   position: fixed;
-  left: 34px;
+  left: 6px;
   top: 2px;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 26px;
   padding: 0;
-  z-index: 46;
-  border: 0;
-  border-image: none;
-  background: transparent;
-  box-shadow: none;
+  z-index: 47;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(90, 47, 12, 0.9);
+  background: rgba(232, 162, 74, 0.92);
+  box-shadow: inset 1px 1px 0 rgba(255, 232, 190, 0.6), 0 1px 0 rgba(0, 0, 0, 0.35);
   image-rendering: pixelated;
-  opacity: 0.9;
-  /* 压在标题栏的拖拽带上，必须显式声明可点 */
   -webkit-app-region: no-drag;
   cursor: pointer;
 }
-.global-music:hover,
-html.tex-button .home-gear.global-music:hover {
-  opacity: 1;
-  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.55));
+.sound-ctl:hover,
+html.tex-button .home-gear.sound-ctl:hover {
+  background: #f0ad55;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.45));
 }
-.global-music:active {
+.sound-ctl:active {
   transform: translateY(1px);
 }
-.global-music svg {
-  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45));
+.sound-ctl.muted {
+  background: rgba(140, 126, 110, 0.9);
+  border-color: rgba(60, 46, 30, 0.9);
 }
-/* 正在放的时候音符微微起伏，一眼看出「有声音」 */
-.global-music.playing svg {
-  animation: music-bob 1.8s ease-in-out infinite;
+/* 播放中的小音符：绝对定位在按钮右下角，微微闪 */
+.sound-note {
+  position: absolute;
+  right: -3px;
+  bottom: -4px;
+  font-size: 10px;
+  line-height: 1;
+  color: #fff3c4;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.65);
+  animation: sound-note-pulse 1.6s ease-in-out infinite;
+  pointer-events: none;
 }
-@keyframes music-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-1.5px); }
+@keyframes sound-note-pulse {
+  0%, 100% { opacity: 0.55; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-1px); }
 }
 
 .music-panel {
   position: fixed;
   left: 6px;
-  top: 30px;
+  top: 32px;
   z-index: 60;
   width: 316px;
   max-height: 70vh;
@@ -4068,8 +4078,7 @@ html.tex-button .home-gear.global-music:hover {
   border: 3px solid var(--wood-outline, #6b4a2a);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   color: var(--ink, #3b2a18);
-}
-.music-mode {
+}.music-mode {
   flex: 1;
   padding: 4px 6px;
   font-size: 11px;

@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { Component, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, ToastProvider, cx, useToast } from './components/ui'
 import { TitleBar } from './components/TitleBar'
@@ -415,17 +415,6 @@ function Shell(): ReactNode {
     setSfx(next)
     if (next) sfx('success')
   }
-  const soundToggle = (
-    <button
-      type="button"
-      className="home-gear global-sound"
-      title={soundOn ? '关闭声音（音效 + 背景音乐）' : '开启声音（音效 + 背景音乐）'}
-      aria-label={soundOn ? '关闭声音' : '开启声音'}
-      onClick={toggleSound}
-    >
-      <PixelIcon name={soundOn ? 'sound' : 'mute'} size={24} />
-    </button>
-  )
 
   /*
    * 首页是**标题画面**，不套导航：它把应用收成四个入口。
@@ -446,7 +435,6 @@ function Shell(): ReactNode {
           onQuit={() => void window.api.app.quit()}
           onSettings={() => setRoute({ name: 'settings' })}
         />
-        {soundToggle}
         <MusicButton music={music} soundOn={soundOn} onToggleSound={toggleSound} />
       </div>
     )
@@ -471,7 +459,6 @@ function Shell(): ReactNode {
       <Backdrop images={backdrops} />
       {/* 无边框窗口的自制标题栏：拖动 + 最小化 / 最大化 / 关闭 */}
       <TitleBar />
-      {soundToggle}
       <MusicButton music={music} soundOn={soundOn} onToggleSound={toggleSound} />
       <div className="page-shell">
       <main className="main">

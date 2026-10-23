@@ -1,11 +1,9 @@
 /**
- * 背景音乐按钮：和左上角的喇叭（静音开关）并排，样式统一成图标按钮。
+ * 左上角**唯一**那颗声音按钮：喇叭（静音）+ 音乐，合在一处。
  *
- * 点开面板：播放/暂停、模式（当季随机 / 当季轮播 / 单曲循环）、音量、
- * 单曲循环时列全部曲目（按季节分组）—— 曲库就十几首，不值得再套一层弹窗。
- *
- * 面板里也放一个「声音」开关：两颗按钮管同一件事（要不要出声），
- * 就地一起控制，省得来回找。
+ * 以前是「喇叭」和「音乐」两颗并排 —— 用户看着像两个开关管一件事。
+ * 现在只有一颗：点开面板，里面既有声音开关，也有播放/暂停、模式、音量、曲单。
+ * 正在放歌时按钮右下角闪一个小音符，不开面板也知道有声音。
  */
 
 import { useState } from 'react'
@@ -33,12 +31,16 @@ export function MusicButton({
     <>
       <button
         type="button"
-        className={`home-gear global-music${music.playing ? ' playing' : ''}`}
-        title={`背景音乐：${label}${music.playing ? '' : '（未播放）'} · 点击换模式 / 调音量`}
-        aria-label="背景音乐"
+        className={`home-gear global-sound sound-ctl${music.playing && soundOn ? ' playing' : ''}${soundOn ? '' : ' muted'}`}
+        title={
+          `${soundOn ? '声音：开' : '声音：关'}  音乐：${label}${music.playing ? '' : '（未播放）'}\n点击打开声音 / 音乐设置`
+        }
+        aria-label="声音与音乐"
         onClick={() => setOpen((v) => !v)}
       >
-        <PixelIcon name="music" size={24} />
+        <PixelIcon name={soundOn ? 'sound' : 'mute'} size={24} />
+        {music.playing && soundOn ? <i className="sound-note" aria-hidden>♪</i> : null}
+        <span className="sr-only">声音与音乐</span>
       </button>
 
       {open ? (
