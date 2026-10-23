@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 首页 / 标题页。
  *
  * 参考星露谷的标题画面：天空 + 木牌 + 四个大按钮。
@@ -19,9 +19,7 @@ export function HomePage({
   onQuit,
   onSettings,
   carePending,
-  version,
-  musicName = null,
-  musicPlaying = false
+  version
 }: {
   onGarden: () => void
   onSpecies: () => void
@@ -31,10 +29,6 @@ export function HomePage({
   /** 养护里「逾期 + 该做」的数量，挂在「养护」按钮上 */
   carePending: number
   version: string | null
-  /** 正在播放的背景音乐文件名（没有就不显示） */
-  musicName?: string | null
-  /** 音乐是否真的在播（浏览器可能拒绝自动播放） */
-  musicPlaying?: boolean
 }): ReactNode {
   return (
     <div className="home">
@@ -80,15 +74,10 @@ export function HomePage({
         <PixelIcon name="gear" size={24} />
       </button>
 
-      {musicName ? (
-        <div
-          className={`home-music${musicPlaying ? '' : ' paused'}`}
-          title={`背景音乐：${musicName}${musicPlaying ? '' : '（未播放）'}`}
-        >
-          ♪ {musicName.replace(/\.[^.]+$/, '')}
-          {musicPlaying ? '' : '（未播放）'}
-        </div>
-      ) : null}
+      {/*
+        首页原来右下角还有一个「♪ 曲名」的静态标签。加了右上角那颗可点的音乐按钮之后
+        两处都在报同一首歌，看着像两个播放器 —— 去掉这处，音乐只留能操作的那一处。
+      */}
       <div className="home-version">{version ? `v${version}` : ''}</div>
     </div>
   )

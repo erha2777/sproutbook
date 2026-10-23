@@ -33,10 +33,11 @@ interface MusicDirState {
   dirs: string[]
 }
 
-/** 上传目标：'' = 直接放曲库根目录（不分季节） */
+/** 上传目标：other = 「其他（Other）」文件夹；'' = 直接放曲库根目录 */
 const UPLOAD_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: '不分季节（曲库根目录）' },
-  ...SEASON_ORDER.map((s) => ({ value: s, label: `${SEASON_LABELS[s]}季` }))
+  { value: 'other', label: '其他（Other，不分季节）' },
+  ...SEASON_ORDER.map((s) => ({ value: s, label: `${SEASON_LABELS[s]}季` })),
+  { value: '', label: '曲库根目录' }
 ]
 
 export function MediaSettings({ themePreview = null }: { themePreview?: string | null }): ReactNode {
@@ -53,6 +54,8 @@ export function MediaSettings({ themePreview = null }: { themePreview?: string |
   // 默认传到「其他（Other）」：和曲库现在的组织方式一致（四季各一个文件夹 + 其他）
   const [uploadSeason, setUploadSeason] = useState('other')
   const [busy, setBusy] = useState(false)
+  /** 曲目列表默认收起：15 首全展开太占地方，需要时再点开 */
+  const [listOpen, setListOpen] = useState(false)
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -197,8 +200,8 @@ export function MediaSettings({ themePreview = null }: { themePreview?: string |
           曲库目录：<span className="mono" style={{ wordBreak: 'break-all' }}>{dirState.upload || '（未设置）'}</span>
         </div>
         <div className="small muted" style={{ marginBottom: 8 }}>
-          结构参考：根目录下按「春季（Spring）」「夏季（Summer）」「秋季（Fall）」「冬季（Winter）」放子文件夹，
-          顶层曲子算不分季节。当季模式下只放当前季节的曲子。
+          目录结构：四季各一个文件夹（「春季（Spring）」「夏季（Summer）」「秋季（Fall）」「冬季（Winter）」），
+          不分季节的放「其他（Other）」。当季模式下只放当前季节的曲子；顶层直接放的文件也算不分季节。
           {dirState.dirs.length > 1 ? ` 另外还会读：${dirState.dirs.slice(1).join('，')}` : ''}
         </div>
 
@@ -240,36 +243,53 @@ export function MediaSettings({ themePreview = null }: { themePreview?: string |
                 </Button>
               </li>
             </ul>
-            {groups.map((group) => (
-              <div key={group.key} style={{ marginTop: 8 }}>
-                <div className="small muted" style={{ marginBottom: 2 }}>
-                  {group.label}（{group.items.length} 首）
-                </div>
-                <ul className="media-list">
-                  {group.items.map((track) => {
-                    const on = prefs.musicMode === 'single' && prefs.musicTrack === track.file
-                    return (
-                      <li key={track.file} className={cx('media-row', on && 'on')}>
-                        <span className="media-name" title={track.file}>
-                          {track.name}
-                        </span>
-                        <span className="spacer" />
-                        <Button
-                          size="small"
-                          variant={on ? 'primary' : 'default'}
-                          onClick={() => void pickTrack(track.file)}
-                        >
-                          {on ? '使用中' : '单曲循环'}
-                        </Button>
-                        <Button size="small" variant="ghost" onClick={() => void removeMusic(track)}>
-                          删除
-                        </Button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </div>
-            ))}
+            <div className="row tight" style={{ marginTop: 8, marginBottom: 4 }}>
+              <span className="small">
+                {listOpen
+                  ? `共 ${tracks.length} 首（按季节分组）`
+                  : prefs.musicMode === 'single'
+                    ? `单曲循环：${tracks.find((t) => t.file === prefs.musicTrack)?.name ?? '（已删除）'}`
+                    : `当季随机 / 轮播 · 共 ${tracks.length} 首`}
+              </span>
+              <span className="spacer" />
+              <Button size="small" onClick={() => setListOpen((v) => !v)}>
+                {listOpen ? '收起曲目' : '展开曲目'}
+              </Button>
+            </div>
+            {listOpen ? (
+              <>
+                {groups.map((group) => (
+                  <div key={group.key} style={{ marginTop: 8 }}>
+                    <div className="small muted" style={{ marginBottom: 2 }}>
+                      {group.label}（{group.items.length} 首）
+                    </div>
+                    <ul className="media-list">
+                      {group.items.map((track) => {
+                        const on = prefs.musicMode === 'single' && prefs.musicTrack === track.file
+                        return (
+                          <li key={track.file} className={cx('media-row', on && 'on')}>
+                            <span className="media-name" title={track.file}>
+                              {track.name}
+                            </span>
+                            <span className="spacer" />
+                            <Button
+                              size="small"
+                              variant={on ? 'primary' : 'default'}
+                              onClick={() => void pickTrack(track.file)}
+                            >
+                              {on ? '使用中' : '单曲循环'}
+                            </Button>
+                            <Button size="small" variant="ghost" onClick={() => void removeMusic(track)}>
+                              删除
+                            </Button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </>
+            ) : null}
           </>
         )}
       </div>

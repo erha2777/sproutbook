@@ -445,8 +445,6 @@ function Shell(): ReactNode {
           onCare={() => setRoute({ name: 'care', tab: 'today' })}
           onQuit={() => void window.api.app.quit()}
           onSettings={() => setRoute({ name: 'settings' })}
-          musicName={music.current?.name ?? null}
-          musicPlaying={music.playing}
         />
         {soundToggle}
         <MusicButton music={music} />
