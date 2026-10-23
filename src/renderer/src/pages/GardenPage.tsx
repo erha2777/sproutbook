@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 花园页 —— 植株管理。
  *
  * 两种视图，不是替代关系：
@@ -23,7 +23,7 @@ import {
   readMonthSet,
   sizeScaleFor
 } from '@core/growth'
-import { CARE_ACTION_ICONS, CARE_PHASE_ICONS, CARE_PHASE_LABELS, dueDescription, urgencyOf } from '@core/care'
+import { CARE_ACTION_ICONS, CARE_PHASE_ICONS, CARE_PHASE_LABELS, dueDescription, phaseAgeDays, urgencyOf } from '@core/care'
 import { deriveCarePhase } from '@core/phase'
 import { flowerColorForSpecies } from '@core/sprite'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
@@ -288,6 +288,12 @@ export function GardenPage({
       today: todayIso()
     })
     const task = nextTask[plant.id]
+    /*
+     * 当前状态持续了几天。
+     * 状态是手动设置的（不是推算的），所以这个天数是「人在这个状态上待了多久」——
+     * 比如缓苗到底缓了几天、开花开了几天。老数据从建档日算起。
+     */
+    const statusDays = phaseAgeDays(plant.statusChangedAt, todayIso())
     return (
       <div>
         <div className="row tight" style={{ flexWrap: 'wrap' }}>
@@ -305,6 +311,7 @@ export function GardenPage({
           {` · ${g.heightText}`}
           {plant.envName ? ` · ${plant.envName}` : ''}
           {` · 状态：${PLANT_STATUS_ICONS[plant.status]} ${PLANT_STATUS_LABELS[plant.status]}`}
+          {statusDays !== null ? `（已 ${statusDays} 天）` : ''}
         </div>
         <div className="row tight" style={{ marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="small">
@@ -559,7 +566,18 @@ function PlantCard({ plant, onClick }: { plant: PlantListItem; onClick: () => vo
         <div className="card-title">{plant.nickname}</div>
         <div className="card-sub">{speciesName}</div>
         <div className="card-meta">
-          <Badge tone={plant.status === 'sick' ? 'warn' : plant.status === 'dead' ? 'safety' : 'ok'}>
+          {/*
+            状态徽章带上「已 N 天」的悬停提示 —— 卡片本身放不下天数，
+            但这个数字恰恰是「缓苗缓了多久」的答案，不能藏着。
+          */}
+          <Badge
+            tone={plant.status === 'sick' ? 'warn' : plant.status === 'dead' ? 'safety' : 'ok'}
+            title={
+              plant.statusChangedAt
+                ? `当前状态「${PLANT_STATUS_LABELS[plant.status]}」已持续 ${phaseAgeDays(plant.statusChangedAt) ?? 0} 天（自 ${plant.statusChangedAt}）`
+                : undefined
+            }
+          >
             {PLANT_STATUS_LABELS[plant.status]}
           </Badge>
           {plant.envName ? <Badge tone="info">{plant.envName}</Badge> : <Badge tone="muted">未分配位置</Badge>}

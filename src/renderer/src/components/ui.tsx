@@ -35,8 +35,21 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
   )
 }
 
-export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?: 'safety' | 'ai' | 'ok' | 'warn' | 'info' | 'muted' }): ReactNode {
-  return <span className={cx('pixel-badge', tone)}>{children}</span>
+export function Badge({
+  children,
+  tone = 'muted',
+  title
+}: {
+  children: ReactNode
+  tone?: 'safety' | 'ai' | 'ok' | 'warn' | 'info' | 'muted'
+  /** 悬停提示：徽章本身放不下的信息（比如「已缓苗 12 天」）挂这里 */
+  title?: string
+}): ReactNode {
+  return (
+    <span className={cx('pixel-badge', tone)} title={title}>
+      {children}
+    </span>
+  )
 }
 
 const NOTICE_GLYPH: Record<string, string> = { danger: '×', warn: '!', ok: '✓', info: 'i' }

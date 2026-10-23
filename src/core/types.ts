@@ -226,6 +226,11 @@ export interface Plant {
   nickname: string
   envId: number | null
   status: PlantStatus
+  /**
+   * 当前状态是从哪天开始的（YYYY-MM-DD）。
+   * 改状态时更新；老数据用入手日期 / 建档日期兜底。
+   */
+  statusChangedAt: string | null
   /** 用户自己分的类（「月季类」「多肉类」），列表按它筛选 */
   category: string | null
   acquiredAt: string | null

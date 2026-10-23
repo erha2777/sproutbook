@@ -107,6 +107,7 @@ import {
   spreadDay,
   summarizeTasks,
   urgencyOf,
+  todayIso,
   windowRange
 } from '../core/care'
 import {
@@ -520,6 +521,11 @@ export async function runSmoke(outFile: string): Promise<number> {
         logs: [{ date: '2026-10-20', kind: '浇水', content: '浇透一次' }]
       })
       check('档案带昵称与分类', dossier.includes('前院莫利纳尔') && dossier.includes('月季'))
+      const withDays = buildPlantDossier({
+        today: '2026-10-22',
+        plant: { nickname: '缓苗中的株', statusLabel: '缓苗', statusDays: 20 }
+      })
+      check('档案里的状态带持续天数', withDays.includes('缓苗（已 20 天）'), withDays.split('【')[1]?.slice(0, 40))
       check('档案带物种知识', dossier.includes('Rosa Molineux') && dossier.includes('蔷薇科'))
       check('档案带养护位置', dossier.includes('前院') && dossier.includes('6 小时'))
       check('档案带物候阶段和依据', dossier.includes('花期') && dossier.includes('10 月在开花期内'))
@@ -631,6 +637,32 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('批量删除不误伤没选中的', left.includes('保留 C'), JSON.stringify(left))
       check('批量删除空数组是安全的', deleteCareLogs(db, []) === 0)
       check('批量删除已经删过的 id 不报错', deleteCareLogs(db, [logA.id, logKeep.id]) === 1)
+
+    /* 状态计时：只有状态真的变了才刷新起点 */
+    {
+      const p = savePlant(db, {
+        speciesId,
+        nickname: '状态计时株',
+        values: { nickname: '状态计时株', status: 'recovering' }
+      })
+      const plantId = p.plant?.id ?? 0
+      check('新建植株的状态起点是今天', p.plant?.statusChangedAt === todayIso(), String(p.plant?.statusChangedAt))
+
+      // 手动把起点拨到很久以前，模拟「这个状态已经持续了一阵」
+      db.run("UPDATE plants SET status_changed_at = '2026-01-01' WHERE id = ?", plantId)
+      const sameStatus = savePlant(db, { id: plantId, values: { nickname: '改了昵称但状态没变' } })
+      check(
+        '只改别的字段不会重置状态起点',
+        getPlant(db, plantId)?.statusChangedAt === '2026-01-01',
+        String(getPlant(db, plantId)?.statusChangedAt)
+      )
+      check('昵称确实改了', sameStatus.plant?.nickname === '改了昵称但状态没变')
+
+      savePlant(db, { id: plantId, values: { status: 'blooming' } })
+      check('改状态会把起点刷成今天', getPlant(db, plantId)?.statusChangedAt === todayIso())
+      check('天数按起点算', phaseAgeDays('2026-01-01', '2026-01-15') === 14)
+      check('没有起点就没有天数', phaseAgeDays(null) === null)
+    }
     }
       check('按 id 读回来的分类和列表一致', getPlant(db, catSaved.plant?.id ?? 0)?.category === catSaved.plant?.category)
       check('别的分类为空', listPlants(db, { category: '不存在的分类' }).items.length === 0)

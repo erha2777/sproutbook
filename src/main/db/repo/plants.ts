@@ -5,6 +5,7 @@
 import type { Db } from '../connection'
 import type { FieldValue, Plant, PlantStatus, PlantWithSpecies } from '../../../core/types'
 import { requiredErrors, splitAttributes } from '../../../core/attributes'
+import { todayIso } from '../../../core/care'
 import { jsonObject, likeParam, loadFieldDefinitions, writeAttrIndex } from './common'
 
 export interface PlantRow {
@@ -13,6 +14,7 @@ export interface PlantRow {
   nickname: string
   env_id: number | null
   status: string
+  status_changed_at: string | null
   category: string | null
   acquired_at: string | null
   pot_size: string | null
@@ -64,6 +66,7 @@ function mapPlant(row: PlantRow): Plant {
     nickname: row.nickname,
     envId: row.env_id,
     status: row.status as PlantStatus,
+    statusChangedAt: row.status_changed_at ?? null,
     category: row.category ?? null,
     acquiredAt: row.acquired_at,
     potSize: row.pot_size,
@@ -335,16 +338,28 @@ export function savePlant(db: Db, input: SavePlantInput): SavePlantResult {
       .replace(/\s+/g, ' ')
       .trim()
 
+    /*
+     * 状态计时：只有**状态真的变了**才刷新起点。
+     *
+     * 保存一次昵称、换一次位置都不该把「已缓苗 12 天」清零 —— 这是用户看它的唯一意义。
+     * 新建植株从今天算起。
+     */
+    const statusChangedAt =
+      existingRow && existingRow.status === status
+        ? (existingRow.status_changed_at ?? todayIso())
+        : todayIso()
+
     let savedId = id
     if (savedId) {
       db.run(
-        `UPDATE plants SET species_id=?, nickname=?, env_id=?, status=?, category=?, acquired_at=?, pot_size=?,
-           attributes_json=?, notes=?, search_blob=?, updated_at=datetime('now')
+        `UPDATE plants SET species_id=?, nickname=?, env_id=?, status=?, status_changed_at=?, category=?,
+           acquired_at=?, pot_size=?, attributes_json=?, notes=?, search_blob=?, updated_at=datetime('now')
          WHERE id=?`,
         speciesId,
         nickname,
         envId,
         status,
+        statusChangedAt,
         category,
         acquiredAt,
         potSize,
@@ -355,12 +370,14 @@ export function savePlant(db: Db, input: SavePlantInput): SavePlantResult {
       )
     } else {
       const r = db.run(
-        `INSERT INTO plants (species_id, nickname, env_id, status, category, acquired_at, pot_size, attributes_json, notes, search_blob)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO plants (species_id, nickname, env_id, status, status_changed_at, category, acquired_at, pot_size,
+           attributes_json, notes, search_blob)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         speciesId,
         nickname,
         envId,
         status,
+        statusChangedAt,
         category,
         acquiredAt,
         potSize,

@@ -572,6 +572,16 @@ const V20_MATERIAL_STOCK = /* sql */ `
 ALTER TABLE materials ADD COLUMN stock REAL;
 ALTER TABLE recipes ADD COLUMN available INTEGER NOT NULL DEFAULT 0;
 `
+/**
+ * 状态计时：记录「当前状态是从哪天开始的」。
+ *
+ * 老数据不知道当时是哪天改的，退一步用入手日期 / 建档日期兜底 ——
+ * 至少比空着好，界面上会写明是"从建档算起"。
+ */
+const V24_PLANT_STATUS_CHANGED = /* sql */ `
+ALTER TABLE plants ADD COLUMN status_changed_at TEXT;
+UPDATE plants SET status_changed_at = COALESCE(acquired_at, created_at) WHERE status_changed_at IS NULL;
+`
 /** 材料单价：每单位的价钱（元）。用来估「配一次土大概多少钱」。 */
 /** 植株分类：用户自己分的类（「月季类」「多肉类」），列表按它筛选。 */
 const V23_PLANT_CATEGORY = /* sql */ `
@@ -619,7 +629,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 20, name: 'material_stock_recipe_available', sql: V20_MATERIAL_STOCK },
   { version: 21, name: 'plant_status_options', run: migratePlantStatusOptions },
   { version: 22, name: 'material_price', sql: V22_MATERIAL_PRICE },
-  { version: 23, name: 'plant_category', sql: V23_PLANT_CATEGORY }
+  { version: 23, name: 'plant_category', sql: V23_PLANT_CATEGORY },
+  { version: 24, name: 'plant_status_changed_at', sql: V24_PLANT_STATUS_CHANGED }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

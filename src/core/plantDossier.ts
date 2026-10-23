@@ -14,6 +14,8 @@ export interface DossierPlant {
   nickname: string
   category?: string | null
   statusLabel: string
+  /** 当前状态已经持续了几天（从最后改状态那天算起）；null / 省略表示不知道 */
+  statusDays?: number | null
   /** 自动推算的物候阶段（中文名），没有就 null */
   phaseLabel?: string | null
   /** 阶段的依据，例如「10 月在开花期内」 */
@@ -99,7 +101,14 @@ export function buildPlantDossier(input: DossierInput): string {
   const p: DossierField[] = [
     { label: '昵称', value: plant.nickname },
     { label: '分类', value: plant.category ?? '' },
-    { label: '状态', value: plant.statusLabel }
+    {
+      label: '状态',
+      // 带上「已 N 天」：'缓苗 20 天还蔫' 和 '今天刚缓苗' 该给的答案完全不同
+      value:
+        typeof plant.statusDays === 'number'
+          ? `${plant.statusLabel}（已 ${plant.statusDays} 天）`
+          : plant.statusLabel
+    }
   ]
   if (plant.phaseLabel) {
     p.push({

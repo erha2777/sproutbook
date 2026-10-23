@@ -86,7 +86,7 @@ import { formatFieldValue } from '../../core/fieldTypes'
 import { buildAskPlantMessages, buildPlantDossier } from '../../core/plantDossier'
 import { deriveCarePhase } from '../../core/phase'
 import { readMonthSet } from '../../core/growth'
-import { CARE_PHASE_LABELS, logKindLabel, todayIso } from '../../core/care'
+import { CARE_PHASE_LABELS, logKindLabel, phaseAgeDays, todayIso } from '../../core/care'
 import { PLANT_STATUS_LABELS } from '../../core/status'
 import type { CareHemisphere, CarePhase, CareRuleInput, CareTaskInput } from '../../core/types'
 import {
@@ -1373,6 +1373,7 @@ function registerAiIpc(): void {
         nickname: plant.nickname,
         category: plant.category,
         statusLabel: PLANT_STATUS_LABELS[plant.status] ?? plant.status,
+        statusDays: phaseAgeDays(plant.statusChangedAt),
         phaseLabel: phase.phase ? CARE_PHASE_LABELS[phase.phase] : null,
         phaseReason: phase.reason,
         acquiredAt: plant.acquiredAt,
