@@ -4048,21 +4048,16 @@ html.tex-button .home-gear.sound-ctl:hover {
   background: rgba(140, 126, 110, 0.9);
   border-color: rgba(60, 46, 30, 0.9);
 }
-/* 播放中的小音符：绝对定位在按钮右下角，微微闪 */
-.sound-note {
-  position: absolute;
-  right: -3px;
-  bottom: -4px;
-  font-size: 10px;
-  line-height: 1;
-  color: #fff3c4;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.65);
-  animation: sound-note-pulse 1.6s ease-in-out infinite;
-  pointer-events: none;
+/* 播放中：音符轻轻起伏；静音：整颗变灰 */
+.sound-ctl.playing svg {
+  animation: music-bob 1.8s ease-in-out infinite;
 }
-@keyframes sound-note-pulse {
-  0%, 100% { opacity: 0.55; transform: translateY(0); }
-  50% { opacity: 1; transform: translateY(-1px); }
+.sound-ctl.muted svg {
+  filter: grayscale(1) brightness(0.75);
+}
+@keyframes music-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
 }
 
 .music-panel {

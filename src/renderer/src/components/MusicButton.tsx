@@ -38,8 +38,7 @@ export function MusicButton({
         aria-label="声音与音乐"
         onClick={() => setOpen((v) => !v)}
       >
-        <PixelIcon name={soundOn ? 'sound' : 'mute'} size={24} />
-        {music.playing && soundOn ? <i className="sound-note" aria-hidden>♪</i> : null}
+        <PixelIcon name="music" size={22} />
         <span className="sr-only">声音与音乐</span>
       </button>
 
