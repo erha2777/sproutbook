@@ -447,7 +447,7 @@ function Shell(): ReactNode {
           onSettings={() => setRoute({ name: 'settings' })}
         />
         {soundToggle}
-        <MusicButton music={music} />
+        <MusicButton music={music} soundOn={soundOn} onToggleSound={toggleSound} />
       </div>
     )
   }
@@ -472,7 +472,7 @@ function Shell(): ReactNode {
       {/* 无边框窗口的自制标题栏：拖动 + 最小化 / 最大化 / 关闭 */}
       <TitleBar />
       {soundToggle}
-      <MusicButton music={music} />
+      <MusicButton music={music} soundOn={soundOn} onToggleSound={toggleSound} />
       <div className="page-shell">
       <main className="main">
         {/* 所有分区共用同一条顶行：养护区左边是 tab，其他区只有右边的 HUD。

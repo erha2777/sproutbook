@@ -1,8 +1,11 @@
 /**
- * 背景音乐控制：左上角那颗音符按钮 + 展开面板。
+ * 背景音乐按钮：和左上角的喇叭（静音开关）并排，样式统一成图标按钮。
  *
- * 面板里就三件事：放/停在放什么、选模式（当季随机 / 当季轮播 / 单曲循环）、调音量。
- * 单曲循环时额外列全部曲目（按季节分组）—— 曲库就十几首，不值得再套一层弹窗。
+ * 点开面板：播放/暂停、模式（当季随机 / 当季轮播 / 单曲循环）、音量、
+ * 单曲循环时列全部曲目（按季节分组）—— 曲库就十几首，不值得再套一层弹窗。
+ *
+ * 面板里也放一个「声音」开关：两颗按钮管同一件事（要不要出声），
+ * 就地一起控制，省得来回找。
  */
 
 import { useState } from 'react'
@@ -11,23 +14,31 @@ import { MUSIC_MODE_HINTS, MUSIC_MODE_LABELS, SEASON_LABELS, SEASON_ORDER } from
 import type { MusicMode } from '@core/music'
 import type { MusicPlayer } from '../lib/useMusic'
 import { Button } from './ui'
+import { PixelIcon } from './PixelIcon'
 
 const MODES: MusicMode[] = ['season-random', 'season-rotate', 'single']
 
-export function MusicButton({ music }: { music: MusicPlayer }): ReactNode {
+export function MusicButton({
+  music,
+  soundOn,
+  onToggleSound
+}: {
+  music: MusicPlayer
+  soundOn: boolean
+  onToggleSound: () => void
+}): ReactNode {
   const [open, setOpen] = useState(false)
   const label = music.current ? music.current.name : '没有音乐'
   return (
     <>
       <button
         type="button"
-        className="music-ctl"
-        title={`背景音乐：${label}${music.playing ? '' : '（未播放）'}`}
+        className={`home-gear global-music${music.playing ? ' playing' : ''}`}
+        title={`背景音乐：${label}${music.playing ? '' : '（未播放）'} · 点击换模式 / 调音量`}
         aria-label="背景音乐"
         onClick={() => setOpen((v) => !v)}
       >
-        {music.playing ? '♪' : '♪̸'}
-        <span className="music-ctl-name">{label}</span>
+        <PixelIcon name="music" size={24} />
       </button>
 
       {open ? (
@@ -36,13 +47,20 @@ export function MusicButton({ music }: { music: MusicPlayer }): ReactNode {
             <span className="small muted">
               当季：{SEASON_LABELS[music.season]} · 共 {music.tracks.length} 首
             </span>
-            <button type="button" className="music-panel-close" onClick={() => setOpen(false)} title="收起">
-              ×
-            </button>
+            <span className="row tight">
+              <Button size="small" onClick={onToggleSound} title="音效和背景音乐一起关 / 开">
+                {soundOn ? '🔊 声音开' : '🔇 已静音'}
+              </Button>
+              <button type="button" className="music-panel-close" onClick={() => setOpen(false)} title="收起">
+                ×
+              </button>
+            </span>
           </div>
 
           <div className="music-now">
-            <span className="music-now-name">{label}</span>
+            <span className="music-now-name" title={label}>
+              {label}
+            </span>
             <span className="row tight">
               <Button size="small" onClick={() => music.toggle()} title="播放 / 暂停">
                 {music.playing ? '暂停' : '播放'}
@@ -110,7 +128,7 @@ export function MusicButton({ music }: { music: MusicPlayer }): ReactNode {
               })}
               {music.tracks.some((t) => t.season === null) ? (
                 <div>
-                  <div className="music-list-head">不分季节</div>
+                  <div className="music-list-head">其他（不分季节）</div>
                   {music.tracks
                     .filter((t) => t.season === null)
                     .map((track) => (
