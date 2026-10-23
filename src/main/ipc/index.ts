@@ -115,6 +115,7 @@ import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintex
 import { importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
 import { listMusic } from '../services/music'
 import { EMPTY_MEDIA_PREFS, MEDIA_KEY, backdropsDir, listBackdrops, readBackdrop, type MediaPrefs } from '../services/media'
+import { normalizeMusicMode } from '../../core/music'
 import {
   createCompatShortcut,
   detectIntegrityLevel,
@@ -567,13 +568,31 @@ function registerAppIpc(): void {
     return listBackdrops()
   })
 
-  handle('app:mediaPrefs', () => getSetting<MediaPrefs>(getDb(), MEDIA_KEY, EMPTY_MEDIA_PREFS))
+  handle('app:mediaPrefs', () => {
+    // 老库里没有新字段：读出来时补默认值，别让界面拿到 undefined
+    const prefs = getSetting<Partial<MediaPrefs>>(getDb(), MEDIA_KEY, EMPTY_MEDIA_PREFS)
+    return {
+      ...EMPTY_MEDIA_PREFS,
+      ...prefs,
+      musicMode: normalizeMusicMode(prefs.musicMode),
+      musicVolume:
+        typeof prefs.musicVolume === 'number' && Number.isFinite(prefs.musicVolume)
+          ? Math.min(Math.max(prefs.musicVolume, 0), 1)
+          : EMPTY_MEDIA_PREFS.musicVolume
+    }
+  })
   handle('app:setMediaPrefs', (patch: Partial<MediaPrefs>) => {
     const db = getDb()
     const current = getSetting<MediaPrefs>(db, MEDIA_KEY, EMPTY_MEDIA_PREFS)
+    const volume =
+      patch.musicVolume === undefined
+        ? (current.musicVolume ?? EMPTY_MEDIA_PREFS.musicVolume)
+        : Math.min(Math.max(Number(patch.musicVolume) || 0, 0), 1)
     const next: MediaPrefs = {
       musicTrack: patch.musicTrack === undefined ? current.musicTrack : patch.musicTrack,
-      backdrop: patch.backdrop === undefined ? current.backdrop : patch.backdrop
+      backdrop: patch.backdrop === undefined ? current.backdrop : patch.backdrop,
+      musicMode: patch.musicMode === undefined ? normalizeMusicMode(current.musicMode) : normalizeMusicMode(patch.musicMode),
+      musicVolume: volume
     }
     setSetting(db, MEDIA_KEY, next)
     return next

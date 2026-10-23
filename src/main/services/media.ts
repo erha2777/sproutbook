@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 音乐 / 背景的"选哪个"偏好，和用户自己放的背景图。
  *
  * 文件都落在 <userData>/textures 下：
@@ -14,13 +14,30 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
 export interface MediaPrefs {
-  /** 选中的曲目文件名；null = 用列表里的第一首 */
+  /**
+   * 单曲循环时选中的曲目（相对 music 目录的路径，允许带季节子目录）；
+   * null = 没选，按当季随机走。
+   */
   musicTrack: string | null
   /** 选中的背景图文件名；null = 全部轮播 */
   backdrop: string | null
+  /**
+   * 音乐播放模式：
+   *  - season-random（默认）：每次打开应用，从当季曲子里随机挑一首循环
+   *  - season-rotate：当季曲子按顺序轮播
+   *  - single：只放 musicTrack 那一首
+   */
+  musicMode: 'season-random' | 'season-rotate' | 'single'
+  /** 音乐音量 0~1（音效音量是另一条线，互不影响） */
+  musicVolume: number
 }
 
-export const EMPTY_MEDIA_PREFS: MediaPrefs = { musicTrack: null, backdrop: null }
+export const EMPTY_MEDIA_PREFS: MediaPrefs = {
+  musicTrack: null,
+  backdrop: null,
+  musicMode: 'season-random',
+  musicVolume: 0.3
+}
 /** settings 表里的键 */
 export const MEDIA_KEY = 'media.prefs'
 

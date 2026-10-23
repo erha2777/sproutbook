@@ -138,6 +138,14 @@ import {
 } from './db/repo/care'
 import { seedCareRules } from './db/seed'
 import {
+  nextIndex,
+  normalizeMusicMode,
+  randomIndex,
+  seasonOfFolderName,
+  seasonOfMonth,
+  seasonTracks
+} from '../core/music'
+import {
   archiveRecipe,
   deleteMaterial,
   getRecipe,
@@ -646,6 +654,48 @@ export async function runSmoke(outFile: string): Promise<number> {
         values: { nickname: '状态计时株', status: 'recovering' }
       })
       const plantId = p.plant?.id ?? 0
+
+    /* 四季音乐：季节判断、模式、选曲（纯函数的那些容易错的地方） */
+    {
+      check('3 月是春天', seasonOfMonth(3) === 'spring')
+      check('5 月还是春天', seasonOfMonth(5) === 'spring')
+      check('6 月入夏', seasonOfMonth(6) === 'summer')
+      check('8 月还是夏天', seasonOfMonth(8) === 'summer')
+      check('9 月入秋', seasonOfMonth(9) === 'autumn')
+      check('11 月还是秋天', seasonOfMonth(11) === 'autumn')
+      check('12 月入冬', seasonOfMonth(12) === 'winter')
+      check('1 月是冬天', seasonOfMonth(1) === 'winter')
+      check('2 月还是冬天', seasonOfMonth(2) === 'winter')
+
+      check('文件夹「春季（Spring）」认成春天', seasonOfFolderName('春季（Spring）') === 'spring')
+      check('文件夹「夏季（Summer）」认成夏天', seasonOfFolderName('夏季（Summer）') === 'summer')
+      check('文件夹「秋季（Fall）」认成秋天', seasonOfFolderName('秋季（Fall）') === 'autumn')
+      check('文件夹「冬季（Winter）」认成冬天', seasonOfFolderName('冬季（Winter）') === 'winter')
+      check('顶层曲目不属于任何季节', seasonOfFolderName('多云的乡村.mp3') === null)
+
+      check('未知模式收敛成当季随机循环', normalizeMusicMode('乱写的') === 'season-random')
+      check('null 也收敛成当季随机循环', normalizeMusicMode(null) === 'season-random')
+      check('单曲模式被保留', normalizeMusicMode('single') === 'single')
+
+      const pool = [
+        { season: 'spring' as const },
+        { season: 'spring' as const },
+        { season: 'autumn' as const },
+        { season: null }
+      ]
+      check('当季有曲子时只取当季的', seasonTracks(pool, 'spring').length === 2)
+      check('当季一首都没有时退回全部', seasonTracks(pool, 'winter').length === pool.length)
+
+      check('随机下标落在范围内（最小）', randomIndex(3, () => 0) === 0)
+      check('随机下标落在范围内（最大）', randomIndex(3, () => 0.999) === 2)
+      check('随机值越界不会崩', randomIndex(3, () => 1.7) === 2)
+      check('空列表没有随机下标', randomIndex(0) === -1)
+
+      check('轮播下一首', nextIndex(1, 3) === 2)
+      check('轮播到底回到第一首', nextIndex(2, 3) === 0)
+      check('下标非法也能兜住', nextIndex(-1, 3) === 0)
+      check('空列表轮播返回 -1', nextIndex(0, 0) === -1)
+    }
       check('新建植株的状态起点是今天', p.plant?.statusChangedAt === todayIso(), String(p.plant?.statusChangedAt))
 
       // 手动把起点拨到很久以前，模拟「这个状态已经持续了一阵」

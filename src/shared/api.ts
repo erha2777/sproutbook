@@ -5,6 +5,7 @@
  * 名字写错在编译期就会报错。
  */
 
+import type { MusicMode, MusicSeason } from '../core/music'
 import type {
   AiAutofillResult,
   AiConnectionResult,
@@ -144,24 +145,42 @@ export interface SproutbookApi {
     /** 私有字体：<userData>/fonts 里放了字体就返回 data URL（不打包进仓库） */
     fonts(): Promise<{ custom: string | null }>
     /**
-     * 私有背景音乐：<userData>/textures/music 下的音频
+     * 私有背景音乐：<userData>/textures/music 下的音频。
+     * 按季节分子目录的，season 就是那一季；顶层曲子 season 为 null。
      */
-    music(): Promise<Array<{ name: string; url: string }>>
+    music(): Promise<Array<{ name: string; file: string; season: MusicSeason | null; url: string }>>
     /** 弹文件对话框添加音乐（复制进 <userData>/textures/music） */
-    importMusic(): Promise<{ canceled: boolean; tracks: Array<{ name: string; url: string }> }>
+    importMusic(): Promise<{
+      canceled: boolean
+      tracks: Array<{ name: string; file: string; season: MusicSeason | null; url: string }>
+    }>
     /** 删掉一首，返回剩余列表 */
-    removeMusic(name: string): Promise<Array<{ name: string; url: string }>>
+    removeMusic(name: string): Promise<
+      Array<{ name: string; file: string; season: MusicSeason | null; url: string }>
+    >
     /** 用户自己放的背景图（<userData>/textures/backgrounds，已缩到 1600 内的 data URL） */
     backdrops(): Promise<Array<{ name: string; url: string }>>
     /** 单独取某一张背景（列表里没有时兜底） */
     backdropUrl(name: string): Promise<string | null>
     importBackdrops(): Promise<{ canceled: boolean; backdrops: Array<{ name: string; url: string }> }>
     removeBackdrop(name: string): Promise<Array<{ name: string; url: string }>>
-    /** 选中的曲目 / 背景（null = 第一首 / 全部轮播） */
-    mediaPrefs(): Promise<{ musicTrack: string | null; backdrop: string | null }>
-    setMediaPrefs(patch: { musicTrack?: string | null; backdrop?: string | null }): Promise<{
+    /** 选中的曲目 / 背景 / 播放模式 / 音量 */
+    mediaPrefs(): Promise<{
       musicTrack: string | null
       backdrop: string | null
+      musicMode: MusicMode
+      musicVolume: number
+    }>
+    setMediaPrefs(patch: {
+      musicTrack?: string | null
+      backdrop?: string | null
+      musicMode?: MusicMode
+      musicVolume?: number
+    }): Promise<{
+      musicTrack: string | null
+      backdrop: string | null
+      musicMode: MusicMode
+      musicVolume: number
     }>
     /**
      * 私有素材：<userData>/textures 下的图片。

@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, ToastProvider, cx, useToast } from './components/ui'
 import { TitleBar } from './components/TitleBar'
@@ -17,6 +17,8 @@ import { TodayPage } from './pages/TodayPage'
 import { LogsPage } from './pages/LogsPage'
 import { HomePage } from './pages/HomePage'
 import { isSfxOn, setSfx, sfx } from './lib/sfx'
+import { useMusic } from './lib/useMusic'
+import { MusicButton } from './components/MusicButton'
 import { pendingBuckets, todayIso } from '@core/care'
 
 type CareTab = 'today' | 'plans' | 'logs' | 'recipes'
@@ -116,14 +118,11 @@ function Shell(): ReactNode {
   const [backdropPref, setBackdropPref] = useState<string | null>(null)
   /** 设置页改了音乐/背景后，靠这个计数重跑加载 */
   const [mediaVersion, setMediaVersion] = useState(0)
-  /** 正在播放的私有背景音乐（没有就是 null） */
-  const [musicName, setMusicName] = useState<string | null>(null)
-  const [musicPlaying, setMusicPlaying] = useState(false)
   /**
-   * 背景音乐（私有）：<userData>/textures/music 下的音频，循环播放。
-   * 和音效共用一个静音开关（soundOn）。
+   * 背景音乐（私有）：<userData>/textures/music 下的音频。
+   * 四季模式、选曲、音量都在 useMusic 里；和音效共用一个静音开关（soundOn）。
    */
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const music = useMusic(soundOn)
 
   /**
    * 兼容模式首启提示。
@@ -331,42 +330,10 @@ function Shell(): ReactNode {
   }, [])
 
   /*
-   * 背景音乐：播放设置里选中的那首（没选就用第一首），循环，音量 0.3。
-   * 设置页换了歌会通过 sproutbook:media 事件触发重跑（见下面的 mediaVersion）。
+   * 背景音乐已经搬进 useMusic（四季选曲 + 模式 + 音量）。
+   * 设置页改了音乐/背景后仍然靠 sproutbook:media 事件重跑背景图部分；
+   * 音乐列表变化时用户重开应用即可，不额外重建 Audio —— 免得正放着歌被掐断。
    */
-  useEffect(() => {
-    let disposed = false
-    void (async () => {
-      try {
-        const [tracks, prefs] = await Promise.all([window.api.app.music(), window.api.app.mediaPrefs()])
-        if (disposed || tracks.length === 0) return
-        const track = tracks.find((t) => t.name === prefs.musicTrack) ?? tracks[0]
-        setMusicName(track.name)
-        const audio = new Audio(track.url)
-        audio.loop = true
-        audio.volume = 0.3
-        audioRef.current = audio
-        if (!isSfxOn()) return
-        try {
-          await audio.play()
-          setMusicPlaying(true)
-        } catch {
-          const resume = (): void => {
-            if (isSfxOn()) void audio.play().then(() => setMusicPlaying(true)).catch(() => undefined)
-            window.removeEventListener('pointerdown', resume)
-          }
-          window.addEventListener('pointerdown', resume, { once: true })
-        }
-      } catch {
-        // 没有音乐就安静地放着
-      }
-    })()
-    return () => {
-      disposed = true
-      audioRef.current?.pause()
-      audioRef.current = null
-    }
-  }, [mediaVersion])
 
 
   /*
@@ -422,16 +389,7 @@ function Shell(): ReactNode {
     () => resolveBackdrops(baseBackdrops, uploadedBackdrops, backdropPref, directBackdrop),
     [baseBackdrops, uploadedBackdrops, backdropPref, directBackdrop]
   )
-  // 静音开关同时控制背景音乐
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    if (soundOn) void audio.play().then(() => setMusicPlaying(true)).catch(() => undefined)
-    else {
-      audio.pause()
-      setMusicPlaying(false)
-    }
-  }, [soundOn])
+  // （背景音乐的放/停由 useMusic 的 enabled 参数负责，这里不再单独处理）
 
   // 首次进入时做一次环境自检，把明显的问题尽早告诉用户
   useEffect(() => {
@@ -487,10 +445,11 @@ function Shell(): ReactNode {
           onCare={() => setRoute({ name: 'care', tab: 'today' })}
           onQuit={() => void window.api.app.quit()}
           onSettings={() => setRoute({ name: 'settings' })}
-          musicName={musicName}
-          musicPlaying={musicPlaying}
+          musicName={music.current?.name ?? null}
+          musicPlaying={music.playing}
         />
         {soundToggle}
+        <MusicButton music={music} />
       </div>
     )
   }
@@ -515,6 +474,7 @@ function Shell(): ReactNode {
       {/* 无边框窗口的自制标题栏：拖动 + 最小化 / 最大化 / 关闭 */}
       <TitleBar />
       {soundToggle}
+      <MusicButton music={music} />
       <div className="page-shell">
       <main className="main">
         {/* 所有分区共用同一条顶行：养护区左边是 tab，其他区只有右边的 HUD。
