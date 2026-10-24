@@ -255,6 +255,9 @@ export interface PlantWithSpecies extends Plant {
 export type MaterialKind = 'substrate' | 'fertilizer' | 'pesticide' | 'tool' | 'other'
 
 export interface Material {
+  /** 第一张照片（买的袋装土长什么样），没有就是 null；保存时不传也行 */
+  imageId?: number | null
+  imageThumb?: string | null
   id: number
   name: string
   kind: MaterialKind
@@ -531,6 +534,8 @@ export interface ImageRecord {
   speciesId: number | null
   /** 养护位置的图片（拍窗台、架子、光照），暂时只存着，留给以后的 AI 分析 */
   environmentId: number | null
+  /** 物品的照片（买的袋装土、肥料长什么样） */
+  materialId: number | null
   path: string
   thumbPath: string | null
   caption: string | null

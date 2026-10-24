@@ -578,6 +578,15 @@ ALTER TABLE recipes ADD COLUMN available INTEGER NOT NULL DEFAULT 0;
  * 老数据不知道当时是哪天改的，退一步用入手日期 / 建档日期兜底 ——
  * 至少比空着好，界面上会写明是"从建档算起"。
  */
+/**
+ * 物品照片：和植株 / 物种 / 位置一样挂在 images 表上（owner 列）。
+ * 单独一列而不是复用 caption 之类，是因为删物品时靠外键级联把照片记录一起带走。
+ */
+const V25_MATERIAL_IMAGE = /* sql */ `
+ALTER TABLE images ADD COLUMN material_id INTEGER REFERENCES materials(id) ON DELETE CASCADE;
+CREATE INDEX idx_images_material ON images(material_id, sort_order);
+`
+
 const V24_PLANT_STATUS_CHANGED = /* sql */ `
 ALTER TABLE plants ADD COLUMN status_changed_at TEXT;
 UPDATE plants SET status_changed_at = COALESCE(acquired_at, created_at) WHERE status_changed_at IS NULL;
@@ -630,7 +639,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 21, name: 'plant_status_options', run: migratePlantStatusOptions },
   { version: 22, name: 'material_price', sql: V22_MATERIAL_PRICE },
   { version: 23, name: 'plant_category', sql: V23_PLANT_CATEGORY },
-  { version: 24, name: 'plant_status_changed_at', sql: V24_PLANT_STATUS_CHANGED }
+  { version: 24, name: 'plant_status_changed_at', sql: V24_PLANT_STATUS_CHANGED },
+  { version: 25, name: 'material_image', sql: V25_MATERIAL_IMAGE }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

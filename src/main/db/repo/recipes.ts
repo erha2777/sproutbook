@@ -25,6 +25,8 @@ interface MaterialRow {
   stock: number | null
   price: number | null
   note: string | null
+  image_id: number | null
+  image_thumb: string | null
 }
 
 function mapMaterial(row: MaterialRow): Material {
@@ -35,7 +37,9 @@ function mapMaterial(row: MaterialRow): Material {
     unit: row.unit,
     stock: row.stock ?? null,
     price: row.price ?? null,
-    note: row.note
+    note: row.note,
+    imageId: row.image_id ?? null,
+    imageThumb: row.image_thumb ?? null
   }
 }
 
@@ -45,17 +49,34 @@ export function listMaterials(db: Db, query?: string): Material[] {
     const like = `%${query.trim().replace(/[%_]/g, (m) => `\\${m}`)}%`
     return db
       .all<MaterialRow>(
-        "SELECT * FROM materials WHERE name LIKE ? ESCAPE '\\' OR note LIKE ? ESCAPE '\\' ORDER BY kind, name",
+        `SELECT m.*, i.id AS image_id, i.thumb_path AS image_thumb
+         FROM materials m
+         LEFT JOIN images i ON i.id = (SELECT id FROM images WHERE material_id = m.id ORDER BY sort_order, id LIMIT 1)
+         WHERE m.name LIKE ? ESCAPE '\\' OR m.note LIKE ? ESCAPE '\\'
+         ORDER BY m.kind, m.name`,
         like,
         like
       )
       .map(mapMaterial)
   }
-  return db.all<MaterialRow>('SELECT * FROM materials ORDER BY kind, name').map(mapMaterial)
+  return db
+    .all<MaterialRow>(
+      `SELECT m.*, i.id AS image_id, i.thumb_path AS image_thumb
+       FROM materials m
+       LEFT JOIN images i ON i.id = (SELECT id FROM images WHERE material_id = m.id ORDER BY sort_order, id LIMIT 1)
+       ORDER BY m.kind, m.name`
+    )
+    .map(mapMaterial)
 }
 
 export function getMaterial(db: Db, id: number): Material | null {
-  const row = db.get<MaterialRow>('SELECT * FROM materials WHERE id = ?', id)
+  const row = db.get<MaterialRow>(
+    `SELECT m.*, i.id AS image_id, i.thumb_path AS image_thumb
+     FROM materials m
+     LEFT JOIN images i ON i.id = (SELECT id FROM images WHERE material_id = m.id ORDER BY sort_order, id LIMIT 1)
+     WHERE m.id = ?`,
+    id
+  )
   return row ? mapMaterial(row) : null
 }
 

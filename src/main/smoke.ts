@@ -35,7 +35,7 @@ import { chat } from './services/ai/client'
 import { createField, deleteField, fieldUsage, getField, setFieldArchived, updateField } from './db/repo/fields'
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { archivePlant, getPlant, listPlantCategories, listPlants, plantStats, savePlant, setPlantCover } from './db/repo/plants'
-import { addImage, archiveEnvironment, getEnvironment, getSetting, listCorruptSettings, listEnvironments, listImages, saveEnvironment, setSetting } from './db/repo/misc'
+import { addImage, archiveEnvironment, deleteImage, getEnvironment, getSetting, listCorruptSettings, listEnvironments, listImages, saveEnvironment, setSetting } from './db/repo/misc'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
@@ -655,6 +655,26 @@ export async function runSmoke(outFile: string): Promise<number> {
         values: { nickname: '状态计时株', status: 'recovering' }
       })
       const plantId = p.plant?.id ?? 0
+
+    /* 物品照片：images 表多一种 owner，列表要能带出来 */
+    {
+      const mat = saveMaterial(db, {
+        name: '带照片的物品',
+        kind: 'substrate',
+        unit: null,
+        stock: null,
+        price: null,
+        note: null
+      })
+      check('物品默认没有照片', (listMaterials(db).find((m) => m.id === mat.id)?.imageThumb ?? null) === null)
+      const img = addImage(db, { materialId: mat.id, path: 'mat-1.jpg', thumbPath: 'mat-1-thumb.jpg' })
+      check('图片记录带上物品归属', img.materialId === mat.id, String(img.materialId))
+      const listed = listMaterials(db).find((m) => m.id === mat.id)
+      check('列表带出物品缩略图', listed?.imageThumb === 'mat-1-thumb.jpg', String(listed?.imageThumb))
+      check('图片按物品查得到', listImages(db, { materialId: mat.id }).length === 1)
+      check('别的物品查不到这张图', listImages(db, { materialId: mat.id + 9999 }).length === 0)
+      deleteImage(db, img.id)
+    }
 
     /* 全年养护指南：解析与「加进计划」的转换 */
     {

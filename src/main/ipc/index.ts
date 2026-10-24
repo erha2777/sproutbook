@@ -98,7 +98,7 @@ import {
   discardImport,
   previewImport
 } from '../services/transfer'
-import type { TransferImportOptions, TransferFormat, TransferKind } from '../../shared/api'
+import type { ImageOwner, TransferImportOptions, TransferFormat, TransferKind } from '../../shared/api'
 import type {
   AiConnectionResult,
   AiSettings,
@@ -1073,7 +1073,7 @@ function registerEnvironmentIpc(): void {
 // ---------------------------------------------------------------------------
 
 function registerImageIpc(): void {
-  handle('images:list', (owner: { plantId?: number; speciesId?: number; environmentId?: number }) =>
+  handle('images:list', (owner: ImageOwner) =>
     listImages(getDb(), owner)
   )
 
@@ -1084,7 +1084,7 @@ function registerImageIpc(): void {
    * 模型（deepseek-chat 之类）拿不到图片，国内的图片搜索又多要单独的 key，
    * 所以先给一条「浏览器里看到图 → 复制图片地址 → 粘贴」的路。
    */
-  handle('images:importUrl', async (owner: { plantId?: number; speciesId?: number }, url: string) => {
+  handle('images:importUrl', async (owner: ImageOwner, url: string) => {
     const file = await importImageFromUrl(url)
     return addImage(getDb(), {
       plantId: owner.plantId ?? null,
@@ -1095,7 +1095,7 @@ function registerImageIpc(): void {
     })
   })
 
-  handle('images:pick', async (owner: { plantId?: number; speciesId?: number; environmentId?: number }) => {
+  handle('images:pick', async (owner: ImageOwner) => {
     const result = await dialog.showOpenDialog({
       title: '选择图片',
       properties: ['openFile', 'multiSelections'],

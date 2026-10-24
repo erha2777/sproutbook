@@ -130,6 +130,7 @@ interface ImageRow {
   plant_id: number | null
   species_id: number | null
   environment_id: number | null
+  material_id: number | null
   path: string
   thumb_path: string | null
   caption: string | null
@@ -144,6 +145,7 @@ function mapImage(row: ImageRow): ImageRecord {
     plantId: row.plant_id,
     speciesId: row.species_id,
     environmentId: row.environment_id,
+    materialId: row.material_id,
     path: row.path,
     thumbPath: row.thumb_path,
     caption: row.caption,
@@ -155,7 +157,7 @@ function mapImage(row: ImageRow): ImageRecord {
 
 export function listImages(
   db: Db,
-  owner: { plantId?: number; speciesId?: number; environmentId?: number }
+  owner: { plantId?: number; speciesId?: number; environmentId?: number; materialId?: number }
 ): ImageRecord[] {
   if (typeof owner.plantId === 'number') {
     return db
@@ -165,6 +167,11 @@ export function listImages(
   if (typeof owner.speciesId === 'number') {
     return db
       .all<ImageRow>('SELECT * FROM images WHERE species_id = ? ORDER BY sort_order, id', owner.speciesId)
+      .map(mapImage)
+  }
+  if (typeof owner.materialId === 'number') {
+    return db
+      .all<ImageRow>('SELECT * FROM images WHERE material_id = ? ORDER BY sort_order, id', owner.materialId)
       .map(mapImage)
   }
   if (typeof owner.environmentId === 'number') {
@@ -181,6 +188,7 @@ export function addImage(
     plantId?: number | null
     speciesId?: number | null
     environmentId?: number | null
+    materialId?: number | null
     path: string
     thumbPath?: string | null
     origin?: string
@@ -189,21 +197,25 @@ export function addImage(
   const nextOrder = Number(
     db.scalar<number>(
       `SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM images
-       WHERE (plant_id IS ? OR ? IS NULL) AND (species_id IS ? OR ? IS NULL) AND (environment_id IS ? OR ? IS NULL)`,
+       WHERE (plant_id IS ? OR ? IS NULL) AND (species_id IS ? OR ? IS NULL)
+         AND (environment_id IS ? OR ? IS NULL) AND (material_id IS ? OR ? IS NULL)`,
       input.plantId ?? null,
       input.plantId ?? null,
       input.speciesId ?? null,
       input.speciesId ?? null,
       input.environmentId ?? null,
-      input.environmentId ?? null
+      input.environmentId ?? null,
+      input.materialId ?? null,
+      input.materialId ?? null
     ) ?? 0
   )
   const r = db.run(
-    `INSERT INTO images (plant_id, species_id, environment_id, path, thumb_path, origin, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO images (plant_id, species_id, environment_id, material_id, path, thumb_path, origin, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     input.plantId ?? null,
     input.speciesId ?? null,
     input.environmentId ?? null,
+    input.materialId ?? null,
     input.path,
     input.thumbPath ?? null,
     input.origin ?? 'user',
