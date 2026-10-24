@@ -660,11 +660,11 @@ export async function runSmoke(outFile: string): Promise<number> {
     {
       const march = careGuideTaskDrafts(parseCareGuide('## 3月\n- 换盆：换到 20cm 盆', 2026))[0]
       check('不带日期的条目落在当月 1 号', march.dueDate === '2026-03-01', march.dueDate)
-      check('窗口覆盖整月', march.windowDays === 31, String(march.windowDays))
+      check('窗口一直开到月底', march.windowDays === 30, String(march.windowDays))
       const february = careGuideTaskDrafts(parseCareGuide('## 2月\n- 修剪：剪掉枯枝', 2026))[0]
-      check('二月窗口 28 天', february.windowDays === 28, String(february.windowDays))
+      check('二月窗口 27 天', february.windowDays === 27, String(february.windowDays))
       const dated = careGuideTaskDrafts(parseCareGuide('## 3月\n- 换盆（03-15）：换盆', 2026))[0]
-      check('写了日期就按日期算，窗口到月底', dated.dueDate === '2026-03-15' && dated.windowDays === 17, `${dated.dueDate}/${dated.windowDays}`)
+      check('写了日期就按日期算，窗口到月底', dated.dueDate === '2026-03-15' && dated.windowDays === 16, `${dated.dueDate}/${dated.windowDays}`)
     }
 
     /* 指南加进计划时，已经过去的条目不要再加 */
@@ -675,6 +675,20 @@ export async function runSmoke(outFile: string): Promise<number> {
       const { upcoming, past } = splitDraftsByDate(drafts, '2026-10-24')
       check('过去的条目被分到 past', past.length === 1 && past[0].title === '换盆', String(past.length))
       check('今天及以后留在 upcoming', upcoming.length === 2, String(upcoming.length))
+      /*
+       * 当月条目：起始日在 1 号（早就过了），但窗口开到月底 ——
+       * 它属于「这个月要做」，不能算过期。
+       */
+      const sameMonth = splitDraftsByDate(
+        careGuideTaskDrafts(parseCareGuide('## 10月\n- 清园：扫掉落叶', 2026)),
+        '2026-10-24'
+      )
+      check('当月条目不算过期', sameMonth.past.length === 0 && sameMonth.upcoming.length === 1)
+      const nextMonth = splitDraftsByDate(
+        careGuideTaskDrafts(parseCareGuide('## 9月\n- 施肥：最后一次追肥', 2026)),
+        '2026-10-24'
+      )
+      check('上个月且窗口已关的才算过期', nextMonth.past.length === 1 && nextMonth.upcoming.length === 0)
       check(
         '刚好今天的不算过期',
         upcoming.some((d) => d.dueDate === '2026-10-24'),

@@ -97,17 +97,25 @@ function pad2(n: number): string {
 }
 
 /**
- * 从这一天到月底还剩几天（含当天）。
+ * 从这一天到月底还有几天（窗口长度，加到 dueDate 上正好落在月底）。
  *
  * 指南里的条目只精确到月，加入计划时统一落在 1 号；窗口给到月底，
  * 「本月内做完」就体现为「可做至 3-31」，而不是一加进来就红着说逾期。
  */
 function daysInMonth(date: string): number {
   const [y, m, d] = date.split('-').map(Number)
-  if (!y || !m) return 1
+  if (!y || !m) return 0
   const last = new Date(y, m, 0).getDate()
   const day = d || 1
-  return Math.max(1, last - day + 1)
+  return Math.max(0, last - day)
+}
+
+/** 和 core/care 的 addDays 一致：本地时间构造，不会因为时区错一天 */
+function addDaysIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const date = new Date(y, (m ?? 1) - 1, d ?? 1)
+  date.setDate(date.getDate() + days)
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
 }
 
 /**
@@ -265,7 +273,14 @@ export function splitDraftsByDate(
   const upcoming: CareGuideTaskDraft[] = []
   const past: CareGuideTaskDraft[] = []
   for (const draft of drafts) {
-    if (draft.dueDate < today) past.push(draft)
+    /*
+     * 比的是**窗口结束日**，不是起始日。
+     *
+     * 按月给的条目落在 1 号，但整月都能做 —— 10 月 24 日加计划时，
+     * 「10 月浇水」的起始日早就过了，窗口却还开着，它是这个月该做的事，
+     * 不是过期的事。（上一版按起始日比，当月条目全被当成过期丢掉了。）
+     */
+    if (addDaysIso(draft.dueDate, draft.windowDays) < today) past.push(draft)
     else upcoming.push(draft)
   }
   return { upcoming, past }
