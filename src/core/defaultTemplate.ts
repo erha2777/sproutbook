@@ -72,6 +72,14 @@ const speciesFields: Seed[] = [
     groupName: '基础',
     type: 'text'
   },
+  {
+    key: 'uses',
+    label: '用途',
+    groupName: '基础',
+    type: 'multiselect',
+    options: ['观花', '观叶', '观果', '香草', '可食用', '切花'],
+    helpText: '可多选。列表和统计里能按用途筛，也方便回答「我养了几种能吃的」。'
+  },
 
   // ---- 形态 ----
   {
@@ -88,6 +96,22 @@ const speciesFields: Seed[] = [
     groupName: '形态',
     type: 'number',
     unit: 'cm'
+  },
+  {
+    key: 'mature_spread_cm',
+    label: '成熟冠幅',
+    groupName: '形态',
+    type: 'number',
+    unit: 'cm',
+    helpText: '长成后横向铺开多宽。用来提示摆放间距，别和画图用的「株幅」搞混。'
+  },
+  {
+    key: 'growth_speed',
+    label: '生长速度',
+    groupName: '形态',
+    type: 'select',
+    options: ['慢', '中等', '快'],
+    helpText: '和「现状高度」一起看，能判断长得算不算正常。'
   },
   {
     key: 'lifespan',
@@ -211,11 +235,49 @@ const speciesFields: Seed[] = [
     helpText: '同样可以选多段：夏天和冬天各休眠一次的植物（如某些多肉、球根）就点上两段。'
   },
   {
+    key: 'propagation_methods',
+    label: '繁殖方式',
+    groupName: '繁殖',
+    type: 'multiselect',
+    options: ['播种', '扦插', '分株', '压条', '嫁接', '叶插', '分球'],
+    helpText: '可多选。填了之后「适宜繁殖月份」才有意义。'
+  },
+  {
+    key: 'propagation_months',
+    label: '适宜繁殖月份',
+    groupName: '繁殖',
+    type: 'month_range',
+    helpText: '这段月份里可以提醒你扦插 / 分株。'
+  },
+  {
     key: 'water_need',
     label: '需水量',
     groupName: '习性',
     type: 'select',
     options: ['少', '中等', '多', '干透浇透']
+  },
+  {
+    key: 'humidity_need',
+    label: '空气湿度需求',
+    groupName: '习性',
+    type: 'select',
+    options: ['低', '中等', '高', '很湿'],
+    helpText: '室内养护最常被忽略的一项：湿度不够时叶子先焦边。蕨类 / 兰花 / 竹芋一般要「高」以上。'
+  },
+  {
+    key: 'soil_ph',
+    label: '土壤 pH 范围',
+    groupName: '习性',
+    type: 'hours_range',
+    unit: 'pH',
+    helpText: '如 5.5 ~ 6.5。喜酸植物（蓝莓、栀子、茶花）填了才能提醒别用碱性的土和水。'
+  },
+  {
+    key: 'common_pests',
+    label: '常见病虫害',
+    groupName: '习性',
+    type: 'tags',
+    helpText: '用逗号分隔，如「黑斑病, 蚜虫」。可以据此生成防治任务，也会作为 AI 看照片时的先验知识。'
   },
 
   // ---- 安全（全部标记为 isSafety：AI 填充后必须人工确认）----
@@ -316,12 +378,28 @@ const plantFields: Seed[] = [
   },
   { key: 'acquired_at', label: '入手 / 播种日期', groupName: '基础', type: 'date', helpText: '生长进度与养护计划的时间基准。' },
   {
+    key: 'ended_at',
+    label: '结束日期',
+    groupName: '基础',
+    type: 'date',
+    // 只有「不在了」的状态才问结束日期：活着的时候填它会让人困惑
+    visibleWhen: { key: 'status', in: ['dead', 'gifted'] },
+    helpText: '枯死或送人的日期。用来统计「这株陪了你多久」。'
+  },
+  {
     key: 'purchase_price',
     label: '购入价格',
     groupName: '基础',
     type: 'number',
     unit: '元',
     helpText: '买这株花了多少钱（连同运费就一起算）。列表里可以按它排序，翻账时有用。'
+  },
+  {
+    key: 'source_channel',
+    label: '来源渠道',
+    groupName: '基础',
+    type: 'text',
+    helpText: '哪家店 / 花市 / 朋友送的，可以写店名或链接。复盘「哪家苗情好」时用得上。'
   },
   {
     key: 'cultivation',

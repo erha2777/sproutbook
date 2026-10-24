@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { normalizeQuery, parseBingResults, queryTokens, rankHits } from '../core/imageSearch'
 import { Db, countPlaceholders } from './db/connection'
-import { formatMonthSet, normalizeMonths } from '../core/fieldTypes'
+import { formatFieldValue, formatMonthSet, normalizeMonths } from '../core/fieldTypes'
 import { LATEST_VERSION, MIGRATIONS, migrateSafetyVisibility } from './db/schema'
 import { currentVersion, migrate, rebuildAttrIndex } from './db/migrate'
 import { seedAll, seedFieldDefinitions } from './db/seed'
@@ -655,6 +655,59 @@ export async function runSmoke(outFile: string): Promise<number> {
         values: { nickname: '状态计时株', status: 'recovering' }
       })
       const plantId = p.plant?.id ?? 0
+
+    /* 新补的物种 / 植株字段：模板里要有，存进去要能读回来 */
+    {
+      const speciesDefs = loadFieldDefinitions(db, 'species', true)
+      const plantDefs = loadFieldDefinitions(db, 'plant', true)
+      const need = [
+        'humidity_need',
+        'soil_ph',
+        'common_pests',
+        'uses',
+        'propagation_methods',
+        'propagation_months',
+        'growth_speed',
+        'mature_spread_cm'
+      ]
+      check(
+        '物种新字段都在模板里',
+        need.every((key) => speciesDefs.some((d) => d.key === key)),
+        need.filter((key) => !speciesDefs.some((d) => d.key === key)).join(',')
+      )
+      check('植株新字段都在模板里', ['source_channel', 'ended_at'].every((key) => plantDefs.some((d) => d.key === key)))
+      check(
+        '结束日期只在枯死/送人时显示',
+        JSON.stringify(plantDefs.find((d) => d.key === 'ended_at')?.visibleWhen?.in) === JSON.stringify(['dead', 'gifted'])
+      )
+
+      const created = saveSpeciesOk(db, {
+        values: {
+          common_name: '新字段测试种',
+          humidity_need: '高',
+          soil_ph: { min: 5.5, max: 6.5 },
+          common_pests: ['黑斑病', '蚜虫'],
+          uses: ['观花', '切花'],
+          propagation_methods: ['扦插', '分株'],
+          propagation_months: [4, 5],
+          growth_speed: '中等',
+          mature_spread_cm: 80
+        }
+      })
+      const loaded = getSpecies(db, created.species.id)
+      check('湿度需求存得住', loaded?.attributes.humidity_need === '高')
+      check('pH 区间存得住', JSON.stringify(loaded?.attributes.soil_ph) === JSON.stringify({ min: 5.5, max: 6.5 }))
+      check('常见病虫害是数组', Array.isArray(loaded?.attributes.common_pests))
+      check('用途多选存得住', Array.isArray(loaded?.attributes.uses) && (loaded?.attributes.uses as string[]).includes('切花'))
+      check('繁殖月份存成月份集合', Array.isArray(loaded?.attributes.propagation_months))
+
+      const phDef = speciesDefs.find((d) => d.key === 'soil_ph')
+      check(
+        'pH 区间显示带单位',
+        phDef ? formatFieldValue(phDef, { min: 5.5, max: 6.5 }) === '5.5 ~ 6.5 pH' : false,
+        phDef ? formatFieldValue(phDef, { min: 5.5, max: 6.5 }) : 'no def'
+      )
+    }
 
     /* 物品照片：images 表多一种 owner，列表要能带出来 */
     {
