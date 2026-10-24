@@ -259,12 +259,17 @@ export function GardenPage({
       if (guide.trim()) {
         const r = await window.api.care.planFromGuide(plant.id, year)
         if (r.total > 0) {
-          toast.push(
-            r.created > 0
-              ? `已按养护指南加入 ${r.created} 项（已有 ${r.skipped} 项跳过）`
-              : `指南里的 ${r.total} 项都已在计划里`,
-            'success'
-          )
+          const pastNote = r.skippedPast > 0 ? `，${r.skippedPast} 条已过期未加入` : ''
+          if (r.created === 0 && r.skipped === 0 && r.skippedPast > 0) {
+            toast.push(`指南里的 ${r.skippedPast} 条都已经过期了，没有加入计划`, 'error')
+          } else {
+            toast.push(
+              r.created > 0
+                ? `已按养护指南加入 ${r.created} 项（已有 ${r.skipped} 项跳过${pastNote}）`
+                : `指南里的 ${r.skipped} 项都已在计划里${pastNote}`,
+              'success'
+            )
+          }
         } else {
           const g = await window.api.care.generate(plant.id, year)
           toast.push(`指南里没有可解析的条目，已按规则库排了 ${g.created} 项（保留已有 ${g.kept} 项）`, 'success')

@@ -1,4 +1,4 @@
-import type { CareActionType } from './types'
+﻿import type { CareActionType } from './types'
 
 /**
  * 全年养护指南：AI 生成 + 解析成养护任务。
@@ -222,4 +222,25 @@ export function careGuideTaskDrafts(parsed: ParsedCareGuide): CareGuideTaskDraft
     }
   }
   return out.sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.title.localeCompare(b.title, 'zh'))
+}
+
+
+/**
+ * 按今天把任务草稿分成「还没到期」和「已经过去」。
+ *
+ * 指南是**全年**的，10 月才加入计划时，1–9 月的条目已经没意义了 ——
+ * 加进去只会立刻变成一排"已过期 N 天"，把真正要做的事压到下面。
+ * 过去的日期不补任务；要补记请走养护日志。
+ */
+export function splitDraftsByDate(
+  drafts: CareGuideTaskDraft[],
+  today: string
+): { upcoming: CareGuideTaskDraft[]; past: CareGuideTaskDraft[] } {
+  const upcoming: CareGuideTaskDraft[] = []
+  const past: CareGuideTaskDraft[] = []
+  for (const draft of drafts) {
+    if (draft.dueDate < today) past.push(draft)
+    else upcoming.push(draft)
+  }
+  return { upcoming, past }
 }

@@ -85,7 +85,12 @@ import {
 import type { CareLogPatch, CareTaskPatch, CareTaskQuery } from '../../shared/api'
 import { formatFieldValue } from '../../core/fieldTypes'
 import { buildAskPlantMessages, buildPlantDossier } from '../../core/plantDossier'
-import { buildCareGuideMessages, careGuideTaskDrafts, parseCareGuide } from '../../core/careGuide'
+import {
+  buildCareGuideMessages,
+  careGuideTaskDrafts,
+  parseCareGuide,
+  splitDraftsByDate
+} from '../../core/careGuide'
 import type { CareGuideTemplate } from '../../core/careGuide'
 import { deriveCarePhase } from '../../core/phase'
 import { readMonthSet } from '../../core/growth'
@@ -1722,11 +1727,17 @@ function registerAiIpc(): void {
     if (!plant) throw new Error('植株不存在')
     const text = typeof plant.attributes.care_guide === 'string' ? (plant.attributes.care_guide as string) : ''
     const parsed = parseCareGuide(text, year ?? new Date().getFullYear())
-    const drafts = careGuideTaskDrafts(parsed)
-    if (drafts.length === 0) return { created: 0, skipped: 0, total: 0 }
+    const all = careGuideTaskDrafts(parsed)
+    if (all.length === 0) return { created: 0, skipped: 0, skippedPast: 0, total: 0 }
+    /*
+     * 指南是**全年**的。10 月才把它加进计划时，1–9 月的条目已经过去了 ——
+     * 加进去只会立刻变成一排「已过期 200 天」，把真正要做的事压到看不见的地方。
+     * 过去的日期不补任务（要补记请走养护日志），只加今天及以后的。
+     */
+    const { upcoming, past } = splitDraftsByDate(all, todayIso())
     let created = 0
     let skipped = 0
-    for (const draft of drafts) {
+    for (const draft of upcoming) {
       const exists = db.scalar<number>(
         'SELECT 1 FROM care_tasks WHERE plant_id = ? AND due_date = ? AND title = ? LIMIT 1',
         plantId,
@@ -1748,7 +1759,7 @@ function registerAiIpc(): void {
       })
       created += 1
     }
-    return { created, skipped, total: drafts.length }
+    return { created, skipped, skippedPast: past.length, total: all.length }
   })
 
 

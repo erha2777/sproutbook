@@ -84,7 +84,7 @@ import { PLANT_STATUS_ORDER } from '../core/status'
 import { deriveCarePhase } from '../core/phase'
 import { searchSelectView } from '../core/searchSelect'
 import { buildAskPlantMessages, buildPlantDossier } from '../core/plantDossier'
-import { careGuideTaskDrafts, parseCareGuide } from '../core/careGuide'
+import { careGuideTaskDrafts, parseCareGuide, splitDraftsByDate } from '../core/careGuide'
 import { defaultFieldDefinitions } from '../core/defaultTemplate'
 import {
   addDays,
@@ -655,6 +655,22 @@ export async function runSmoke(outFile: string): Promise<number> {
         values: { nickname: '状态计时株', status: 'recovering' }
       })
       const plantId = p.plant?.id ?? 0
+
+    /* 指南加进计划时，已经过去的条目不要再加 */
+    {
+      const drafts = careGuideTaskDrafts(
+        parseCareGuide('## 3月\n- 换盆（03-15）\n## 10月\n- 施肥（10-24）\n## 11月\n- 防寒（11-05）', 2026)
+      )
+      const { upcoming, past } = splitDraftsByDate(drafts, '2026-10-24')
+      check('过去的条目被分到 past', past.length === 1 && past[0].title === '换盆', String(past.length))
+      check('今天及以后留在 upcoming', upcoming.length === 2, String(upcoming.length))
+      check(
+        '刚好今天的不算过期',
+        upcoming.some((d) => d.dueDate === '2026-10-24'),
+        upcoming.map((d) => d.dueDate).join(',')
+      )
+      check('全过期时 upcoming 为空', splitDraftsByDate(drafts, '2026-12-31').upcoming.length === 0)
+    }
 
     /* 新补的物种 / 植株字段：模板里要有，存进去要能读回来 */
     {

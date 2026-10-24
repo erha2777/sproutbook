@@ -431,7 +431,7 @@ export interface SproutbookApi {
     planFromGuide(
       plantId: number,
       year?: number
-    ): Promise<{ created: number; skipped: number; total: number }>
+    ): Promise<{ created: number; skipped: number; skippedPast: number; total: number }>
     overview(year: number): Promise<CareOverview>
 
     /**
