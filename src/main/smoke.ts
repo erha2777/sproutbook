@@ -1109,7 +1109,7 @@ export async function runSmoke(outFile: string): Promise<number> {
       oldDb.close()
     }
 
-    // --- 材料与配方 ---
+    // --- 物品与配方 ---
     {
       // 纯逻辑先测：比例摘要与按份数换算
       const mix: RecipeItem[] = [
@@ -1133,16 +1133,16 @@ export async function runSmoke(outFile: string): Promise<number> {
       const scaledAmount = scaleRecipe(withAmount, 2, new Map([[4, '缓释肥']]))
       check('同时有比例与用量时以用量为准显示', scaledAmount[0].text === '40 克', scaledAmount[0].text)
 
-      check('无比例条目时摘要退回列材料名', summarizeRecipe([{ materialId: null, name: '园土', ratioPart: null, amount: null, unit: null, note: null, sortOrder: 0 }]) === '园土')
-      check('空配方摘要不炸', summarizeRecipe([]) === '（还没有材料）')
+      check('无比例条目时摘要退回列物品名', summarizeRecipe([{ materialId: null, name: '园土', ratioPart: null, amount: null, unit: null, note: null, sortOrder: 0 }]) === '园土')
+      check('空配方摘要不炸', summarizeRecipe([]) === '（还没有物品）')
       check(
-        '未命名材料有兜底名字',
-        scaleRecipe([{ materialId: null, name: '  ', ratioPart: 1, amount: null, unit: null, note: null, sortOrder: 0 }], 1)[0].name === '（未命名材料）'
+        '未命名物品有兜底名字',
+        scaleRecipe([{ materialId: null, name: '  ', ratioPart: 1, amount: null, unit: null, note: null, sortOrder: 0 }], 1)[0].name === '（未命名物品）'
       )
 
       check('校验：缺名称', Boolean(validateRecipe({ name: '  ', items: mix }).name))
       check(
-        '校验：条目既无材料也无名称',
+        '校验：条目既无物品也无名称',
         Boolean(
           validateRecipe({
             name: 'x',
@@ -1173,10 +1173,10 @@ export async function runSmoke(outFile: string): Promise<number> {
       // 仓储层
       const peat = saveMaterial(db, { name: '自检泥炭', kind: 'substrate', unit: '升', stock: 12.5, price: 3.8, note: '保水' })
       const perlite = saveMaterial(db, { name: '自检珍珠岩', kind: 'substrate', unit: '升', stock: null, price: null, note: null })
-      check('可新增材料', peat.id > 0 && peat.name === '自检泥炭')
-      checkThrows('重名材料被拒绝', () => saveMaterial(db as Db, { name: '自检泥炭', kind: 'substrate', unit: null, stock: null, price: null, note: null }), '已经有叫')
-      check('材料按关键词可搜索', listMaterials(db, '珍珠').some((m) => m.id === perlite.id))
-      check('材料搜索匹配备注', listMaterials(db, '保水').some((m) => m.id === peat.id))
+      check('可新增物品', peat.id > 0 && peat.name === '自检泥炭')
+      checkThrows('重名物品被拒绝', () => saveMaterial(db as Db, { name: '自检泥炭', kind: 'substrate', unit: null, stock: null, price: null, note: null }), '已经有叫')
+      check('物品按关键词可搜索', listMaterials(db, '珍珠').some((m) => m.id === perlite.id))
+      check('物品搜索匹配备注', listMaterials(db, '保水').some((m) => m.id === peat.id))
 
       const saved = saveRecipe(db, {
         name: '自检配土',
@@ -1192,7 +1192,7 @@ export async function runSmoke(outFile: string): Promise<number> {
       const recipeId = saved.recipe?.id ?? 0
       check('配方条目全部落库', saved.recipe?.items.length === 3, String(saved.recipe?.items.length))
       check(
-        '配方摘要带出材料库里的名字（含库外临时材料）',
+        '配方摘要带出物品库里的名字（含库外临时物品）',
         saved.recipe?.summary === '自检泥炭 : 自检珍珠岩 : 手边剩的园土 = 5 : 3 : 2',
         saved.recipe?.summary
       )
@@ -1211,17 +1211,17 @@ export async function runSmoke(outFile: string): Promise<number> {
         available: true,
         items: [{ materialId: peat.id, name: null, ratioPart: 1, amount: null, unit: '升', note: null, sortOrder: 0 }]
       })
-      check('材料使用计数正确', materialUsage(db, peat.id) === 1, String(materialUsage(db, peat.id)))
-      checkThrows('被配方引用的材料禁止删除', () => deleteMaterial(db as Db, peat.id), '还有 1 个配方在用')
-      check('未被引用的材料可以删除', deleteMaterial(db, perlite.id) === true)
-      check('删除材料后配方条目不会被连带删除', getRecipe(db, recipeId)?.items.length === 1)
+      check('物品使用计数正确', materialUsage(db, peat.id) === 1, String(materialUsage(db, peat.id)))
+      checkThrows('被配方引用的物品禁止删除', () => deleteMaterial(db as Db, peat.id), '还有 1 个配方在用')
+      check('未被引用的物品可以删除', deleteMaterial(db, perlite.id) === true)
+      check('删除物品后配方条目不会被连带删除', getRecipe(db, recipeId)?.items.length === 1)
 
-      check('材料已有数量能存能读', peat.stock === 12.5 && listMaterials(db, '自检泥炭')[0].stock === 12.5, String(peat.stock))
-      check('材料单价能存能读', peat.price === 3.8 && listMaterials(db, '自检泥炭')[0].price === 3.8, String(peat.price))
+      check('物品已有数量能存能读', peat.stock === 12.5 && listMaterials(db, '自检泥炭')[0].stock === 12.5, String(peat.stock))
+      check('物品单价能存能读', peat.price === 3.8 && listMaterials(db, '自检泥炭')[0].price === 3.8, String(peat.price))
       check('改单价也生效', saveMaterial(db, { id: peat.id, name: peat.name, kind: peat.kind, unit: peat.unit, stock: peat.stock, price: 4.5, note: peat.note }).price === 4.5)
       check('配方可使用标记能存能读', updated.recipe?.available === true && getRecipe(db, recipeId)?.available === true)
       check('默认新建的配方不是可使用', saveRecipe(db, { name: '自检未做好', kind: '配土', note: null, items: [{ materialId: peat.id, name: null, ratioPart: 1, amount: null, unit: null, note: null, sortOrder: 0 }] }).recipe?.available === false)
-      check('可按材料名搜到配方', listRecipes(db, { query: '自检泥炭' }).some((r) => r.id === recipeId))
+      check('可按物品名搜到配方', listRecipes(db, { query: '自检泥炭' }).some((r) => r.id === recipeId))
       check('可按类型筛选配方', listRecipes(db, { kind: '配土' }).some((r) => r.id === recipeId))
       check('筛选不匹配的类型时为空', !listRecipes(db, { kind: '不存在的类型' }).some((r) => r.id === recipeId))
 
@@ -2271,7 +2271,7 @@ export async function runSmoke(outFile: string): Promise<number> {
             { materialId: null, name: '骨粉', ratioPart: 1, amount: null, unit: null, note: '少量', sortOrder: 1 }
           ]
         })
-        check('配方可以不依赖材料库（用自由文本）', recipe.recipe?.items.length === 2, String(recipe.recipe?.items.length))
+        check('配方可以不依赖物品库（用自由文本）', recipe.recipe?.items.length === 2, String(recipe.recipe?.items.length))
 
         const saved = saveCareRule(db, {
           speciesKeys: ['*'],
@@ -2850,7 +2850,7 @@ export async function runSmoke(outFile: string): Promise<number> {
 
         // ---- 写操作要如实报告有没有改到东西 ----
       //
-      // 这批（归档植株/位置、删规则/任务/日志、删材料、归档恢复配方）
+      // 这批（归档植株/位置、删规则/任务/日志、删物品、归档恢复配方）
       // 原来一律 return true。**报「已删除」之后对象又出现在列表里**，
       // 用户会以为删除功能坏了。
       //
@@ -2861,7 +2861,7 @@ export async function runSmoke(outFile: string): Promise<number> {
         check('删一条不存在的规则 → false', deleteCareRule(db, 999999) === false)
         check('删一条不存在的任务 → false', deleteCareTask(db, 999999) === false)
         check('删一条不存在的日志 → false', deleteCareLog(db, 999999) === false)
-        check('删一个不存在的材料 → false', deleteMaterial(db, 999999) === false)
+        check('删一个不存在的物品 → false', deleteMaterial(db, 999999) === false)
         check('归档一个不存在的配方 → false', archiveRecipe(db, 999999) === false)
         check('恢复一个不存在的配方 → false', restoreRecipe(db, 999999) === false)
 

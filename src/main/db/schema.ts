@@ -70,7 +70,7 @@ CREATE TABLE field_definitions (
 );
 CREATE INDEX idx_field_defs_owner ON field_definitions(owner_kind, sort_order);
 
--- 材料：配土 / 肥料 / 药剂的组成成分
+-- 物品：配土 / 肥料 / 药剂的组成成分
 CREATE TABLE materials (
   id    INTEGER PRIMARY KEY AUTOINCREMENT,
   name  TEXT NOT NULL UNIQUE,
@@ -451,7 +451,7 @@ function migratePotSize(db: Db): void {
  * 那不是表达，是绕过。
  *
  * `recipe_id`：规则可以直接引用配方。底肥的「羊粪 + 缓释肥 + 少量骨粉」
- * 原来只能写成正文，材料比例是散的文字。
+ * 原来只能写成正文，物品比例是散的文字。
  */
 const V8_RULE_FREQUENCY_AND_RECIPE = /* sql */ `
 ALTER TABLE care_rules ADD COLUMN once_per_window INTEGER NOT NULL DEFAULT 0;
@@ -463,7 +463,7 @@ ALTER TABLE care_rules ADD COLUMN recipe_id INTEGER REFERENCES recipes(id);
  *
  * 原来 care_tasks 和 care_plans 都没有 rule_id —— 任务生成出来就和规则脱钩了，
  * 于是「这条规则绑了哪个配方」在任务卡片上根本查不到，
- * 而做任务的时候恰恰最需要看到材料清单。
+ * 而做任务的时候恰恰最需要看到物品清单。
  *
  * recipe_id 冗余存一份（规则上也有）：规则改了配方之后，
  * 已经生成的任务仍应显示当时的配方 —— 提醒的是那次要做的事。
@@ -562,10 +562,10 @@ CREATE INDEX IF NOT EXISTS idx_images_log ON images(log_id);
 
 /** 位置备注：写「朝南、下午西晒、架子三层、冬天暖气足」这类填表填不出来的话。 */
 /**
- * 材料库存 + 配方「可使用」标记。
+ * 物品库存 + 配方「可使用」标记。
  *
  * 库存 = 现在手头大概还有多少（同一单位，允许小数）。
- * 「可使用」是手动标记：材料齐了、现在就能配，或者暂时配不出来。
+ * 「可使用」是手动标记：物品齐了、现在就能配，或者暂时配不出来。
  * 不自动从库存推算 —— 配方是配比，一次做多少由人定，自动判断只会猜错。
  */
 const V20_MATERIAL_STOCK = /* sql */ `
@@ -582,7 +582,7 @@ const V24_PLANT_STATUS_CHANGED = /* sql */ `
 ALTER TABLE plants ADD COLUMN status_changed_at TEXT;
 UPDATE plants SET status_changed_at = COALESCE(acquired_at, created_at) WHERE status_changed_at IS NULL;
 `
-/** 材料单价：每单位的价钱（元）。用来估「配一次土大概多少钱」。 */
+/** 物品单价：每单位的价钱（元）。用来估「配一次土大概多少钱」。 */
 /** 植株分类：用户自己分的类（「月季类」「多肉类」），列表按它筛选。 */
 const V23_PLANT_CATEGORY = /* sql */ `
 ALTER TABLE plants ADD COLUMN category TEXT;

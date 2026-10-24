@@ -90,7 +90,7 @@ export function RecipesPage(): ReactNode {
             className="pixel-input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索配方名、材料…"
+            placeholder="搜索配方名、物品…"
           />
         </div>
         <div style={{ width: 150 }}>
@@ -102,7 +102,7 @@ export function RecipesPage(): ReactNode {
         </label>
         <span className="spacer" />
         <Button size="small" onClick={() => setManagingMaterials(true)}>
-          材料库（{stats.materials}）
+          物品库（{stats.materials}）
         </Button>
         <Button variant="primary" onClick={() => setEditing('new')}>
           ＋ 新增配方
@@ -114,7 +114,7 @@ export function RecipesPage(): ReactNode {
         <SectionTitle
           right={
             <span className="small muted">
-              共 {items.length} 个配方 · {stats.materials} 种材料
+              共 {items.length} 个配方 · {stats.materials} 种物品
             </span>
           }
         >
@@ -157,7 +157,7 @@ export function RecipesPage(): ReactNode {
                   </div>
                   <div className="card-meta">
                     <Badge tone="info">{recipe.kind}</Badge>
-                    <Badge tone="muted">{recipe.items.length} 种材料</Badge>
+                    <Badge tone="muted">{recipe.items.length} 种物品</Badge>
                     {recipe.available ? <Badge tone="ok">可使用</Badge> : null}
                   </div>
                   <div className="small" style={{ margin: '8px 0', lineHeight: 1.7 }}>

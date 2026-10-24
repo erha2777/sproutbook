@@ -62,7 +62,7 @@ export function TaskRecipe({  recipeId,
   const rec = recipes.find((r) => r.id === recipeId)
   if (!rec) return <div className="small muted">📋 配方已删除</div>
   const parts = rec.items.map((it) => {
-    const label = it.name ?? materials?.find((m) => m.id === it.materialId)?.name ?? '材料'
+    const label = it.name ?? materials?.find((m) => m.id === it.materialId)?.name ?? '物品'
     return it.ratioPart && it.ratioPart !== 1 ? `${label} ${it.ratioPart} 份` : label
   })
   return (
@@ -207,7 +207,7 @@ export function CareTaskRow({
         )}
         {compact ? null : task.detail ? <div className="small">{task.detail}</div> : null}
         {/*
-          绑了配方的规则，任务上直接列出材料清单 ——
+          绑了配方的规则，任务上直接列出物品清单 ——
           做的时候不用再翻回规则库查「羊粪放多少」。
           按 id 现查，所以配方改了名字这里会跟着变。
         */}

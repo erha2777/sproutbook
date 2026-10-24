@@ -4,7 +4,7 @@
  * 界面上的两个重点：
  *  1. **实时摘要**：边填边显示「泥炭 : 珍珠岩 : 蛭石 = 5 : 3 : 2」，
  *     比例写错了一眼就能看出来。
- *  2. **用量换算**：输入份数立刻算出每样材料要多少 ——
+ *  2. **用量换算**：输入份数立刻算出每样物品要多少 ——
  *     这是配方的实际用途（「配 10 盆要各买多少」），不放在保存之后。
  */
 
@@ -74,7 +74,7 @@ export function RecipeEditor({
   const [saving, setSaving] = useState(false)
   const [portions, setPortions] = useState('1')
 
-  /** 正在为哪个条目新建材料（item.key），以及新建表单的内容 */
+  /** 正在为哪个条目新建物品（item.key），以及新建表单的内容 */
   const [newFor, setNewFor] = useState<string | null>(null)
   const [newMat, setNewMat] = useState({ name: '', kind: 'substrate' as MaterialKind, unit: '' })
 
@@ -84,7 +84,7 @@ export function RecipeEditor({
         `${a.kind}${a.name}`.localeCompare(`${b.kind}${b.name}`, 'zh')
       ))
     } catch (error) {
-      toast.push(`加载材料库失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+      toast.push(`加载物品库失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }
   }, [toast])
 
@@ -122,7 +122,7 @@ export function RecipeEditor({
     ...MATERIAL_KIND_OPTIONS.flatMap((k) =>
       materials.filter((m) => m.kind === k.value).map((m) => ({ value: String(m.id), label: `${m.name}` }))
     ),
-    { value: NEW_MATERIAL, label: '＋ 新建材料…' }
+    { value: NEW_MATERIAL, label: '＋ 新建物品…' }
   ]
 
   const onMaterialChange = (item: DraftItem, value: string): void => {
@@ -137,13 +137,13 @@ export function RecipeEditor({
     }
     const id = Number(value)
     const material = materials.find((m) => m.id === id)
-    // 选中材料时顺手把它登记的常用单位带过来，省一次输入
+    // 选中物品时顺手把它登记的常用单位带过来，省一次输入
     patch(item.key, { materialId: id, name: '', unit: item.unit.trim() || material?.unit || '' })
   }
 
   const createMaterial = async (itemKey: string): Promise<void> => {
     if (!newMat.name.trim()) {
-      toast.push('材料名称不能为空', 'error')
+      toast.push('物品名称不能为空', 'error')
       return
     }
     try {
@@ -158,9 +158,9 @@ export function RecipeEditor({
       setMaterials((prev) => [...prev, created])
       patch(itemKey, { materialId: created.id, name: '', unit: created.unit ?? '' })
       setNewFor(null)
-      toast.push(`已新增材料「${created.name}」`, 'success')
+      toast.push(`已新增物品「${created.name}」`, 'success')
     } catch (error) {
-      toast.push(error instanceof Error ? error.message : '新建材料失败', 'error')
+      toast.push(error instanceof Error ? error.message : '新建物品失败', 'error')
     }
   }
 
@@ -244,18 +244,18 @@ export function RecipeEditor({
         </Field>
 
         {/*
-          「可使用」是**手动标记**：材料齐了、现在就能配，就勾上。
+          「可使用」是**手动标记**：物品齐了、现在就能配，就勾上。
           不从库存自动推算 —— 配方是配比，一次做多少由人定，自动判断只会猜错。
         */}
         <div className="row tight" style={{ marginTop: 6 }}>
           <label className="check-row">
             <input type="checkbox" checked={available} onChange={(e) => setAvailable(e.target.checked)} /> 现在可以使用
-            （材料齐了）
+            （物品齐了）
           </label>
         </div>
 
         <div className="section-title">
-          材料
+          物品
           <span className="small muted" style={{ fontWeight: 400, marginLeft: 6 }}>
             比例填「份」，用量填数量和单位；两者填一个就行
           </span>
@@ -263,7 +263,7 @@ export function RecipeEditor({
 
         {/* 表头必须和数据行用同一套列宽，否则标题和输入框对不上 */}
         <div className="row tight small muted" style={{ marginBottom: 4, flexWrap: 'nowrap' }}>
-          <div style={{ width: 190 }}>材料</div>
+          <div style={{ width: 190 }}>物品</div>
           <div style={{ width: 150 }}>或手填名称</div>
           <div style={{ width: 78 }}>比例（份）</div>
           <div style={{ width: 88 }}>用量</div>
@@ -291,7 +291,7 @@ export function RecipeEditor({
                     <TextInput
                       value={item.name}
                       onChange={(v) => patch(item.key, { name: v })}
-                      placeholder="库外材料名"
+                      placeholder="库外物品名"
                       invalid={Boolean(itemError)}
                     />
                   </div>
@@ -334,7 +334,7 @@ export function RecipeEditor({
                     <TextInput
                       value={newMat.name}
                       onChange={(v) => setNewMat((s) => ({ ...s, name: v }))}
-                      placeholder="新材料名称"
+                      placeholder="新物品名称"
                     />
                   </div>
                   <div style={{ width: 130 }}>
@@ -352,7 +352,7 @@ export function RecipeEditor({
                     />
                   </div>
                   <Button size="small" variant="primary" onClick={() => void createMaterial(item.key)}>
-                    保存材料
+                    保存物品
                   </Button>
                   <Button size="small" variant="ghost" onClick={() => setNewFor(null)}>
                     取消
@@ -365,7 +365,7 @@ export function RecipeEditor({
 
         <div className="row" style={{ marginTop: 8 }}>
           <Button size="small" onClick={() => setItems((prev) => [...prev, blankItem()])}>
-            ＋ 添加材料
+            ＋ 添加物品
           </Button>
         </div>
 
@@ -395,7 +395,7 @@ export function RecipeEditor({
           ))}
         </div>
         <div className="small muted" style={{ marginTop: 6 }}>
-          材料库共 {materials.length} 种
+          物品库共 {materials.length} 种
           {MATERIAL_KIND_OPTIONS.map((o) => (
             <span key={o.value}>
               {' · '}

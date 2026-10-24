@@ -89,7 +89,7 @@ export function CarePage({
   const [day, setDay] = useState<string | null>(today)
   const [plants, setPlants] = useState<PlantOption[]>([])
   const [speciesNames, setSpeciesNames] = useState<string[]>([])
-  /** 任务上要显示绑定的配方，所以把配方与材料一起取回来（都是几十条量级） */
+  /** 任务上要显示绑定的配方，所以把配方与物品一起取回来（都是几十条量级） */
   const [recipes, setRecipes] = useState<RecipeListItem[] | null>(null)
   const [materials, setMaterials] = useState<Material[] | null>(null)
   const [loading, setLoading] = useState(true)

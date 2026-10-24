@@ -48,7 +48,7 @@ interface Draft {
    * 那时只能把区间收窄到单月绕过，规则本身表达不了「这个窗口里做一次就够」。
    */
   oncePerWindow: boolean
-  /** 绑定的配方 id（字符串形式便于 select），空＝没有材料清单 */
+  /** 绑定的配方 id（字符串形式便于 select），空＝没有物品清单 */
   recipeId: string
   /** 每行一个轮换步骤 */
   rotationText: string
@@ -102,7 +102,7 @@ export function CareRuleManager({
    * 可以绑到规则上的配方。
    *
    * 目前用户的配方库是空的 —— 这不是错误状态，配方是可选的，
-   * 没配方时规则照旧只靠正文说明。选了配方，任务上就会直接显示材料清单。
+   * 没配方时规则照旧只靠正文说明。选了配方，任务上就会直接显示物品清单。
    */
   const [recipes, setRecipes] = useState<Array<{ id: number; name: string; kind: string }>>([])
   /** 就地展开的表单行：展开后要滚进视野，否则点靠底部的规则时表单在屏幕外 */
@@ -479,7 +479,7 @@ export function CareRuleManager({
             help={
               recipes.length === 0
                 ? '配方库还是空的。到「配方」页建一个（比如「月季底肥 = 羊粪 + 骨粉」），这里就能选了。'
-                : '绑上之后，生成的任务会直接列出材料清单，不用再去翻正文。'
+                : '绑上之后，生成的任务会直接列出物品清单，不用再去翻正文。'
             }
           >
             <SelectInput

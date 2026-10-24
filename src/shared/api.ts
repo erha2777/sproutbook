@@ -356,9 +356,9 @@ export interface SproutbookApi {
   materials: {
     list(query?: string): Promise<Material[]>
     save(input: MaterialInput): Promise<Material>
-    /** 被配方引用的材料会被拒绝删除并抛出人话错误 */
+    /** 被配方引用的物品会被拒绝删除并抛出人话错误 */
     remove(id: number): Promise<boolean>
-    /** 有多少个配方在用这个材料 */
+    /** 有多少个配方在用这个物品 */
     usage(id: number): Promise<number>
   }
   recipes: {

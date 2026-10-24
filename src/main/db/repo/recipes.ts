@@ -1,12 +1,12 @@
 /**
- * 材料与配方仓储。
+ * 物品与配方仓储。
  *
  * 数据模型上的两个取舍：
  *  1. 条目**整组替换**而不是逐条 diff。配方条目撑死十几条，整组替换的代码
  *     简单到不会错；做增量更新则要处理「哪条删了、哪条改了」，
  *     在这么小的数据量上纯粹是给自己找 bug。
- *  2. 材料删除做**引用保护**：被配方用到的材料只能归档不能删，
- *     否则配方里那一条会变成「（未命名材料）」，用户不知道原来是什么。
+ *  2. 物品删除做**引用保护**：被配方用到的物品只能归档不能删，
+ *     否则配方里那一条会变成「（未命名物品）」，用户不知道原来是什么。
  */
 
 import type { Db } from '../connection'
@@ -14,7 +14,7 @@ import type { Material, MaterialInput, RecipeInput, RecipeItem, RecipeListItem }
 import { summarizeRecipe, validateRecipe } from '../../../core/recipes'
 
 // ---------------------------------------------------------------------------
-// 材料库
+// 物品库
 // ---------------------------------------------------------------------------
 
 interface MaterialRow {
@@ -61,11 +61,11 @@ export function getMaterial(db: Db, id: number): Material | null {
 
 export function saveMaterial(db: Db, input: MaterialInput): Material {
   const name = input.name.trim()
-  if (!name) throw new Error('材料名称不能为空')
+  if (!name) throw new Error('物品名称不能为空')
 
   // name 列有 UNIQUE 约束：重名时给出人话，而不是把 SQLite 的原文抛给用户
   const clash = db.get<{ id: number }>('SELECT id FROM materials WHERE name = ? AND id IS NOT ?', name, input.id ?? null)
-  if (clash) throw new Error(`已经有叫「${name}」的材料了`)
+  if (clash) throw new Error(`已经有叫「${name}」的物品了`)
 
   if (input.id) {
     db.run(
@@ -79,7 +79,7 @@ export function saveMaterial(db: Db, input: MaterialInput): Material {
       input.id
     )
     const updated = getMaterial(db, input.id)
-    if (!updated) throw new Error('材料更新失败')
+    if (!updated) throw new Error('物品更新失败')
     return updated
   }
 
@@ -93,11 +93,11 @@ export function saveMaterial(db: Db, input: MaterialInput): Material {
     input.note
   )
   const created = getMaterial(db, Number(r.lastInsertRowid))
-  if (!created) throw new Error('材料创建失败')
+  if (!created) throw new Error('物品创建失败')
   return created
 }
 
-/** 有多少个配方在用这个材料。 */
+/** 有多少个配方在用这个物品。 */
 export function materialUsage(db: Db, id: number): number {
   return Number(
     db.scalar<number>('SELECT COUNT(DISTINCT recipe_id) AS c FROM recipe_items WHERE material_id = ?', id) ?? 0
@@ -107,7 +107,7 @@ export function materialUsage(db: Db, id: number): number {
 export function deleteMaterial(db: Db, id: number): boolean {
   const used = materialUsage(db, id)
   if (used > 0) {
-    throw new Error(`还有 ${used} 个配方在用这个材料，删掉会让那些配方缺一项。请先改配方，或保留它。`)
+    throw new Error(`还有 ${used} 个配方在用这个物品，删掉会让那些配方缺一项。请先改配方，或保留它。`)
   }
   const r = db.run('DELETE FROM materials WHERE id = ?', id)
   /*
@@ -202,8 +202,8 @@ export function listRecipes(db: Db, options: RecipeListOptions = {}): RecipeList
     params.push(options.kind)
   }
   if (options.query && options.query.trim()) {
-    // 名称、类型、说明、以及材料名都参与搜索：
-    // 用户常按「珍珠岩」找配方，而材料名在另一张表里
+    // 名称、类型、说明、以及物品名都参与搜索：
+    // 用户常按「珍珠岩」找配方，而物品名在另一张表里
     const like = `%${options.query.trim().replace(/[%_]/g, (m) => `\\${m}`)}%`
     where.push(
       `(name LIKE ? ESCAPE '\\' OR kind LIKE ? ESCAPE '\\' OR note LIKE ? ESCAPE '\\'
@@ -313,7 +313,7 @@ export function restoreRecipe(db: Db, id: number): boolean {
   return Number(r.changes) > 0
 }
 
-/** 统计：材料数与配方数，用于界面上的概览。 */
+/** 统计：物品数与配方数，用于界面上的概览。 */
 export function recipeStats(db: Db): { materials: number; recipes: number } {
   return {
     materials: Number(db.scalar<number>('SELECT COUNT(*) AS c FROM materials') ?? 0),

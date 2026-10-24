@@ -23,13 +23,13 @@ export const MATERIAL_KIND_OPTIONS = (Object.keys(MATERIAL_KIND_LABELS) as Mater
 /** 配方类型的常用值。存的是自由文本，所以用户想写「扦插基质」也完全可以。 */
 export const RECIPE_KIND_SUGGESTIONS = ['配土', '肥料', '药剂', '扦插基质', '其他']
 
-/** 条目在界面上的名字：优先材料库，其次临时名。 */
+/** 条目在界面上的名字：优先物品库，其次临时名。 */
 export function itemName(item: RecipeItem, materialNames?: Map<number, string>): string {
   if (item.materialId !== null) {
     const fromLib = materialNames?.get(item.materialId)
     if (fromLib) return fromLib
   }
-  return item.name?.trim() || '（未命名材料）'
+  return item.name?.trim() || '（未命名物品）'
 }
 
 /** 保留三位小数并去掉多余的 0：1.5 → "1.5"，2 → "2"。 */
@@ -39,7 +39,7 @@ function num(n: number): string {
 
 /**
  * 一行摘要，例如「泥炭 : 珍珠岩 : 蛭石 = 5 : 3 : 2」。
- * 没有比例条目时退回列出材料名（「泥炭、珍珠岩」），至少能看出用了什么。
+ * 没有比例条目时退回列出物品名（「泥炭、珍珠岩」），至少能看出用了什么。
  */
 export function summarizeRecipe(items: RecipeItem[], materialNames?: Map<number, string>): string {
   const names = items.map((i) => itemName(i, materialNames))
@@ -49,7 +49,7 @@ export function summarizeRecipe(items: RecipeItem[], materialNames?: Map<number,
     const parts = withRatio.map((i) => num(i.ratioPart as number))
     return `${names.join(' : ')} = ${parts.join(' : ')}`
   }
-  if (items.length === 0) return '（还没有材料）'
+  if (items.length === 0) return '（还没有物品）'
   return names.join('、')
 }
 
@@ -65,7 +65,7 @@ export interface ScaledItem {
  *
  * 「1 份」= 配方本身。配 N 份就是把每条目都乘以 N ——
  * 比例条目和绝对用量条目都如此：前者得到「泥炭 15 份」，
- * 后者得到「缓释肥 60 克」。这样「配 10 盆要多少材料」就是一个乘法。
+ * 后者得到「缓释肥 60 克」。这样「配 10 盆要多少物品」就是一个乘法。
  *
  * 条目同时写了比例和用量时以**绝对用量**为准显示（用户既然写了克数，
  * 说明他关心的是实际称量，而不是份数比例），比例仍会出现在摘要里。
@@ -90,7 +90,7 @@ export function scaleRecipe(items: RecipeItem[], portions: number, materialNames
  * 校验配方。
  *
  * 只拦「明显没意义」的情况，不做过度限制 —— 配方是给人看的记录，
- * 不是要交给机器的配方单。比如允许材料全用临时名（手边只有一包不知名的土）。
+ * 不是要交给机器的配方单。比如允许物品全用临时名（手边只有一包不知名的土）。
  */
 export function validateRecipe(input: {
   name: string
@@ -104,7 +104,7 @@ export function validateRecipe(input: {
     const key = String(index)
     const hasMaterial = item.materialId !== null || Boolean(item.name?.trim())
     if (!hasMaterial) {
-      errors[key] = '请选择材料，或填一个名称'
+      errors[key] = '请选择物品，或填一个名称'
       return
     }
     const hasQuantity = item.ratioPart !== null || item.amount !== null

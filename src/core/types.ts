@@ -249,7 +249,7 @@ export interface PlantWithSpecies extends Plant {
 }
 
 // ---------------------------------------------------------------------------
-// 材料与配方
+// 物品与配方
 // ---------------------------------------------------------------------------
 
 export type MaterialKind = 'substrate' | 'fertilizer' | 'pesticide' | 'tool' | 'other'
@@ -277,12 +277,12 @@ export type MaterialInput = Omit<Material, 'id'> & { id?: number }
  *  - **用量**（amount + unit）：肥料、药剂这类「每批加多少」的场景，关心的是 20 克
  * 一条目可以只有比例、只有用量，也可以两者都有（既说明占比又给出建议量）。
  *
- * materialId 为空时用 name 记一个临时材料，这样「手边只有一包不知名的土」也能录进来。
+ * materialId 为空时用 name 记一个临时物品，这样「手边只有一包不知名的土」也能录进来。
  */
 export interface RecipeItem {
   id?: number
   materialId: number | null
-  /** 材料库外的临时材料名；与 materialId 至少有一个 */
+  /** 物品库外的临时物品名；与 materialId 至少有一个 */
   name: string | null
   /** 比例份数 */
   ratioPart: number | null
@@ -299,7 +299,7 @@ export interface Recipe {
   /** 配土 / 肥料 / 药剂 …（自由文本，给出常用建议值） */
   kind: string
   note: string | null
-  /** 手动标记「现在能做 / 材料齐了」。不自动推算，见 schema 里的说明。 */
+  /** 手动标记「现在能做 / 物品齐了」。不自动推算，见 schema 里的说明。 */
   available: boolean
   items: RecipeItem[]
   createdAt: string
@@ -403,7 +403,7 @@ export interface CareRule {
    * 旧数据没有这一列时按 false 处理（迁移里加了默认 0）。
    */
   sameDay?: boolean
-  /** 绑定的配方。为空表示这条规则没有材料清单 */
+  /** 绑定的配方。为空表示这条规则没有物品清单 */
   recipeId: number | null
   /**
    * 轮换步骤。非空时生成的任务会按顺序取名 ——

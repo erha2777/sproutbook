@@ -1,8 +1,8 @@
 /**
- * 材料库管理弹窗。
+ * 物品库管理弹窗。
  *
- * 材料是配方的砖头：先把「泥炭、珍珠岩、缓释肥」这些登记好单位和分类，
- * 配方里就能直接选，不用每次手打。但也不强制 —— 配方条目允许写库外的临时材料名。
+ * 物品是配方的砖头：先把「泥炭、珍珠岩、缓释肥」这些登记好单位和分类，
+ * 配方里就能直接选，不用每次手打。但也不强制 —— 配方条目允许写库外的临时物品名。
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -44,12 +44,12 @@ export function MaterialManager({
     try {
       const list = await window.api.materials.list()
       setItems(list)
-      // 每个材料被多少配方引用 —— 删除前要让人看见
+      // 每个物品被多少配方引用 —— 删除前要让人看见
       const counts: Record<number, number> = {}
       for (const m of list) counts[m.id] = await window.api.materials.usage(m.id)
       setUsage(counts)
     } catch (error) {
-      toast.push(`加载材料库失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+      toast.push(`加载物品库失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -62,7 +62,7 @@ export function MaterialManager({
   const save = async (): Promise<void> => {
     if (!draft) return
     if (!draft.name.trim()) {
-      toast.push('材料名称不能为空', 'error')
+      toast.push('物品名称不能为空', 'error')
       return
     }
     setSaving(true)
@@ -86,7 +86,7 @@ export function MaterialManager({
         price,
         note: draft.note.trim() || null
       })
-      toast.push(draft.id ? '材料已更新' : '材料已新增', 'success')
+      toast.push(draft.id ? '物品已更新' : '物品已新增', 'success')
       setDraft(null)
       await reload()
       onChanged()
@@ -103,11 +103,11 @@ export function MaterialManager({
       toast.push(`「${m.name}」被 ${used} 个配方使用，不能删除`, 'error')
       return
     }
-    if (!window.confirm(`确定删除材料「${m.name}」吗？`)) return
+    if (!window.confirm(`确定删除物品「${m.name}」吗？`)) return
     try {
       const ok = await window.api.materials.remove(m.id)
       await reload()
-      toast.push(ok ? '已删除' : '这个材料已经不在了。列表已刷新。', ok ? 'success' : 'error')
+      toast.push(ok ? '已删除' : '这个物品已经不在了。列表已刷新。', ok ? 'success' : 'error')
       onChanged()
     } catch (error) {
       toast.push(error instanceof Error ? error.message : '删除失败', 'error')
@@ -116,11 +116,11 @@ export function MaterialManager({
 
   return (
     <Modal
-      title="材料库"
+      title="物品库"
       onClose={onClose}
       footer={
         <>
-          <span className="small muted">共 {items.length} 种材料</span>
+          <span className="small muted">共 {items.length} 种物品</span>
           <span className="spacer" />
           <Button variant="primary" onClick={onClose}>
             完成
@@ -130,13 +130,13 @@ export function MaterialManager({
     >
       <div className="content-inner">
         <Notice tone="info">
-          这里登记常用材料与单位，配方里就能直接选。被配方用到的材料<b>不能删除</b> ——
-          否则配方里那一条会变成「未命名材料」，你就不知道原来放的是什么了。
+          这里登记常用物品与单位，配方里就能直接选。被配方用到的物品<b>不能删除</b> ——
+          否则配方里那一条会变成「未命名物品」，你就不知道原来放的是什么了。
         </Notice>
 
         {draft ? (
           <Panel flat>
-            <SectionTitle>{draft.id ? '编辑材料' : '新增材料'}</SectionTitle>
+            <SectionTitle>{draft.id ? '编辑物品' : '新增物品'}</SectionTitle>
             <div className="form-grid">
               <Field label="名称" required>
                 <TextInput
@@ -189,7 +189,7 @@ export function MaterialManager({
         ) : (
           <div className="row" style={{ marginTop: 10 }}>
             <Button variant="primary" size="small" onClick={() => setDraft({ ...BLANK })}>
-              ＋ 新增材料
+              ＋ 新增物品
             </Button>
           </div>
         )}
@@ -198,7 +198,7 @@ export function MaterialManager({
           <Spinner label="加载中…" />
         ) : items.length === 0 ? (
           <div className="small muted" style={{ marginTop: 12 }}>
-            还没有材料。也可以直接在配方里写材料名（选「手填名称」），不登记也能用。
+            还没有物品。也可以直接在配方里写物品名（选「手填名称」），不登记也能用。
           </div>
         ) : (
           <table className="pixel-table" style={{ marginTop: 12 }}>

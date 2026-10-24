@@ -391,7 +391,7 @@ export interface GeneratedTask {
   priority: number
   windowDays: number
   ruleId: number
-  /** 生成时那条规则绑的配方。为空表示这条规则没有材料清单 */
+  /** 生成时那条规则绑的配方。为空表示这条规则没有物品清单 */
   recipeId: number | null
 }
 
