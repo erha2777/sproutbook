@@ -2,6 +2,22 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.54.1] - 2026-10-24
+
+### 修：物品「加图片没反应」
+
+用户：「加图片没反应」。
+
+`images:pick`（弹文件框导入图片）只把 plantId / speciesId / environmentId 传给了 `addImage`，
+**漏了 materialId** —— 于是照片存进了 images 表，但四个 owner 全是 NULL，
+`listMaterials` 按 material_id 连不上，界面上什么都看不到。
+
+- `images:pick` 补上 `materialId`
+- `images:importUrl` 也补上 `environmentId` / `materialId`（同一条路，之前只认前两个 owner）
+- 界面兜底：选了文件却一张都没导入时提示「没有导入任何图片，换一张试试」，
+  不再静默 —— 按钮"没反应"和"导入失败"要能分得清
+
+自检 945 项不变（`addImage({ materialId })` 与列表带缩略图已有覆盖）。
 ## [1.54.0] - 2026-10-24
 
 ### 物品支持照片；编辑改成行内

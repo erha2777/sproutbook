@@ -124,10 +124,14 @@ export function MaterialManager({
   const uploadPhoto = async (m: Material): Promise<void> => {
     try {
       const res = await window.api.images.pick({ materialId: m.id })
-      if (!res.canceled && res.imported.length > 0) await reload()
       if (res.failures && res.failures.length > 0) {
         toast.push(`有 ${res.failures.length} 张没能导入：${res.failures[0]}`, 'error')
       }
+      if (!res.canceled && res.imported.length === 0 && (res.failures?.length ?? 0) === 0) {
+        // 选了文件却一张都没进来：说出来，别让人以为按钮坏了
+        toast.push('没有导入任何图片，换一张试试', 'error')
+      }
+      if (res.imported.length > 0) await reload()
     } catch (error) {
       toast.push(error instanceof Error ? error.message : '上传失败', 'error')
     }

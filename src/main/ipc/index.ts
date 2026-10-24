@@ -1089,6 +1089,8 @@ function registerImageIpc(): void {
     return addImage(getDb(), {
       plantId: owner.plantId ?? null,
       speciesId: owner.speciesId ?? null,
+      environmentId: owner.environmentId ?? null,
+      materialId: owner.materialId ?? null,
       path: file.fileName,
       thumbPath: file.thumbName,
       origin: 'url'
@@ -1112,6 +1114,7 @@ function registerImageIpc(): void {
           plantId: owner.plantId ?? null,
           speciesId: owner.speciesId ?? null,
           environmentId: owner.environmentId ?? null,
+          materialId: owner.materialId ?? null,
           path: file.fileName,
           thumbPath: file.thumbName
         })
