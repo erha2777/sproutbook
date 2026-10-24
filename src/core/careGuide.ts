@@ -44,8 +44,9 @@ export interface ParsedCareGuide {
 /** 指南的格式约定：写进系统提示词，也直接展示给用户看 */
 export const CARE_GUIDE_FORMAT = [
   '## 3月',
-  '- 换盆（03-15）：换到 20cm 盆，土用泥炭 5 : 珍珠岩 3',
-  '- 开始施肥（03-20）'
+  '- 换盆：换到 20cm 盆，土用泥炭 5 : 珍珠岩 3',
+  '- 开始施肥：新芽展开后，每两周一次稀薄液肥',
+  '- 检查蚜虫：新梢背面重点看，发现就冲掉'
 ].join('\n')
 
 export const CARE_GUIDE_SYSTEM_PROMPT = [
@@ -57,11 +58,14 @@ export const CARE_GUIDE_SYSTEM_PROMPT = [
   '',
   CARE_GUIDE_FORMAT,
   '',
-  '   每月 2~4 条，日期写在中文括号里（MM-DD）；能不给日期就只写「## N月」一节的条目不带日期。',
+  '   每月 2~4 条；**不要写具体日期**（不要写 03-15 这种），只需要归到月份。',
   '3. 每条先写事项（浇水 / 施肥 / 修剪 / 换盆 / 防寒 / 病虫害检查…），冒号后一句说明「怎么做、做到什么程度」。',
-  '4. 结合这株的位置（光照、是否室外、所在城市）和当前状态调整，例如室外要写霜冻防护、室内要写通风。',
-  '5. 涉及用药、剂量、毒性时保守表述，提示以专业意见为准。',
-  '6. 中文；不要写表格；不要寒暄；不要在开头写总结段落 —— 直接从「## 1月」开始。'
+  '4. 同一个月份里的几件事，多数情况下这个月内什么时候做都行 —— **不要为了错开而编造先后日期**。',
+  '   只有确实有先后要求时才在说明里写清楚，例如「花谢后一周内修剪」「霜冻前完成」。',
+  '5. 像「防寒」「清园」「修剪」这类季节性的活，写在这个月的第一条即可，不用拆成多天。',
+  '6. 结合这株的位置（光照、是否室外、所在城市）和当前状态调整，例如室外要写霜冻防护、室内要写通风。',
+  '7. 涉及用药、剂量、毒性时保守表述，提示以专业意见为准。',
+  '8. 中文；不要写表格；不要寒暄；不要在开头写总结段落 —— 直接从「## 1月」开始。'
 ].join('\n')
 
 export interface CareGuideMessages {
@@ -90,6 +94,20 @@ const MONTH_ONLY = /[（(]\s*(\d{1,2})\s*月\s*[)）]/
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
+}
+
+/**
+ * 从这一天到月底还剩几天（含当天）。
+ *
+ * 指南里的条目只精确到月，加入计划时统一落在 1 号；窗口给到月底，
+ * 「本月内做完」就体现为「可做至 3-31」，而不是一加进来就红着说逾期。
+ */
+function daysInMonth(date: string): number {
+  const [y, m, d] = date.split('-').map(Number)
+  if (!y || !m) return 1
+  const last = new Date(y, m, 0).getDate()
+  const day = d || 1
+  return Math.max(1, last - day + 1)
 }
 
 /**
@@ -199,6 +217,8 @@ export function guessCareAction(title: string): CareActionType {
 export interface CareGuideTaskDraft {
   title: string
   dueDate: string
+  /** 这件事的可做窗口（天）。按月给的条目 = 整月，所以当月哪天做都不算逾期 */
+  windowDays: number
   note: string
   /** 猜出来的动作类型，只影响图标 / 分组 */
   actionType: CareActionType
@@ -218,7 +238,13 @@ export function careGuideTaskDrafts(parsed: ParsedCareGuide): CareGuideTaskDraft
       const key = `${item.date}|${item.title}`
       if (seen.has(key)) continue
       seen.add(key)
-      out.push({ title: item.title, dueDate: item.date, note: item.note, actionType: guessCareAction(item.title) })
+      out.push({
+        title: item.title,
+        dueDate: item.date,
+        windowDays: daysInMonth(item.date),
+        note: item.note,
+        actionType: guessCareAction(item.title)
+      })
     }
   }
   return out.sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.title.localeCompare(b.title, 'zh'))

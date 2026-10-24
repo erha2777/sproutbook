@@ -1754,7 +1754,8 @@ function registerAiIpc(): void {
         title: draft.title,
         detail: draft.note || null,
         dueDate: draft.dueDate,
-        windowDays: 7,
+        // 指南按「月」给，窗口就覆盖到月底 —— 当月哪天做都不算逾期
+        windowDays: draft.windowDays,
         source: 'manual'
       })
       created += 1

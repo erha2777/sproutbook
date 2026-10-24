@@ -656,6 +656,17 @@ export async function runSmoke(outFile: string): Promise<number> {
       })
       const plantId = p.plant?.id ?? 0
 
+    /* 指南只精确到月：任务落在 1 号，窗口覆盖到月底 */
+    {
+      const march = careGuideTaskDrafts(parseCareGuide('## 3月\n- 换盆：换到 20cm 盆', 2026))[0]
+      check('不带日期的条目落在当月 1 号', march.dueDate === '2026-03-01', march.dueDate)
+      check('窗口覆盖整月', march.windowDays === 31, String(march.windowDays))
+      const february = careGuideTaskDrafts(parseCareGuide('## 2月\n- 修剪：剪掉枯枝', 2026))[0]
+      check('二月窗口 28 天', february.windowDays === 28, String(february.windowDays))
+      const dated = careGuideTaskDrafts(parseCareGuide('## 3月\n- 换盆（03-15）：换盆', 2026))[0]
+      check('写了日期就按日期算，窗口到月底', dated.dueDate === '2026-03-15' && dated.windowDays === 17, `${dated.dueDate}/${dated.windowDays}`)
+    }
+
     /* 指南加进计划时，已经过去的条目不要再加 */
     {
       const drafts = careGuideTaskDrafts(

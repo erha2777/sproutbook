@@ -433,7 +433,7 @@ export function PlantEditorModal({
           value={typeof values.care_guide === 'string' ? values.care_guide : ''}
           onChange={(v) => setValue('care_guide', v)}
           rows={8}
-          placeholder={'## 3月\n- 换盆（03-15）：换到 20cm 盆，土用泥炭 5 : 珍珠岩 3'}
+          placeholder={'## 3月\n- 换盆：换到 20cm 盆，土用泥炭 5 : 珍珠岩 3\n- 开始施肥：新芽展开后每两周一次'}
         />
 
         {/*
@@ -457,7 +457,7 @@ export function PlantEditorModal({
           footer={
             <>
               <span className="small muted">
-                格式：每月一节「## 3月」，每条「- 事项（MM-DD）：说明」—— 加进养护计划时按这个解析。
+                格式：每月一节「## 3月」，每条「- 事项：说明」，不用写具体日期（归到月份就够）—— 加进养护计划时按这个解析。
               </span>
               <span className="spacer" />
               <Button onClick={() => setGuideOpen(false)}>取消</Button>
