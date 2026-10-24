@@ -14,7 +14,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareLog, CareLogImage, ImageRecord } from '@core/types'
 import { CARE_ACTION_OPTIONS, logKindLabel } from '@core/care'
-import { Badge, Button, EmptyState, Modal, Panel, SearchSelect, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
+import { Badge, Button, EmptyState, Panel, SearchSelect, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
+import { ImageViewer } from '../components/ImageViewer'
 import type { PlantOption } from '../components/CareTaskDialog'
 
 /**
@@ -23,11 +24,6 @@ import type { PlantOption } from '../components/CareTaskDialog'
  */
 function imageSrc(image: { path: string; thumbPath: string | null }): string {
   return `plantimg://local/${encodeURIComponent(image.thumbPath ?? image.path)}`
-}
-
-/** 点开看大图时用原图，不用缩略图 */
-function imageFull(image: { path: string; thumbPath: string | null }): string {
-  return `plantimg://local/${encodeURIComponent(image.path)}`
 }
 
 export function LogsPage(): ReactNode {
@@ -42,7 +38,8 @@ export function LogsPage(): ReactNode {
   /** 已经导入、但还没随这条记录保存的照片 */
   const [picked, setPicked] = useState<ImageRecord[]>([])
   /** 预览大图 */
-  const [preview, setPreview] = useState<CareLogImage | null>(null)
+  /** 大图查看：当前这条日志的整组照片 + 看到第几张（支持翻页） */
+  const [preview, setPreview] = useState<{ images: CareLogImage[]; index: number } | null>(null)
   /** 多选删除：勾中的日志 id */
   const [selected, setSelected] = useState<number[]>([])
   /** 正在编辑的日志 id（null = 没有在编辑） */
@@ -460,7 +457,9 @@ export function LogsPage(): ReactNode {
                                 type="button"
                                 className="log-image-cell"
                                 title="点开看大图"
-                                onClick={() => setPreview(image)}
+                                onClick={() =>
+                                  setPreview({ images: log.images, index: log.images.indexOf(image) })
+                                }
                               >
                                 <img className="log-image" src={imageSrc(image)} alt="" />
                               </button>
@@ -494,9 +493,13 @@ export function LogsPage(): ReactNode {
 
       {/* 大图预览：缩略图看细节不够，点开看原图 */}
       {preview ? (
-        <Modal title="照片" onClose={() => setPreview(null)} footer={<Button onClick={() => setPreview(null)}>关闭</Button>}>
-          <img className="log-image-full" src={imageFull(preview)} alt="" />
-        </Modal>
+        <ImageViewer
+          title="养护日志照片"
+          images={preview.images}
+          index={preview.index}
+          onIndex={(i) => setPreview({ ...preview, index: i })}
+          onClose={() => setPreview(null)}
+        />
       ) : null}
     </div>
   )

@@ -4161,3 +4161,76 @@ html.tex-button .home-gear.sound-ctl:hover {
   display: block;
   image-rendering: auto;
 }
+
+/* ---- 大图查看器 ---- */
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  background: rgba(18, 12, 8, 0.82);
+  color: #f6e9cf;
+}
+.image-viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.image-viewer-title {
+  font-weight: 600;
+}
+.image-viewer-count {
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+.image-viewer-close {
+  width: 26px;
+  height: 24px;
+  border: 2px solid #5b2f0c;
+  background: #e8a24a;
+  color: #3b2410;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.image-viewer-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.image-viewer-img {
+  max-width: calc(100% - 120px);
+  max-height: 100%;
+  object-fit: contain;
+  border: 2px solid var(--wood-outline, #6b4a2a);
+  background: #fff;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+.image-viewer-nav {
+  width: 44px;
+  height: 64px;
+  flex-shrink: 0;
+  border: 2px solid #5b2f0c;
+  background: rgba(232, 162, 74, 0.92);
+  color: #3b2410;
+  font-size: 34px;
+  line-height: 1;
+  cursor: pointer;
+}
+.image-viewer-nav:hover {
+  background: #f0ad55;
+}
+.image-viewer-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+}

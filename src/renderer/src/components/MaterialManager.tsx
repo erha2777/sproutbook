@@ -11,10 +11,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { Material, MaterialKind } from '@core/types'
+import type { ImageRecord, Material, MaterialKind } from '@core/types'
 import { MATERIAL_KIND_LABELS, MATERIAL_KIND_OPTIONS } from '@core/recipes'
 import { imageUrl } from '../lib/util'
 import { Badge, Button, Modal, Notice, SelectInput, Spinner, TextInput, useToast } from './ui'
+import { ImageViewer } from './ImageViewer'
 
 interface Draft {
   id?: number
@@ -44,6 +45,8 @@ export function MaterialManager({
   /** 正在编辑的那一行（id 为空 = 新增）；null = 没有在编辑 */
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
+  /** 大图查看（物品的照片，按 owner 现取原图列表） */
+  const [viewer, setViewer] = useState<{ images: ImageRecord[]; index: number } | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -145,6 +148,16 @@ export function MaterialManager({
       await reload()
     } catch (error) {
       toast.push(error instanceof Error ? error.message : '删除失败', 'error')
+    }
+  }
+
+  /** 打开物品照片的大图（images 表里存着原图，缩略图不能直接看） */
+  const openViewer = async (m: Material): Promise<void> => {
+    try {
+      const images = await window.api.images.list({ materialId: m.id })
+      if (images.length > 0) setViewer({ images, index: 0 })
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : '打不开这张图', 'error')
     }
   }
 
@@ -290,7 +303,13 @@ export function MaterialManager({
                     <td>
                       <div className="material-photo">
                         {m.imageThumb ? (
-                          <img src={imageUrl(m.imageThumb) ?? ''} alt={m.name} />
+                          <img
+                            src={imageUrl(m.imageThumb) ?? ''}
+                            alt={m.name}
+                            title="点开看大图"
+                            style={{ cursor: 'zoom-in' }}
+                            onClick={() => void openViewer(m)}
+                          />
                         ) : (
                           <span className="muted">—</span>
                         )}
@@ -339,6 +358,16 @@ export function MaterialManager({
           </table>
         )}
       </div>
+
+      {viewer ? (
+        <ImageViewer
+          title="物品照片"
+          images={viewer.images}
+          index={viewer.index}
+          onIndex={(i) => setViewer({ ...viewer, index: i })}
+          onClose={() => setViewer(null)}
+        />
+      ) : null}
     </Modal>
   )
 }

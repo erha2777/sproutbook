@@ -9,6 +9,7 @@ import type { ImageRecord } from '@core/types'
 import { imageUrl } from '../lib/util'
 import { Button, Spinner, cx, useToast } from './ui'
 import { ImageSearchModal } from './ImageSearchModal'
+import { ImageViewer } from './ImageViewer'
 
 export interface ImageStripProps {
   owner: { plantId?: number; speciesId?: number; environmentId?: number }
@@ -46,6 +47,8 @@ export function ImageStrip({
   const [searchOpen, setSearchOpen] = useState(false)
   /** 所属物种的图片（只读，可借来当封面） */
   const [speciesImages, setSpeciesImages] = useState<ImageRecord[]>([])
+  /** 大图查看：看哪一组的第几张 */
+  const [viewer, setViewer] = useState<{ images: ImageRecord[]; index: number } | null>(null)
 
   useEffect(() => {
     if (!speciesId) {
@@ -175,8 +178,8 @@ export function ImageStrip({
           <div
             className={`image-thumb${isCover ? ' is-cover' : ''}${onSetCover ? ' pickable' : ''}`}
             key={image.id}
-            onClick={onSetCover ? () => onSetCover(isCover ? null : image.id) : undefined}
-            title={onSetCover ? (isCover ? '点一下取消封面，回到默认' : '点一下用这张当封面') : undefined}
+            onClick={() => setViewer({ images, index: images.indexOf(image) })}
+            title="点开看大图"
           >
             {url ? <img src={url} alt={image.caption ?? '植物图片'} /> : null}
             {isCover ? <span className="image-cover-badge">封面</span> : null}
@@ -218,7 +221,7 @@ export function ImageStrip({
               恢复默认
             </Button>
           ) : (
-            <span> · 点照片可设成封面</span>
+            <span> · 点照片看大图，大图里可以设为封面</span>
           )}
         </div>
       ) : null}
@@ -232,7 +235,7 @@ export function ImageStrip({
       {speciesImages.length > 0 && onSetCover ? (
         <div className="species-strip">
           <div className="small muted species-strip-title">
-            物种图片（只读 · 点一张借来当封面）
+            物种图片（只读 · 点开看大图，大图里可以借来当封面）
           </div>
           <div className="image-strip">
             {speciesImages.map((image) => {
@@ -242,8 +245,8 @@ export function ImageStrip({
                 <div
                   key={image.id}
                   className={cx('image-thumb', 'pickable', borrowed && 'is-cover')}
-                  onClick={() => onSetCover(borrowed ? null : image.id)}
-                  title={borrowed ? '点一下取消，回到默认封面' : '点一下借这张当封面'}
+                  onClick={() => setViewer({ images: speciesImages, index: speciesImages.indexOf(image) })}
+                  title="点开看大图（大图里可以借来当封面）"
                 >
                   {url ? <img src={url} alt={image.caption ?? '物种图片'} /> : null}
                   <span className="species-tag">物种</span>
@@ -253,6 +256,31 @@ export function ImageStrip({
             })}
           </div>
         </div>
+      ) : null}
+
+      {viewer ? (
+        <ImageViewer
+          images={viewer.images}
+          index={viewer.index}
+          onIndex={(i) => setViewer({ ...viewer, index: i })}
+          onClose={() => setViewer(null)}
+          actions={
+            onSetCover
+              ? (image) => {
+                  const on = coverId === image.id
+                  return (
+                    <Button
+                      size="small"
+                      variant={on ? 'default' : 'primary'}
+                      onClick={() => onSetCover(on ? null : image.id)}
+                    >
+                      {on ? '取消封面' : '设为封面'}
+                    </Button>
+                  )
+                }
+              : undefined
+          }
+        />
       ) : null}
 
       {searchOpen ? (
