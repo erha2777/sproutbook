@@ -84,6 +84,7 @@ import { PLANT_STATUS_ORDER } from '../core/status'
 import { deriveCarePhase } from '../core/phase'
 import { searchSelectView } from '../core/searchSelect'
 import { buildAskPlantMessages, buildPlantDossier } from '../core/plantDossier'
+import { careGuideTaskDrafts, parseCareGuide } from '../core/careGuide'
 import { defaultFieldDefinitions } from '../core/defaultTemplate'
 import {
   addDays,
@@ -654,6 +655,47 @@ export async function runSmoke(outFile: string): Promise<number> {
         values: { nickname: '状态计时株', status: 'recovering' }
       })
       const plantId = p.plant?.id ?? 0
+
+    /* 全年养护指南：解析与「加进计划」的转换 */
+    {
+      const text = [
+        '## 3月',
+        '- 换盆（03-15）：换到 20cm 盆，土用泥炭 5 : 珍珠岩 3',
+        '- 开始施肥（03-20）',
+        '## 4月',
+        '- 观察新芽：每周看一次',
+        '### 5月',
+        '* 防蚜虫（5/8）：发现就打药'
+      ].join('\n')
+      const parsed = parseCareGuide(text, 2026)
+      check('指南按月分节', parsed.sections.length === 3, String(parsed.sections.length))
+      check('指南条目数正确', parsed.itemCount === 4, String(parsed.itemCount))
+      check(
+        '日期解析成具体日子',
+        parsed.sections[0].items[0].date === '2026-03-15',
+        parsed.sections[0].items[0].date
+      )
+      check(
+        '没有日期时落在当月 1 号',
+        parsed.sections[1].items[0].date === '2026-04-01',
+        parsed.sections[1].items[0].date
+      )
+      check('冒号后是说明', parsed.sections[0].items[0].note.includes('珍珠岩'))
+      check('英文括号和斜杠也认', parsed.sections[2].items[0].date === '2026-05-08')
+
+      const drafts = careGuideTaskDrafts(parsed)
+      check('转成任务数一致', drafts.length === 4, String(drafts.length))
+      check('按日期排序', drafts[0].dueDate <= drafts[drafts.length - 1].dueDate)
+      check('换盆→repot', drafts.find((d) => d.title === '换盆')?.actionType === 'repot')
+      check('施肥→fertilize', drafts.find((d) => d.title === '开始施肥')?.actionType === 'fertilize')
+      check('防蚜虫→pest', drafts.find((d) => d.title.includes('防蚜虫'))?.actionType === 'pest')
+
+      const dup = parseCareGuide('## 6月\n- 浇水（06-01）\n- 浇水（06-01）', 2026)
+      check('重复条目会去重', careGuideTaskDrafts(dup).length === 1)
+
+      const junk = parseCareGuide('随便写的，没有按月分节，也没有列表。', 2026)
+      check('解析不出来就是空列表，不报错', junk.itemCount === 0 && junk.sections.length === 0)
+    }
 
     /* 四季音乐：季节判断、模式、选曲（纯函数的那些容易错的地方） */
     {

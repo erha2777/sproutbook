@@ -10,7 +10,8 @@ import type { ReactNode } from 'react'
 import type { Environment, FieldDefinition, PlantStatus } from '@core/types'
 import type { PlantListItem, SpeciesListItem } from '@shared/api'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS } from '../lib/util'
-import { Badge, Button, Field, Modal, Notice, Panel, TextInput, useToast } from '../components/ui'
+import type { CareGuideTemplate } from '@core/careGuide'
+import { Badge, Button, Field, Modal, Notice, Panel, SelectInput, TextArea, TextInput, useToast } from '../components/ui'
 import { DynamicForm } from '../components/DynamicForm'
 import type { FieldContext, FormValues } from '../components/DynamicForm'
 import { ImageStrip } from '../components/ImageStrip'
@@ -158,6 +159,60 @@ export function PlantEditorModal({
       return next
     })
   }, [])
+
+  /*
+   * 全年养护指南：AI 生成 → 先给用户看和改 → 点「用这份指南」填进字段。
+   * 真正写库还是靠右下角「保存」，所以生成失败不会留下半截数据。
+   */
+  const [guideTemplates, setGuideTemplates] = useState<CareGuideTemplate[]>([])
+  const [guideTemplateId, setGuideTemplateId] = useState('')
+  const [guideOpen, setGuideOpen] = useState(false)
+  const [guideText, setGuideText] = useState('')
+  const [guideBusy, setGuideBusy] = useState(false)
+  const [guideError, setGuideError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.api.careGuide
+      .templates()
+      .then((r) => {
+        setGuideTemplates(r.templates)
+        setGuideTemplateId(r.activeId)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const generateGuide = async (): Promise<void> => {
+    if (!plant) {
+      toast.push('先保存这一株，再生成指南（要按它的信息来写）', 'error')
+      return
+    }
+    setGuideBusy(true)
+    setGuideError(null)
+    try {
+      const r = await window.api.ai.careGuide({ requestId: `guide-${Date.now()}`, plantId: plant.id })
+      if (!r.ok) {
+        setGuideError(r.message ?? 'AI 没有返回内容。')
+        setGuideOpen(true)
+        return
+      }
+      setGuideText(r.text)
+      setGuideOpen(true)
+      if ((r.itemCount ?? 0) === 0) {
+        toast.push('生成好了，但格式不太规整（可能加不进计划），建议改一改', 'error')
+      }
+    } catch (error) {
+      setGuideError(error instanceof Error ? error.message : '生成失败')
+      setGuideOpen(true)
+    } finally {
+      setGuideBusy(false)
+    }
+  }
+
+  const applyGuide = (): void => {
+    setValue('care_guide', guideText.trim())
+    setGuideOpen(false)
+    toast.push('已填入「全年养护指南」，确认后点保存', 'success')
+  }
 
   const createSpecies = async (): Promise<void> => {
     const name = speciesQuery.trim()
@@ -340,12 +395,47 @@ export function PlantEditorModal({
           模板字段就该怎么定义就怎么显示，不要在这里偷偷过滤。
         */}
         <DynamicForm
-          defs={defs.filter((d) => d.key !== 'nickname')}
+          defs={defs.filter((d) => d.key !== 'nickname' && d.key !== 'care_guide')}
           values={values}
           errors={errors}
           onChange={setValue}
           context={fieldContext}
         />
+        <div className="section-title">全年养护指南</div>
+        {/*
+          指南是 AI 写的长文本，所以单独一块：
+          上面是模板 + 生成按钮，下面是可编辑的正文。
+          「确认」只把它填进表单，真正写库还是靠右下角保存 —— 生成的东西不直接落盘。
+        */}
+        <div className="row tight" style={{ marginBottom: 6, flexWrap: 'wrap' }}>
+          <div style={{ width: 190 }}>
+            <SelectInput
+              value={guideTemplateId}
+              onChange={(v) => {
+                setGuideTemplateId(v)
+                void window.api.careGuide.setActive(v).catch(() => undefined)
+              }}
+              options={
+                guideTemplates.length > 0
+                  ? guideTemplates.map((t) => ({ value: t.id, label: t.name }))
+                  : [{ value: '', label: '标准年历' }]
+              }
+            />
+          </div>
+          <Button size="small" onClick={() => void generateGuide()} disabled={guideBusy}>
+            {guideBusy ? '生成中…' : '🤖 AI 生成'}
+          </Button>
+          <span className="small muted">
+            按物种 / 养护位置 / 这一株的信息写 12 个月的要点；生成后可以先改再确认。
+          </span>
+        </div>
+        <TextArea
+          value={typeof values.care_guide === 'string' ? values.care_guide : ''}
+          onChange={(v) => setValue('care_guide', v)}
+          rows={8}
+          placeholder={'## 3月\n- 换盆（03-15）：换到 20cm 盆，土用泥炭 5 : 珍珠岩 3'}
+        />
+
         {/*
           现状放在最下面：它是"看一眼"的信息（阶段、下一件事），
           改字段和图片才是打开弹窗的主要目的 —— 先让能改的东西在前面。
@@ -359,6 +449,33 @@ export function PlantEditorModal({
         ) : null}
       </div>
 
+
+      {guideOpen ? (
+        <Modal
+          title="全年养护指南（AI 生成）"
+          onClose={() => setGuideOpen(false)}
+          footer={
+            <>
+              <span className="small muted">
+                格式：每月一节「## 3月」，每条「- 事项（MM-DD）：说明」—— 加进养护计划时按这个解析。
+              </span>
+              <span className="spacer" />
+              <Button onClick={() => setGuideOpen(false)}>取消</Button>
+              <Button onClick={() => void generateGuide()} disabled={guideBusy}>
+                重新生成
+              </Button>
+              <Button variant="primary" onClick={applyGuide} disabled={!guideText.trim()}>
+                用这份指南
+              </Button>
+            </>
+          }
+        >
+          <div className="content-inner">
+            {guideError ? <Notice tone="danger">{guideError}</Notice> : null}
+            <TextArea value={guideText} onChange={setGuideText} rows={18} placeholder="（生成的内容会出现在这里）" />
+          </div>
+        </Modal>
+      ) : null}
     </Modal>
   )
 }

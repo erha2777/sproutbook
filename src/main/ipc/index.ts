@@ -85,6 +85,8 @@ import {
 import type { CareLogPatch, CareTaskPatch, CareTaskQuery } from '../../shared/api'
 import { formatFieldValue } from '../../core/fieldTypes'
 import { buildAskPlantMessages, buildPlantDossier } from '../../core/plantDossier'
+import { buildCareGuideMessages, careGuideTaskDrafts, parseCareGuide } from '../../core/careGuide'
+import type { CareGuideTemplate } from '../../core/careGuide'
 import { deriveCarePhase } from '../../core/phase'
 import { readMonthSet } from '../../core/growth'
 import { CARE_PHASE_LABELS, logKindLabel, phaseAgeDays, todayIso } from '../../core/care'
@@ -156,6 +158,60 @@ function ok<T>(data: T): IpcResult<T> {
 /** settings 里存音乐目录的键 */
 const MUSIC_DIR_KEY = 'music.dir'
 
+const CARE_GUIDE_TEMPLATES_KEY = 'careGuide.templates'
+const CARE_GUIDE_ACTIVE_KEY = 'careGuide.templateId'
+
+const DEFAULT_CARE_GUIDE_TEMPLATES: CareGuideTemplate[] = [
+  {
+    id: 'standard',
+    name: '标准年历',
+    instruction: '按 1–12 月逐月写，每月 2~4 条；浇水、施肥、修剪、换盆、病虫害都要覆盖到。'
+  },
+  {
+    id: 'minimal',
+    name: '极简清单',
+    instruction: '每月只写 1~2 条最关键的，不要展开细节；日期尽量给具体日子。'
+  },
+  {
+    id: 'pest',
+    name: '病虫害重点',
+    instruction: '重点写各月的病虫害风险、怎么预防、发现后怎么处理；日常浇水施肥简单带过。'
+  },
+  {
+    id: 'indoor',
+    name: '室内盆栽',
+    instruction: '按室内 / 阳台盆栽来写：通风、浇水频率、补光、越冬是否搬移，都要写进去。'
+  }
+]
+
+function sanitizeCareGuideTemplates(input: unknown): CareGuideTemplate[] {
+  const list = Array.isArray(input) ? input : []
+  const out: CareGuideTemplate[] = []
+  for (const row of list) {
+    if (!row || typeof row !== 'object') continue
+    const item = row as Partial<CareGuideTemplate>
+    const name = String(item.name ?? '').trim()
+    const instruction = String(item.instruction ?? '').trim()
+    if (!name || out.length >= 20) continue
+    const id = String(item.id ?? '').trim() || `t-${Date.now()}-${out.length}`
+    if (out.some((t) => t.id === id)) continue
+    out.push({ id, name, instruction })
+  }
+  return out.length > 0 ? out : DEFAULT_CARE_GUIDE_TEMPLATES
+}
+
+function readCareGuideTemplates(db: Db): CareGuideTemplate[] {
+  return sanitizeCareGuideTemplates(
+    getSetting<CareGuideTemplate[]>(db, CARE_GUIDE_TEMPLATES_KEY, DEFAULT_CARE_GUIDE_TEMPLATES)
+  )
+}
+
+function readCareGuideTemplateId(db: Db): string {
+  const id = getSetting<string>(db, CARE_GUIDE_ACTIVE_KEY, DEFAULT_CARE_GUIDE_TEMPLATES[0].id)
+  const templates = readCareGuideTemplates(db)
+  return templates.some((t) => t.id === id) ? id : (templates[0]?.id ?? '')
+}
+
 /** 季节 → 曲库里的文件夹名（上传时用它决定落到哪一季） */
 function seasonFolderName(season: string | null): string | null {
   const map: Record<string, string> = {
@@ -180,6 +236,101 @@ function fail(error: unknown): IpcResult<never> {
 }
 
 /** 包装 handler：统一 try/catch + 统一返回结构。 */
+/**
+ * 把一株植物拼成「档案」文本（物种、位置、状态、阶段、未完成任务、最近日志）。
+ *
+ * 问问 AI 和 生成全年养护指南 都用它 —— 两份提示词看到的必须是同一份事实，
+ * 否则会出现"问答说花期、指南按生长期写"这种自相矛盾。
+ */
+function dossierForPlant(db: Db, plant: NonNullable<ReturnType<typeof getPlant>>): string {
+  const species = plant.speciesId ? getSpecies(db, plant.speciesId) : null
+  const env = plant.envId ? getEnvironment(db, plant.envId) : null
+  const plantDefs = loadFieldDefinitions(db, 'plant', true)
+  const speciesDefs = loadFieldDefinitions(db, 'species', true)
+  const formatAttrs = (
+    defs: typeof plantDefs,
+    values: Record<string, unknown>
+  ): Array<{ label: string; value: string }> =>
+    defs
+      .filter((def) => !def.columnName)
+      .map((def) => {
+        const raw = values[def.key] as Parameters<typeof formatFieldValue>[1] | undefined
+        if (raw === null || raw === undefined) return null
+        let text = ''
+        try {
+          text = formatFieldValue(def, raw)
+        } catch {
+          text = String(raw)
+        }
+        return { label: def.label, value: text }
+      })
+      .filter((row): row is { label: string; value: string } => row !== null && row.value.trim() !== '')
+
+  // 物候阶段用和界面一致的推算，避免"档案说花期、任务按生长期生成"这种自相矛盾
+  const speciesAttrs = (species?.attributes ?? {}) as Record<string, unknown>
+  const phase = deriveCarePhase({
+    status: plant.status,
+    bloomMonths: readMonthSet(speciesAttrs.bloom_months),
+    dormancyMonths: readMonthSet(speciesAttrs.dormancy_months),
+    today: todayIso()
+  })
+
+  const tasks = listCareTasks(db, { plantId: plant.id, status: 'open' }).slice(0, 12)
+  const logs = listCareLogs(db, { plantId: plant.id, limit: 10 })
+
+  const dossier = buildPlantDossier({
+    plant: {
+      nickname: plant.nickname,
+      category: plant.category,
+      statusLabel: PLANT_STATUS_LABELS[plant.status] ?? plant.status,
+      statusDays: phaseAgeDays(plant.statusChangedAt),
+      phaseLabel: phase.phase ? CARE_PHASE_LABELS[phase.phase] : null,
+      phaseReason: phase.reason,
+      acquiredAt: plant.acquiredAt,
+      potSize: plant.potSize,
+      cultivation:
+        typeof plant.attributes.cultivation === 'string' ? (plant.attributes.cultivation as string) : null,
+      heightCm:
+        typeof plant.attributes.actual_height_cm === 'number' ? (plant.attributes.actual_height_cm as number) : null,
+      ageYears: typeof plant.attributes.age_years === 'number' ? (plant.attributes.age_years as number) : null,
+      price:
+        typeof plant.attributes.purchase_price === 'number' ? (plant.attributes.purchase_price as number) : null,
+      notes: plant.notes,
+      attributes: formatAttrs(plantDefs, plant.attributes as Record<string, unknown>)
+    },
+    species: species
+      ? {
+          commonName: species.commonName,
+          scientificName: species.scientificName,
+          family: species.family,
+          genus: species.genus,
+          aliases: species.aliases ?? [],
+          attributes: formatAttrs(speciesDefs, speciesAttrs)
+        }
+      : null,
+    env: env
+      ? {
+          name: env.name,
+          light: env.lightLevel,
+          lightHours: env.lightHours,
+          location: [env.province, env.city, env.district].filter(Boolean).join(' / ') || null,
+          notes: env.notes
+        }
+      : null,
+    tasks: tasks.map((t) => ({ title: t.title, dueDate: t.dueDate, status: t.status })),
+    logs: logs
+      .filter((l) => (l.content ?? '').trim() !== '' || l.kind)
+      .map((l) => ({
+        date: l.logDate,
+        kind: logKindLabel(l.kind),
+        content: (l.content ?? '').trim() || '（没有文字，只有照片）'
+      })),
+    today: todayIso()
+  })
+
+  return dossier
+}
+
 function handle<T>(channel: string, fn: (...args: never[]) => T | Promise<T>): void {
   ipcMain.handle(channel, async (_event, ...args) => {
     try {
@@ -1399,8 +1550,6 @@ function registerAiIpc(): void {
 
     const plant = getPlant(db, payload.plantId)
     if (!plant) return fail('这一株已经不在了。')
-    const species = plant.speciesId ? getSpecies(db, plant.speciesId) : null
-    const env = plant.envId ? getEnvironment(db, plant.envId) : null
 
     /*
      * 选中的照片：植株相册里的，或者这株的养护记录里挂的。
@@ -1435,89 +1584,7 @@ function registerAiIpc(): void {
     const model = imageParts.length > 0 ? visionModel || chatModel : chatModel
     if (!model) return fail('还没有配置对话模型。到「设置 → AI 配置」填一个。')
 
-    // 字段 label 让人看得懂：档案是给模型读的，键名对它没意义
-    const plantDefs = loadFieldDefinitions(db, 'plant', true)
-    const speciesDefs = loadFieldDefinitions(db, 'species', true)
-    const formatAttrs = (
-      defs: typeof plantDefs,
-      values: Record<string, unknown>
-    ): Array<{ label: string; value: string }> =>
-      defs
-        .filter((def) => !def.columnName)
-        .map((def) => {
-          const raw = values[def.key] as Parameters<typeof formatFieldValue>[1] | undefined
-          if (raw === null || raw === undefined) return null
-          let text = ''
-          try {
-            text = formatFieldValue(def, raw)
-          } catch {
-            text = String(raw)
-          }
-          return { label: def.label, value: text }
-        })
-        .filter((row): row is { label: string; value: string } => row !== null && row.value.trim() !== '')
-
-    // 物候阶段用和界面一致的推算，避免"档案说花期、任务按生长期生成"这种自相矛盾
-    const speciesAttrs = (species?.attributes ?? {}) as Record<string, unknown>
-    const phase = deriveCarePhase({
-      status: plant.status,
-      bloomMonths: readMonthSet(speciesAttrs.bloom_months),
-      dormancyMonths: readMonthSet(speciesAttrs.dormancy_months),
-      today: todayIso()
-    })
-
-    const tasks = listCareTasks(db, { plantId: plant.id, status: 'open' }).slice(0, 12)
-    const logs = listCareLogs(db, { plantId: plant.id, limit: 10 })
-
-    const dossier = buildPlantDossier({
-      plant: {
-        nickname: plant.nickname,
-        category: plant.category,
-        statusLabel: PLANT_STATUS_LABELS[plant.status] ?? plant.status,
-        statusDays: phaseAgeDays(plant.statusChangedAt),
-        phaseLabel: phase.phase ? CARE_PHASE_LABELS[phase.phase] : null,
-        phaseReason: phase.reason,
-        acquiredAt: plant.acquiredAt,
-        potSize: plant.potSize,
-        cultivation:
-          typeof plant.attributes.cultivation === 'string' ? (plant.attributes.cultivation as string) : null,
-        heightCm:
-          typeof plant.attributes.actual_height_cm === 'number' ? (plant.attributes.actual_height_cm as number) : null,
-        ageYears: typeof plant.attributes.age_years === 'number' ? (plant.attributes.age_years as number) : null,
-        price:
-          typeof plant.attributes.purchase_price === 'number' ? (plant.attributes.purchase_price as number) : null,
-        notes: plant.notes,
-        attributes: formatAttrs(plantDefs, plant.attributes as Record<string, unknown>)
-      },
-      species: species
-        ? {
-            commonName: species.commonName,
-            scientificName: species.scientificName,
-            family: species.family,
-            genus: species.genus,
-            aliases: species.aliases ?? [],
-            attributes: formatAttrs(speciesDefs, speciesAttrs)
-          }
-        : null,
-      env: env
-        ? {
-            name: env.name,
-            light: env.lightLevel,
-            lightHours: env.lightHours,
-            location: [env.province, env.city, env.district].filter(Boolean).join(' / ') || null,
-            notes: env.notes
-          }
-        : null,
-      tasks: tasks.map((t) => ({ title: t.title, dueDate: t.dueDate, status: t.status })),
-      logs: logs
-        .filter((l) => (l.content ?? '').trim() !== '' || l.kind)
-        .map((l) => ({
-          date: l.logDate,
-          kind: logKindLabel(l.kind),
-          content: (l.content ?? '').trim() || '（没有文字，只有照片）'
-        })),
-      today: todayIso()
-    })
+    const dossier = dossierForPlant(db, plant)
 
     const messages = buildAskPlantMessages(dossier, question, imageParts.length)
     const userContent: string | ChatContentPart[] =
@@ -1557,6 +1624,128 @@ function registerAiIpc(): void {
     } finally {
       runningAi.delete(payload.requestId)
     }
+  })
+
+  /*
+   * 全年养护指南：AI 生成。
+   *
+   * 和问问 AI 用同一份档案（dossierForPlant），区别只在提示词 ——
+   * 指南要求按月分节、每条能解析成一条养护任务（见 core/careGuide）。
+   * 生成结果**不落库**：界面先给用户看、改，确认后由保存植株那条路写字段。
+   */
+  handle('ai:careGuide', async (payload: { requestId: string; plantId: number }) => {
+    const fail = (message: string) => ({ ok: false as const, text: '', model: null, message })
+
+    const db = getDb()
+    const settings = readAiSettings(db)
+    const apiKey = getApiKey()
+    if (!apiKey) return fail('还没有配置 API Key。到「设置 → AI 配置」填一个就能用。')
+    const model = (settings.chatModel ?? '').trim()
+    if (!model) return fail('还没有配置对话模型。到「设置 → AI 配置」填一个。')
+
+    const plant = getPlant(db, payload.plantId)
+    if (!plant) return fail('这一株已经不在了。')
+
+    const templates = readCareGuideTemplates(db)
+    const active = templates.find((t) => t.id === readCareGuideTemplateId(db)) ?? templates[0] ?? null
+    const dossier = dossierForPlant(db, plant)
+    const messages = buildCareGuideMessages(dossier, active?.instruction ?? null)
+
+    const controller = new AbortController()
+    runningAi.set(payload.requestId, controller)
+    try {
+      const outcome = await chat({
+        baseUrl: settings.baseUrl,
+        apiKey,
+        model,
+        messages: [
+          { role: 'system', content: messages.system },
+          { role: 'user', content: messages.user }
+        ],
+        temperature: settings.temperature,
+        // 12 个月 × 每月几条，比问答长得多
+        timeoutMs: Math.max(settings.timeoutMs ?? 60000, 120000),
+        maxRetries: settings.maxRetries,
+        signal: controller.signal
+      })
+      const parsed = parseCareGuide(outcome.content ?? '')
+      recordAiRun(db, {
+        kind: 'care-guide',
+        baseUrl: settings.baseUrl,
+        model: outcome.model || model,
+        promptVersion: 'care-guide-1',
+        input: { plantId: plant.id, templateId: active?.id ?? null, dossier },
+        output: { text: outcome.content, parsedItems: parsed.itemCount },
+        status: outcome.ok ? 'ok' : 'error',
+        error: outcome.error ?? null,
+        usage: outcome.usage,
+        durationMs: outcome.durationMs
+      })
+      if (!outcome.ok) return fail(outcome.error ?? 'AI 没有返回内容。')
+      const text = (outcome.content ?? '').trim()
+      if (!text) return fail('AI 返回了空内容，换个模板或检查模型设置。')
+      return { ok: true as const, text, model: outcome.model || model, message: null, itemCount: parsed.itemCount }
+    } finally {
+      runningAi.delete(payload.requestId)
+    }
+  })
+
+  /* ---- 全年养护指南的格式模板 ---- */
+  handle('careGuide:templates', () => ({
+    templates: readCareGuideTemplates(getDb()),
+    activeId: readCareGuideTemplateId(getDb())
+  }))
+  handle('careGuide:saveTemplates', (templates: CareGuideTemplate[]) => {
+    const clean = sanitizeCareGuideTemplates(templates)
+    setSetting(getDb(), CARE_GUIDE_TEMPLATES_KEY, clean)
+    return { templates: clean, activeId: readCareGuideTemplateId(getDb()) }
+  })
+  handle('careGuide:setActive', (id: string) => {
+    const templates = readCareGuideTemplates(getDb())
+    const next = templates.find((t) => t.id === id) ? id : templates[0]?.id ?? ''
+    setSetting(getDb(), CARE_GUIDE_ACTIVE_KEY, next)
+    return { templates, activeId: next }
+  })
+
+  /*
+   * 把指南里解析出的事项加进养护计划。
+   *
+   * 已经存在的（同一天 + 同标题）跳过，所以点两次不会重复排；
+   * 指南没写或解析不出东西时返回 0，界面据此提示"先写/先生成指南"。
+   */
+  handle('care:planFromGuide', (plantId: number, year?: number) => {
+    const db = getDb()
+    const plant = getPlant(db, plantId)
+    if (!plant) throw new Error('植株不存在')
+    const text = typeof plant.attributes.care_guide === 'string' ? (plant.attributes.care_guide as string) : ''
+    const parsed = parseCareGuide(text, year ?? new Date().getFullYear())
+    const drafts = careGuideTaskDrafts(parsed)
+    if (drafts.length === 0) return { created: 0, skipped: 0, total: 0 }
+    let created = 0
+    let skipped = 0
+    for (const draft of drafts) {
+      const exists = db.scalar<number>(
+        'SELECT 1 FROM care_tasks WHERE plant_id = ? AND due_date = ? AND title = ? LIMIT 1',
+        plantId,
+        draft.dueDate,
+        draft.title
+      )
+      if (exists) {
+        skipped += 1
+        continue
+      }
+      createCareTask(db, {
+        plantId,
+        actionType: draft.actionType,
+        title: draft.title,
+        detail: draft.note || null,
+        dueDate: draft.dueDate,
+        windowDays: 7,
+        source: 'manual'
+      })
+      created += 1
+    }
+    return { created, skipped, total: drafts.length }
   })
 
 

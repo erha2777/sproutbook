@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 默认信息模板 —— 首次启动时写入 field_definitions。
  *
  * 与你原始需求的对照（关键改动都注明了理由）：
@@ -359,7 +359,15 @@ const plantFields: Seed[] = [
     helpText:
       '这株养了几年。没量现状高度时按它推算大小 —— 只对木本（乔木 / 灌木 / 藤本）有用，草本和多肉一季就长满，年龄不说明大小。'
   },
-  { key: 'plant_notes', label: '备注', groupName: '其他', type: 'longtext' }
+  { key: 'plant_notes', label: '备注', groupName: '其他', type: 'longtext' },
+  {
+    key: 'care_guide',
+    label: '全年养护指南',
+    groupName: '养护指南',
+    type: 'longtext',
+    helpText:
+      '按月份写的全年养护要点。可以在编辑页用 AI 生成（基于物种 / 位置 / 这株的信息），确认后保存；生成的内容也能一键加进养护计划。'
+  }
 ]
 
 /**

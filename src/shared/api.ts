@@ -6,6 +6,7 @@
  */
 
 import type { MusicMode, MusicSeason } from '../core/music'
+import type { CareGuideTemplate } from '../core/careGuide'
 import type {
   AiAutofillResult,
   AiConnectionResult,
@@ -253,7 +254,25 @@ export interface SproutbookApi {
       model: string | null
       message: string | null
     }>
+    /**
+     * 生成全年养护指南（按月分节，每条可解析成一条任务）。
+     * 只生成、不保存 —— 界面先给用户看和改，确认后由保存植株写字段。
+     */
+    careGuide(payload: { requestId: string; plantId: number }): Promise<{
+      ok: boolean
+      text: string
+      model: string | null
+      message: string | null
+      /** 解析出的条目数，0 表示 AI 没按格式写（仍可保存，但加不进计划） */
+      itemCount?: number
+    }>
     cancel(requestId: string): Promise<boolean>
+  }
+  /** 全年养护指南的格式模板 */
+  careGuide: {
+    templates(): Promise<{ templates: CareGuideTemplate[]; activeId: string }>
+    saveTemplates(templates: CareGuideTemplate[]): Promise<{ templates: CareGuideTemplate[]; activeId: string }>
+    setActive(id: string): Promise<{ templates: CareGuideTemplate[]; activeId: string }>
   }
   fields: {
     list(ownerKind: FieldOwner, includeArchived?: boolean): Promise<FieldDefinition[]>
@@ -400,6 +419,14 @@ export interface SproutbookApi {
     /** 生成是幂等的：签名相同的任务原样保留，已完成的一律不动 */
     generate(plantId: number, year: number): Promise<CareGenerateResult>
     generateAll(year: number): Promise<CareGenerateResult>
+    /**
+     * 把「全年养护指南」里解析出来的事项加进养护计划。
+     * 同一天 + 同标题的跳过，所以重复点不会排两遍。
+     */
+    planFromGuide(
+      plantId: number,
+      year?: number
+    ): Promise<{ created: number; skipped: number; total: number }>
     overview(year: number): Promise<CareOverview>
 
     /**

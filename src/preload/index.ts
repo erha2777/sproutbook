@@ -66,7 +66,13 @@ const api: SproutbookApi = {
     autofill: (payload) => call('ai:autofill', payload),
     identifyFile: (payload) => call('ai:identifyFile', payload),
     askPlant: (payload) => call('ai:askPlant', payload),
+    careGuide: (payload) => call('ai:careGuide', payload),
     cancel: (requestId) => call('ai:cancel', requestId),
+  },
+  careGuide: {
+    templates: () => call('careGuide:templates'),
+    saveTemplates: (templates) => call('careGuide:saveTemplates', templates),
+    setActive: (id) => call('careGuide:setActive', id)
   },
   fields: {
     list: (ownerKind, includeArchived) => call('fields:list', ownerKind, includeArchived ?? false),
@@ -143,6 +149,7 @@ const api: SproutbookApi = {
     purgeTasks: (input) => call('care:tasks.purge', input),
 
     generate: (plantId, year) => call('care:generate', plantId, year),
+    planFromGuide: (plantId, year) => call('care:planFromGuide', plantId, year),
     generateAll: (year) => call('care:generateAll', year),
     overview: (year) => call('care:overview', year),
     exportPlanHtml: (plantId, year) => call('care:plan.exportHtml', plantId, year),

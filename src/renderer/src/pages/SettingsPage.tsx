@@ -12,6 +12,7 @@ import type { AiSettings, AppInfo, SandboxStatus } from '@core/types'
 import type { AppPaths, BackupInfo, WeatherConfigSnapshot } from '@shared/api'
 import { formatBytes, formatDateTime } from '../lib/util'
 import { MediaSettings } from '../components/MediaSettings'
+import { CareGuideTemplates } from '../components/CareGuideTemplates'
 import { Badge, Button, EmptyState, Field, Notice, Panel, SectionTitle, SelectInput, Sign, Spinner, TextInput, useToast } from '../components/ui'
 import { EnvironmentManager } from '../components/EnvironmentManager'
 import { TransferPanel } from '../components/TransferPanel'
@@ -335,6 +336,11 @@ export function SettingsPage({ themeBackdrop = null }: { themeBackdrop?: string 
       <EnvironmentManager />
 
       <TransferPanel />
+
+      <Panel>
+        <SectionTitle>全年养护指南模板</SectionTitle>
+        <CareGuideTemplates />
+      </Panel>
 
       <Panel>
         <SectionTitle>声音与背景</SectionTitle>
