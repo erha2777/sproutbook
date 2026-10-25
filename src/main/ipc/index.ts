@@ -1642,6 +1642,19 @@ function registerAiIpc(): void {
    * 指南要求按月分节、每条能解析成一条养护任务（见 core/careGuide）。
    * 生成结果**不落库**：界面先给用户看、改，确认后由保存植株那条路写字段。
    */
+  /*
+   * 查看「档案」：就是生成指南时喂给模型的那段文本。
+   *
+   * 用户问「AI 怎么还在写盆苗」时，唯一靠谱的排查方式是把档案原样看一眼 ——
+   * 光看界面上的字段永远对不上（比如备注里的「15cm 盆」）。
+   */
+  handle('ai:plantDossier', (plantId: number) => {
+    const db = getDb()
+    const plant = getPlant(db, plantId)
+    if (!plant) throw new Error('植株不存在')
+    return dossierForPlant(db, plant)
+  })
+
   handle('ai:careGuide', async (payload: { requestId: string; plantId: number }) => {
     const fail = (message: string) => ({ ok: false as const, text: '', model: null, message })
 

@@ -67,6 +67,7 @@ const api: SproutbookApi = {
     identifyFile: (payload) => call('ai:identifyFile', payload),
     askPlant: (payload) => call('ai:askPlant', payload),
     careGuide: (payload) => call('ai:careGuide', payload),
+    plantDossier: (plantId) => call('ai:plantDossier', plantId),
     cancel: (requestId) => call('ai:cancel', requestId),
   },
   careGuide: {

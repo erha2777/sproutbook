@@ -11,7 +11,19 @@ import type { Environment, FieldDefinition, PlantStatus } from '@core/types'
 import type { PlantListItem, SpeciesListItem } from '@shared/api'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS } from '../lib/util'
 import type { CareGuideTemplate } from '@core/careGuide'
-import { Badge, Button, Field, Modal, Notice, Panel, SelectInput, TextArea, TextInput, useToast } from '../components/ui'
+import {
+  Badge,
+  Button,
+  Field,
+  Modal,
+  Notice,
+  Panel,
+  SelectInput,
+  Spinner,
+  TextArea,
+  TextInput,
+  useToast
+} from '../components/ui'
 import { DynamicForm } from '../components/DynamicForm'
 import type { FieldContext, FormValues } from '../components/DynamicForm'
 import { ImageStrip } from '../components/ImageStrip'
@@ -180,6 +192,27 @@ export function PlantEditorModal({
       })
       .catch(() => undefined)
   }, [])
+
+  /*
+   * 「查看档案」：把生成指南时喂给模型的原文原样显示。
+   * AI 写出奇怪内容的唯一可靠排查方式就是看这段（界面上字段太多，对不上）。
+   */
+  const [dossierOpen, setDossierOpen] = useState(false)
+  const [dossierText, setDossierText] = useState('')
+  const [dossierBusy, setDossierBusy] = useState(false)
+
+  const openDossier = async (): Promise<void> => {
+    if (!plant) return
+    setDossierOpen(true)
+    setDossierBusy(true)
+    try {
+      setDossierText(await window.api.ai.plantDossier(plant.id))
+    } catch (error) {
+      setDossierText(error instanceof Error ? error.message : '读取档案失败')
+    } finally {
+      setDossierBusy(false)
+    }
+  }
 
   const generateGuide = async (): Promise<void> => {
     if (!plant) {
@@ -425,6 +458,12 @@ export function PlantEditorModal({
           <Button size="small" onClick={() => void generateGuide()} disabled={guideBusy}>
             {guideBusy ? '生成中…' : '🤖 AI 生成'}
           </Button>
+          {/* 只在已保存的植株上出现：档案是按库里的数据拼的 */}
+          {plant ? (
+            <Button size="small" variant="ghost" onClick={() => void openDossier()} title="看看 AI 到底读到了什么">
+              查看档案
+            </Button>
+          ) : null}
           <span className="small muted">
             按物种 / 养护位置 / 这一株的信息写 12 个月的要点；生成后可以先改再确认。
           </span>
@@ -473,6 +512,40 @@ export function PlantEditorModal({
           <div className="content-inner">
             {guideError ? <Notice tone="danger">{guideError}</Notice> : null}
             <TextArea value={guideText} onChange={setGuideText} rows={18} placeholder="（生成的内容会出现在这里）" />
+          </div>
+        </Modal>
+      ) : null}
+
+      {dossierOpen ? (
+        <Modal
+          title="AI 档案（生成指南时喂给模型的原文）"
+          onClose={() => setDossierOpen(false)}
+          footer={
+            <>
+              <span className="small muted">只读；改档案请改这里的字段。</span>
+              <span className="spacer" />
+              <Button
+                onClick={() => {
+                  void navigator.clipboard.writeText(dossierText).then(
+                    () => toast.push('档案已复制', 'success'),
+                    () => toast.push('复制失败，手动选中即可', 'error')
+                  )
+                }}
+              >
+                复制
+              </Button>
+              <Button variant="primary" onClick={() => setDossierOpen(false)}>
+                关闭
+              </Button>
+            </>
+          }
+        >
+          <div className="content-inner">
+            {dossierBusy ? (
+              <Spinner label="读取中…" />
+            ) : (
+              <pre className="dossier-text">{dossierText}</pre>
+            )}
           </div>
         </Modal>
       ) : null}

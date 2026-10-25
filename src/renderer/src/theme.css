@@ -4337,3 +4337,18 @@ html.tex-button .home-gear.sound-ctl:hover {
   background: rgba(76, 143, 46, 0.12);
   border-left: 4px solid var(--leaf-dark, #4c8f2e);
 }
+
+/* ---- AI 档案原文：等宽、可换行、能滚动 ---- */
+.dossier-text {
+  margin: 0;
+  max-height: 52vh;
+  overflow: auto;
+  padding: 8px 10px;
+  font-family: var(--mono, 'Consolas', 'Courier New', monospace);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(255, 255, 255, 0.55);
+  border: 2px solid var(--wood-outline, #6b4a2a);
+}

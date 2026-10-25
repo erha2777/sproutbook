@@ -266,6 +266,8 @@ export interface SproutbookApi {
      * 生成全年养护指南（按月分节，每条可解析成一条任务）。
      * 只生成、不保存 —— 界面先给用户看和改，确认后由保存植株写字段。
      */
+    /** 生成指南时喂给模型的档案原文（排查「AI 为什么这么写」用） */
+    plantDossier(plantId: number): Promise<string>
     careGuide(payload: { requestId: string; plantId: number }): Promise<{
       ok: boolean
       text: string
