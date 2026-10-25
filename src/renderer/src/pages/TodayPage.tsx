@@ -19,8 +19,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareTaskListItem, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
+import type { CareRule } from '@core/types'
 import { suggestTask } from '@core/weather'
-import { groupTasksByRule, isMonthlyTask, pendingBuckets, todayIso } from '@core/care'
+import { groupTasksByRule, isMonthlyTask, pendingBuckets, ruleCoversMonth, ruleMatchesSpecies, todayIso } from '@core/care'
 import { Button, EmptyState, Panel, SectionTitle, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
@@ -76,6 +77,8 @@ export function TodayPage({
   const [openTasks, setOpenTasks] = useState<CareTaskListItem[]>([])
   const [doneToday, setDoneToday] = useState<CareTaskListItem[]>([])
   const [plants, setPlants] = useState<PlantOption[]>([])
+  /** 规则提醒要用物种名匹配；PlantOption 只有 id/label，这里单独存一份 */
+  const [plantRefs, setPlantRefs] = useState<Array<{ nickname: string; speciesName: string | null }>>([])
   const [recipes, setRecipes] = useState<RecipeListItem[] | null>(null)
   const [materials, setMaterials] = useState<Material[] | null>(null)
   const [weather, setWeather] = useState<WeatherWarningResult | null>(null)
@@ -163,6 +166,12 @@ export function TodayPage({
             label: `${p.nickname}${p.species ? `（${p.species.commonName}）` : ''}`
           }))
         )
+        setPlantRefs(
+          plantList.items.map((p) => ({
+            nickname: p.nickname,
+            speciesName: p.species?.commonName ?? null
+          }))
+        )
         setRecipes(recipeList)
         setMaterials(materialList)
       } catch (error) {
@@ -193,6 +202,35 @@ export function TodayPage({
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.title.localeCompare(b.title, 'zh')),
     [openTasks]
   )
+  /**
+   * 规则库的「本月提醒」。
+   *
+   * 规则不生成任务（用户明确要求），但它写的是「哪个月做什么」——
+   * 这个月有哪些事值得看一眼，放在今日页最合适。这里只显示提醒，不改数据。
+   */
+  const [careRules, setCareRules] = useState<CareRule[]>([])
+  useEffect(() => {
+    void window.api.care
+      .rules()
+      .then(setCareRules)
+      .catch(() => undefined)
+  }, [])
+
+  const ruleReminders = useMemo(() => {
+    const month = Number(today.slice(5, 7))
+    const rows = new Map<string, { rule: CareRule; plants: string[] }>()
+    for (const rule of careRules) {
+      if (!ruleCoversMonth(rule, month)) continue
+      for (const plant of plantRefs) {
+        if (!ruleMatchesSpecies(rule.speciesKeys, plant.speciesName)) continue
+        const hit = rows.get(rule.title) ?? { rule, plants: [] as string[] }
+        hit.plants.push(plant.nickname)
+        rows.set(rule.title, hit)
+      }
+    }
+    return [...rows.values()].sort((a, b) => b.plants.length - a.plants.length)
+  }, [careRules, plantRefs, today])
+
   const groups = useMemo(
     () => pendingBuckets(openTasks.filter((task) => !isMonthlyTask(task)), today),
     [openTasks, today]
@@ -469,6 +507,25 @@ export function TodayPage({
               </>
             )}
           </Panel>
+
+          {ruleReminders.length > 0 ? (
+            <Panel flat>
+              <SectionTitle right={<span className="small muted">规则库只做提醒，不会自动加入计划</span>}>
+                本月规则提醒（{ruleReminders.length}）
+              </SectionTitle>
+              {ruleReminders.map(({ rule, plants: names }) => (
+                <div key={rule.title} className="rule-reminder">
+                  <span className="rule-reminder-title">{rule.title}</span>
+                  <span className="small muted">
+                    {' '}
+                    · {names.length} 株
+                    {names.length <= 3 ? `（${names.join('、')}）` : ''}
+                  </span>
+                  {rule.detail ? <div className="small muted">{rule.detail}</div> : null}
+                </div>
+              ))}
+            </Panel>
+          ) : null}
 
           {monthly.length > 0 ? (
             <Panel flat>

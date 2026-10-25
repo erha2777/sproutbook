@@ -661,7 +661,7 @@ export function CarePage({
               <EmptyState
                 icon="garden"
                 title="这一天还没有安排"
-                hint="可以给这天单独加一条；年度计划到「我的花园」里选中那株生成。"
+                hint="可以给这天单独加一条；给植株排的计划在「我的花园」里点「加入计划」。"
                 action={
                   <Button
                     onClick={() => {

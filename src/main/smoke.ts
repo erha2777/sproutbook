@@ -701,7 +701,16 @@ export async function runSmoke(outFile: string): Promise<number> {
       )
       check('季节性筛选只剩修剪', seasonal.length === 1 && seasonal[0].title === '修剪', seasonal.map((d) => d.title).join(','))
       check('月度条目落到月中', seasonal[0].dueDate === '2026-10-15', seasonal[0].dueDate)
-      check('季节性事项窗口 7 天', seasonal[0].windowDays === 7, String(seasonal[0].windowDays))
+      check('季节性事项窗口开到月底', seasonal[0].windowDays === 16, String(seasonal[0].windowDays))
+      /*
+       * 月底窗口的意义：10 月 25 日才加入计划时，「10 月修剪」仍算这个月的事，
+       * 不能被判成已过期（上一版 7 天窗口就是在这里把整月都丢掉的）。
+       */
+      check(
+        '本月季节性事项过了月中也能加入',
+        splitDraftsByDate(seasonal, '2026-10-25').upcoming.length === 1,
+        String(splitDraftsByDate(seasonal, '2026-10-25').upcoming.length)
+      )
       const dated = seasonalGuideDrafts([{ title: '换盆', dueDate: '2026-03-08', windowDays: 0, note: '', actionType: 'repot' }])
       check('写了具体日期的尊重原日期', dated[0].dueDate === '2026-03-08')
     }

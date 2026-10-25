@@ -241,7 +241,6 @@ export function seasonalGuideDrafts(
   opts: { day?: number; windowDays?: number } = {}
 ): CareGuideTaskDraft[] {
   const day = Math.min(Math.max(opts.day ?? 15, 1), 28)
-  const windowDays = Math.max(1, opts.windowDays ?? 7)
   return drafts
     .filter((draft) => !isRecurringGuideItem(draft.title))
     .map((draft) => {
@@ -252,6 +251,13 @@ export function seasonalGuideDrafts(
        */
       const ym = draft.dueDate.slice(0, 7)
       const dueDate = draft.dueDate.endsWith('-01') ? `${ym}-${pad2(day)}` : draft.dueDate
+      /*
+       * 窗口到月底，而不是固定 7 天：10 月 25 日才加计划时，
+       * 「10 月修剪」如果只有 7 天窗口（10-15 ~ 10-22）就已经过期了，
+       * 会被整条跳过 —— 用户看到的就是「本月 0 项」。
+       * 这件事本来就该在这个月内做完，窗口给到月底才符合语义。
+       */
+      const windowDays = Math.max(1, opts.windowDays ?? daysInMonth(dueDate))
       return { ...draft, dueDate, windowDays }
     })
 }
