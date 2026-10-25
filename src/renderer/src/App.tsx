@@ -482,7 +482,7 @@ function Shell(): ReactNode {
           <TopHud
             pending={carePending}
             onGoWeather={() => setRoute({ name: 'care', tab: 'today' })}
-            onGoPlans={() => setRoute({ name: 'care', tab: 'plans' })}
+            onGoToday={() => setRoute({ name: 'care', tab: 'today' })}
           />
         </div>
         {compatHint ? (

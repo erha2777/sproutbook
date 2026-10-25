@@ -45,12 +45,13 @@ function todayLabel(): string {
 export function TopHud({
   pending,
   onGoWeather,
-  onGoPlans,
+  onGoToday,
   className
 }: {
   pending: number
   onGoWeather: () => void
-  onGoPlans: () => void
+  /** 点「今日待办」= 去今日页（那里才是今天要做的事） */
+  onGoToday: () => void
   /** 非养护页用 `top-hud-float` 浮在右上角 */
   className?: string
 }): ReactNode {
@@ -94,8 +95,8 @@ export function TopHud({
       <button
         type="button"
         className="top-hud-item"
-        onClick={onGoPlans}
-        title={pending > 0 ? `${pending} 件待办` : '今天没有待办'}
+        onClick={onGoToday}
+        title={pending > 0 ? `今天还有 ${pending} 件待办，点开看今天要做什么` : '今天没有待办'}
       >
         今日待办 <b className="top-hud-badge">{pending}</b>
       </button>
