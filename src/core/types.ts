@@ -470,7 +470,7 @@ export interface CareTask {
    * 规则后来改了配方不该影响已经生成的任务 —— 它提醒的是当时要做的那件事。
    */
   recipeId: number | null
-  source: 'seed' | 'ai' | 'manual' | 'generated'
+  source: 'seed' | 'ai' | 'manual' | 'generated' | 'guide'
   createdAt: string
 }
 

@@ -12,7 +12,7 @@ import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import type { CareTaskStatus } from '@core/types'
 import type { CareTaskListItem } from '@shared/api'
-import { addDays, urgencyOf, todayIso, windowRange } from '@core/care'
+import { addDays, isMonthlyTask, urgencyOf, todayIso, windowRange } from '@core/care'
 import type { CareUrgency } from '@core/care'
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
@@ -92,6 +92,13 @@ export function CareCalendar({
     const monthEnd = `${year}-${pad(month)}-${pad(days)}`
     for (const t of tasks) {
       if (t.status !== 'pending') continue
+      /*
+       * 来自「全年养护指南」的任务是**月度事项**：到期日落在 1 号、窗口开到月底。
+       * 如果按窗口铺到每一天，整月每一格都会出现同一个标签（用户截图里
+       * 「缓苗观察」铺满 1–31 号就是这里造成的）。它只在 1 号出现一次，
+       * 详细清单在月历上方的「本月事项」条里。
+       */
+      if (isMonthlyTask(t)) continue
       const end = windowRange(t).to
       if (end <= t.dueDate) continue
       const from = addDays(t.dueDate, 1) > monthStart ? addDays(t.dueDate, 1) : monthStart

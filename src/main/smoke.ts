@@ -108,6 +108,7 @@ import {
   spreadDay,
   summarizeTasks,
   urgencyOf,
+  isMonthlyTask,
   todayIso,
   windowRange
 } from '../core/care'
@@ -665,6 +666,14 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('二月窗口 27 天', february.windowDays === 27, String(february.windowDays))
       const dated = careGuideTaskDrafts(parseCareGuide('## 3月\n- 换盆（03-15）：换盆', 2026))[0]
       check('写了日期就按日期算，窗口到月底', dated.dueDate === '2026-03-15' && dated.windowDays === 16, `${dated.dueDate}/${dated.windowDays}`)
+    }
+
+    /* 月度事项的判定：指南来源，或窗口长到覆盖大半个月 */
+    {
+      check('指南来源算月度事项', isMonthlyTask({ source: 'guide', windowDays: 0 }))
+      check('窗口 30 天也算月度事项（旧数据兜底）', isMonthlyTask({ source: 'manual', windowDays: 30 }))
+      check('普通 7 天窗口不算', !isMonthlyTask({ source: 'generated', windowDays: 7 }))
+      check('没有 source 也不崩', !isMonthlyTask({ windowDays: 3 }))
     }
 
     /* 指南加进计划时，已经过去的条目不要再加 */

@@ -241,6 +241,21 @@ export function todayIso(): string {
 }
 
 /** 在 YYYY-MM-DD 上加减天数。 */
+/**
+ * 是不是「月度事项」。
+ *
+ * 两个来源都算：
+ *  - 由全年养护指南生成的任务（source='guide'）
+ *  - 窗口长到覆盖大半个月的任务（旧数据没有 source 标记，靠这个兜底）
+ *
+ * 这类事的语义是「这个月内做完」，不是「某一天到期」：日历上只该出现一次，
+ * 当天列表和「今天该做」也不该天天重复它。
+ */
+export function isMonthlyTask(t: { source?: string | null; windowDays?: number | null }): boolean {
+  if (t.source === 'guide') return true
+  return typeof t.windowDays === 'number' && t.windowDays >= 20
+}
+
 export function addDays(iso: string, days: number): string {
   const [y, m, d] = iso.split('-').map(Number)
   // 用本地时间构造，和 toIsoDate 的取法一致，不会因为时区来回错一天

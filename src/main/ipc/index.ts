@@ -1756,7 +1756,8 @@ function registerAiIpc(): void {
         dueDate: draft.dueDate,
         // 指南按「月」给，窗口就覆盖到月底 —— 当月哪天做都不算逾期
         windowDays: draft.windowDays,
-        source: 'manual'
+        // 标记来源：月历上它只出现一次（本月事项），不按天铺开
+        source: 'guide'
       })
       created += 1
     }
