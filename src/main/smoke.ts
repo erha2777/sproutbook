@@ -700,8 +700,8 @@ export async function runSmoke(outFile: string): Promise<number> {
         careGuideTaskDrafts(parseCareGuide('## 10月\n- 浇水：干了就浇\n- 修剪：剪枯枝\n- 缓苗观察：每天看', 2026))
       )
       check('季节性筛选只剩修剪', seasonal.length === 1 && seasonal[0].title === '修剪', seasonal.map((d) => d.title).join(','))
-      check('月度条目落到月中', seasonal[0].dueDate === '2026-10-15', seasonal[0].dueDate)
-      check('季节性事项窗口开到月底', seasonal[0].windowDays === 16, String(seasonal[0].windowDays))
+      check('月度条目落在当月 1 号', seasonal[0].dueDate === '2026-10-01', seasonal[0].dueDate)
+      check('季节性事项窗口开到月底', seasonal[0].windowDays === 30, String(seasonal[0].windowDays))
       /*
        * 月底窗口的意义：10 月 25 日才加入计划时，「10 月修剪」仍算这个月的事，
        * 不能被判成已过期（上一版 7 天窗口就是在这里把整月都丢掉的）。

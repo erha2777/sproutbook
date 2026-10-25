@@ -1736,9 +1736,16 @@ function registerAiIpc(): void {
     if (!plant) throw new Error('植株不存在')
     const planYear = year ?? new Date().getFullYear()
 
-    // 1) 清理旧版「月度任务」：只有当年由指南生成的才有这么长的窗口（手建任务是 3–7 天）
+    /*
+     * 1) 清掉这一株**还没做**的旧指南任务，再按当前规则重建。
+     *
+     * 不清的话，改了「指南条目落在哪天」的规则（比如从月中改回月初）之后，
+     * 同一个事项会以两个日期各存在一条。已完成 / 已跳过的不动 —— 那是做过的记录。
+     * 另外把改造前那批「月度任务」（manual + 窗口 ≥ 20 天 + 1 号）也一并清掉。
+     */
     const stale = db.run(
-      "DELETE FROM care_tasks WHERE plant_id = ? AND status = 'pending' AND source = 'manual' AND window_days >= 20 AND substr(due_date, 9, 2) = '01'",
+      "DELETE FROM care_tasks WHERE plant_id = ? AND status = 'pending' AND (" +
+        "source = 'guide' OR (source = 'manual' AND window_days >= 20 AND substr(due_date, 9, 2) = '01'))",
       plantId
     )
     const removed = Number(stale.changes ?? 0)

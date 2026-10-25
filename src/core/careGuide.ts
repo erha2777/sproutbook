@@ -240,25 +240,21 @@ export function seasonalGuideDrafts(
   drafts: CareGuideTaskDraft[],
   opts: { day?: number; windowDays?: number } = {}
 ): CareGuideTaskDraft[] {
-  const day = Math.min(Math.max(opts.day ?? 15, 1), 28)
+  void opts
   return drafts
     .filter((draft) => !isRecurringGuideItem(draft.title))
     .map((draft) => {
       /*
-       * 只精确到月的条目（解析时落在 1 号）改到月中：
-       * 挤在 1 号会让月历看起来「只有一格有计划」，月中更符合"这个月找时间做"。
-       * 用户自己写了具体日期的（不是 1 号）就尊重它。
+       * 日期就是**这个月的 1 号**，窗口一直到月底。
+       *
+       * 之前把它挪到月中（15 号）是为了别让月历只有一格有内容，但那是「重复任务」
+       * 造成的问题，不是日期的问题 —— 挪到月中反而让人问「为什么都是 15 号开始」。
+       * 指南只精确到月，那就如实从 1 号开始，整月都能做。
+       *
+       * 用户自己写了具体日期的（不是 1 号）就尊重它，窗口给到那个月的月底。
        */
-      const ym = draft.dueDate.slice(0, 7)
-      const dueDate = draft.dueDate.endsWith('-01') ? `${ym}-${pad2(day)}` : draft.dueDate
-      /*
-       * 窗口到月底，而不是固定 7 天：10 月 25 日才加计划时，
-       * 「10 月修剪」如果只有 7 天窗口（10-15 ~ 10-22）就已经过期了，
-       * 会被整条跳过 —— 用户看到的就是「本月 0 项」。
-       * 这件事本来就该在这个月内做完，窗口给到月底才符合语义。
-       */
-      const windowDays = Math.max(1, opts.windowDays ?? daysInMonth(dueDate))
-      return { ...draft, dueDate, windowDays }
+      const windowDays = Math.max(1, typeof opts.windowDays === 'number' ? opts.windowDays : daysInMonth(draft.dueDate))
+      return { ...draft, windowDays }
     })
 }
 
