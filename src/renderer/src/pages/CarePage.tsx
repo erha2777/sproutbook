@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 养护计划页。
  *
  * 这一页只做两件事：**看这个月的节奏**，和**看某一天安排了什么**。
@@ -21,7 +21,6 @@ import {
   CARE_ACTION_OPTIONS,
   dueDescription,
   groupTasksByRule,
-  isMonthlyTask,
   pendingBuckets,
   summarizeTasks,
   todayIso,
@@ -156,24 +155,11 @@ export function CarePage({
     () =>
       dayInMonth
         ? tasks.filter(
-            (t) =>
-              t.status === 'pending' &&
-              // 指南任务（月度事项）靠上面那条「本月事项」展示，不在每一天重复
-              !isMonthlyTask(t) &&
-              t.dueDate < dayInMonth &&
-              windowRange(t).to >= dayInMonth
+            (t) => t.status === 'pending' && t.dueDate < dayInMonth && windowRange(t).to >= dayInMonth
           )
         : [],
     [tasks, dayInMonth]
   )
-
-  /** 本月的「指南事项」：一个月就几条，单独一条横排，不铺进日历 */
-  const monthGuide = useMemo(() => {
-    const prefix = `${year}-${String(month).padStart(2, '0')}-`
-    return tasks
-      .filter((t) => isMonthlyTask(t) && t.dueDate.startsWith(prefix))
-      .sort((a, b) => Number(a.status !== 'pending') - Number(b.status !== 'pending'))
-  }, [tasks, year, month])
   /** 当天的全部计划：当天到期的 + 时间窗内可以补做的 */
   const dayTasks = useMemo(() => [...dayDue, ...dayCarried], [dayDue, dayCarried])
 
@@ -594,30 +580,6 @@ export function CarePage({
                 本月 {monthSummary.total} 项 · 完成 {monthSummary.done} · 待办 {monthSummary.pending}
               </span>
             </div>
-            {monthGuide.length > 0 ? (
-              <div className="cal-guide-row">
-                <span className="small muted">本月事项（养护指南）：</span>
-                {monthGuide.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className={`cal-guide-chip${t.status === 'done' ? ' done' : ''}${
-                      t.status === 'skipped' ? ' skipped' : ''
-                    }`}
-                    title={`${t.title}${t.plantName ? ` · ${t.plantName}` : ''}（点开看详情 / 完成）`}
-                    onClick={() => {
-                      setDay(t.dueDate)
-                      setHighlight(t.id)
-                    }}
-                  >
-                    {t.status === 'done' ? '✓ ' : ''}
-                    {t.title}
-                    {t.plantName ? <span className="muted"> · {t.plantName}</span> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
             <CareCalendar
               year={year}
               month={month}

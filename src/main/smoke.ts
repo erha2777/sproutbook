@@ -115,7 +115,6 @@ import {
   summarizeTasks,
   ruleCoversMonth,
   urgencyOf,
-  isMonthlyTask,
   todayIso,
   windowRange
 } from '../core/care'
@@ -685,13 +684,7 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('跨年区间：6 月不在里', !ruleCoversMonth({ monthFrom: 11, monthTo: 2 }, 6))
     }
 
-    /* 月度事项的判定：指南来源，或窗口长到覆盖大半个月 */
     {
-      check('窗口 30 天算月度事项', isMonthlyTask({ source: 'manual', windowDays: 30 }))
-      check('指南季节性事项（7 天）是普通任务', !isMonthlyTask({ source: 'guide', windowDays: 7 }))
-      check('普通 7 天窗口不算', !isMonthlyTask({ source: 'generated', windowDays: 7 }))
-      check('没有 source 也不崩', !isMonthlyTask({ windowDays: 3 }))
-
       /* 指南 → 计划：规律性的交给规则库，只把季节性事项变成任务 */
       check('浇水算规律性条目', isRecurringGuideItem('浇水'))
       check('观察算规律性条目', isRecurringGuideItem('缓苗观察'))
