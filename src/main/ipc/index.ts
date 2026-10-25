@@ -89,6 +89,7 @@ import {
   buildCareGuideMessages,
   careGuideTaskDrafts,
   parseCareGuide,
+  seasonalGuideDrafts,
   splitDraftsByDate
 } from '../../core/careGuide'
 import type { CareGuideTemplate } from '../../core/careGuide'
@@ -1721,20 +1722,39 @@ function registerAiIpc(): void {
    * 已经存在的（同一天 + 同标题）跳过，所以点两次不会重复排；
    * 指南没写或解析不出东西时返回 0，界面据此提示"先写/先生成指南"。
    */
+  /*
+   * 「加入计划」= 规则库排的规律性任务 **+** 指南里的季节性事项。
+   *
+   * 早先是「指南解析出什么就建什么」：浇水、施肥、观察这些规律性的条目
+   * 也变成了任务，和规则库重复；又因为按月给的日期都落在 1 号，
+   * 月历上只看得见一个格子 —— 用户看到的「21 条挤在一起」就是这么来的。
+   *
+   * 现在分工：
+   *  - 规律性的事（浇水 / 施肥 / 观察 / 通风…）交给规则库按物种与阶段排，指南只留文字
+   *  - 指南只贡献**季节性的一次性事项**（换盆 / 修剪 / 防寒 / 清园 / 定植…），落在月中
+   *  - 顺带清掉改造前生成的那批「月度任务」（manual + 窗口 ≥ 20 天），避免重复堆着
+   */
   handle('care:planFromGuide', (plantId: number, year?: number) => {
     const db = getDb()
     const plant = getPlant(db, plantId)
     if (!plant) throw new Error('植株不存在')
+    const planYear = year ?? new Date().getFullYear()
+
+    // 1) 清理旧版「月度任务」：只有当年由指南生成的才有这么长的窗口（手建任务是 3–7 天）
+    const stale = db.run(
+      "DELETE FROM care_tasks WHERE plant_id = ? AND status = 'pending' AND source = 'manual' AND window_days >= 20 AND substr(due_date, 9, 2) = '01'",
+      plantId
+    )
+    const removed = Number(stale.changes ?? 0)
+
+    // 2) 规则库：规律性养护按天铺开（幂等，已完成的不动）
+    const rules = generateTasksForPlant(db, plantId, planYear)
+
+    // 3) 指南里的季节性事项
     const text = typeof plant.attributes.care_guide === 'string' ? (plant.attributes.care_guide as string) : ''
-    const parsed = parseCareGuide(text, year ?? new Date().getFullYear())
-    const all = careGuideTaskDrafts(parsed)
-    if (all.length === 0) return { created: 0, skipped: 0, skippedPast: 0, total: 0 }
-    /*
-     * 指南是**全年**的。10 月才把它加进计划时，1–9 月的条目已经过去了 ——
-     * 加进去只会立刻变成一排「已过期 200 天」，把真正要做的事压到看不见的地方。
-     * 过去的日期不补任务（要补记请走养护日志），只加今天及以后的。
-     */
-    const { upcoming, past } = splitDraftsByDate(all, todayIso())
+    const parsed = parseCareGuide(text, planYear)
+    const seasonal = seasonalGuideDrafts(careGuideTaskDrafts(parsed))
+    const { upcoming, past } = splitDraftsByDate(seasonal, todayIso())
     let created = 0
     let skipped = 0
     for (const draft of upcoming) {
@@ -1754,14 +1774,20 @@ function registerAiIpc(): void {
         title: draft.title,
         detail: draft.note || null,
         dueDate: draft.dueDate,
-        // 指南按「月」给，窗口就覆盖到月底 —— 当月哪天做都不算逾期
         windowDays: draft.windowDays,
-        // 标记来源：月历上它只出现一次（本月事项），不按天铺开
         source: 'guide'
       })
       created += 1
     }
-    return { created, skipped, skippedPast: past.length, total: all.length }
+    return {
+      created,
+      skipped,
+      skippedPast: past.length,
+      total: seasonal.length,
+      rulesCreated: rules.created,
+      rulesKept: rules.kept,
+      removed
+    }
   })
 
 

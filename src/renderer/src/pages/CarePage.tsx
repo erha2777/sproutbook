@@ -514,7 +514,7 @@ export function CarePage({
         <Panel flat>
           <Notice tone="info">
             还有 <b>{overview.plantsWithoutTasks}</b> 株植物没有 {year} 年的计划。
-            到「我的花园」里选中那株，点「加入计划」就会把它的全年安排加进养护计划（有养护指南就按指南，没有就按规则库）。
+            到「我的花园」里选中那株，点「加入计划」：规则库排规律性的活（浇水 / 施肥 / 观察…），养护指南里的季节性事项（换盆 / 修剪 / 防寒…）也会一起加进来。
             <b>已打过勾的任务不会被覆盖。</b>
             {onGoGarden ? (
               <div className="row" style={{ marginTop: 6 }}>

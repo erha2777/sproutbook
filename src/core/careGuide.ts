@@ -222,6 +222,40 @@ export function guessCareAction(title: string): CareActionType {
   return 'other'
 }
 
+/**
+ * 指南里「规律性」的事：浇水、施肥、日常观察这类。
+ *
+ * 它们不该从指南变成任务 —— 规则库已经按物种 / 阶段排了浇水施肥的节奏，
+ * 再从指南生一份，日历上就会多出一堆重复的条目（用户就是这么看到的 21 条）。
+ * 指南里保留这些文字当参考，计划只取**季节性的一次性事项**。
+ */
+const RECURRING_GUIDE_ITEM = /浇|浸盆|施肥|追肥|基肥|观察|检查|通风|喷水|转盆/
+
+export function isRecurringGuideItem(title: string): boolean {
+  return RECURRING_GUIDE_ITEM.test(title)
+}
+
+/** 指南草稿 → 只留季节性事项，并落到「月中」 */
+export function seasonalGuideDrafts(
+  drafts: CareGuideTaskDraft[],
+  opts: { day?: number; windowDays?: number } = {}
+): CareGuideTaskDraft[] {
+  const day = Math.min(Math.max(opts.day ?? 15, 1), 28)
+  const windowDays = Math.max(1, opts.windowDays ?? 7)
+  return drafts
+    .filter((draft) => !isRecurringGuideItem(draft.title))
+    .map((draft) => {
+      /*
+       * 只精确到月的条目（解析时落在 1 号）改到月中：
+       * 挤在 1 号会让月历看起来「只有一格有计划」，月中更符合"这个月找时间做"。
+       * 用户自己写了具体日期的（不是 1 号）就尊重它。
+       */
+      const ym = draft.dueDate.slice(0, 7)
+      const dueDate = draft.dueDate.endsWith('-01') ? `${ym}-${pad2(day)}` : draft.dueDate
+      return { ...draft, dueDate, windowDays }
+    })
+}
+
 export interface CareGuideTaskDraft {
   title: string
   dueDate: string

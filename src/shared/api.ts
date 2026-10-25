@@ -431,7 +431,16 @@ export interface SproutbookApi {
     planFromGuide(
       plantId: number,
       year?: number
-    ): Promise<{ created: number; skipped: number; skippedPast: number; total: number }>
+    ): Promise<{
+      created: number
+      skipped: number
+      skippedPast: number
+      total: number
+      rulesCreated: number
+      rulesKept: number
+      /** 被清掉的旧版月度任务条数 */
+      removed: number
+    }>
     overview(year: number): Promise<CareOverview>
 
     /**

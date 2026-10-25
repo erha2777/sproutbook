@@ -252,7 +252,10 @@ export function todayIso(): string {
  * 当天列表和「今天该做」也不该天天重复它。
  */
 export function isMonthlyTask(t: { source?: string | null; windowDays?: number | null }): boolean {
-  if (t.source === 'guide') return true
+  /*
+   * 只看窗口长度。指南生成的「季节性事项」现在是正常的周级任务（7 天窗口），
+   * 该出现在当天列表里；只有改造前那批「窗口开到月底」的月度任务才算特殊。
+   */
   return typeof t.windowDays === 'number' && t.windowDays >= 20
 }
 

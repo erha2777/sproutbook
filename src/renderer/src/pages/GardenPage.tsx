@@ -248,41 +248,40 @@ export function GardenPage({
   /**
    * 把「这一株的全年安排」加进养护计划。
    *
-   * 优先用「全年养护指南」里解析出来的条目（AI 按这株的物种 / 位置写的，比通用规则更贴身）；
-   * 指南没写、或者格式乱到解析不出来时，退回按规则库生成 —— 按钮永远有结果，不会点了没反应。
+   * 两件事一起做：
+   *  1. **规则库**排出规律性的活（浇水 / 施肥 / 观察…），按天铺开月历；
+   *  2. **养护指南**只贡献季节性的一次性事项（换盆 / 修剪 / 防寒 / 清园…），落在月中。
+   *
+   * 规律性的条目不再从指南变成任务 —— 那会和规则库重复，日历上堆成一坨。
+   * 没有指南时就是纯规则库计划，按钮永远有结果。
    */
   const addToPlan = async (plant: PlantListItem): Promise<void> => {
     setGenerating(plant.id)
     try {
       const year = new Date().getFullYear()
-      const guide = typeof plant.attributes.care_guide === 'string' ? plant.attributes.care_guide : ''
-      if (guide.trim()) {
-        const r = await window.api.care.planFromGuide(plant.id, year)
-        if (r.total > 0) {
-          const pastNote = r.skippedPast > 0 ? `，${r.skippedPast} 条已过期未加入` : ''
-          if (r.created === 0 && r.skipped === 0 && r.skippedPast > 0) {
-            toast.push(`指南里的 ${r.skippedPast} 条都已经过期了，没有加入计划`, 'error')
-          } else {
-            toast.push(
-              r.created > 0
-                ? `已按养护指南加入 ${r.created} 项（已有 ${r.skipped} 项跳过${pastNote}）`
-                : `指南里的 ${r.skipped} 项都已在计划里${pastNote}`,
-              'success'
-            )
-          }
-        } else {
-          const g = await window.api.care.generate(plant.id, year)
-          toast.push(`指南里没有可解析的条目，已按规则库排了 ${g.created} 项（保留已有 ${g.kept} 项）`, 'success')
-        }
-      } else {
-        const r = await window.api.care.generate(plant.id, year)
-        toast.push(
-          r.created > 0
-            ? `已为「${plant.nickname}」加入 ${r.created} 项任务（保留已有 ${r.kept} 项）`
-            : `「${plant.nickname}」的 ${year} 年计划已是最新（${r.kept} 项无需变动）`,
-          'success'
-        )
-      }
+      const hasGuide =
+        typeof plant.attributes.care_guide === 'string' && (plant.attributes.care_guide as string).trim() !== ''
+      const r = hasGuide
+        ? await window.api.care.planFromGuide(plant.id, year)
+        : { created: 0, skipped: 0, skippedPast: 0, total: 0, rulesCreated: 0, rulesKept: 0, removed: 0 }
+      /*
+       * 没有指南时走纯规则库。有指南时 planFromGuide 里已经顺带跑过规则库了，
+       * 所以这里只在「没指南」时单独调 generate。
+       */
+      const rules = hasGuide
+        ? { created: r.rulesCreated, kept: r.rulesKept }
+        : await window.api.care.generate(plant.id, year)
+
+      const parts: string[] = []
+      if (rules.created > 0) parts.push(`规则库 ${rules.created} 项`)
+      if (r.created > 0) parts.push(`指南 ${r.created} 项`)
+      if (r.skipped > 0) parts.push(`已有 ${r.skipped} 项跳过`)
+      if (r.skippedPast > 0) parts.push(`${r.skippedPast} 条已过期未加入`)
+      if (r.removed > 0) parts.push(`清理旧月度任务 ${r.removed} 条`)
+      toast.push(
+        parts.length > 0 ? `已加入计划：${parts.join('，')}` : '这一株的计划已经是最新的',
+        parts.length > 0 ? 'success' : 'error'
+      )
       await refreshNextTask(plant.id)
     } catch (error) {
       toast.push(error instanceof Error ? error.message : '加入计划失败', 'error')

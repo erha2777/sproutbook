@@ -84,7 +84,13 @@ import { PLANT_STATUS_ORDER } from '../core/status'
 import { deriveCarePhase } from '../core/phase'
 import { searchSelectView } from '../core/searchSelect'
 import { buildAskPlantMessages, buildPlantDossier } from '../core/plantDossier'
-import { careGuideTaskDrafts, parseCareGuide, splitDraftsByDate } from '../core/careGuide'
+import {
+  careGuideTaskDrafts,
+  isRecurringGuideItem,
+  parseCareGuide,
+  seasonalGuideDrafts,
+  splitDraftsByDate
+} from '../core/careGuide'
 import { defaultFieldDefinitions } from '../core/defaultTemplate'
 import {
   addDays,
@@ -670,10 +676,23 @@ export async function runSmoke(outFile: string): Promise<number> {
 
     /* 月度事项的判定：指南来源，或窗口长到覆盖大半个月 */
     {
-      check('指南来源算月度事项', isMonthlyTask({ source: 'guide', windowDays: 0 }))
-      check('窗口 30 天也算月度事项（旧数据兜底）', isMonthlyTask({ source: 'manual', windowDays: 30 }))
+      check('窗口 30 天算月度事项', isMonthlyTask({ source: 'manual', windowDays: 30 }))
+      check('指南季节性事项（7 天）是普通任务', !isMonthlyTask({ source: 'guide', windowDays: 7 }))
       check('普通 7 天窗口不算', !isMonthlyTask({ source: 'generated', windowDays: 7 }))
       check('没有 source 也不崩', !isMonthlyTask({ windowDays: 3 }))
+
+      /* 指南 → 计划：规律性的交给规则库，只把季节性事项变成任务 */
+      check('浇水算规律性条目', isRecurringGuideItem('浇水'))
+      check('观察算规律性条目', isRecurringGuideItem('缓苗观察'))
+      check('换盆不算规律性条目', !isRecurringGuideItem('换盆'))
+      const seasonal = seasonalGuideDrafts(
+        careGuideTaskDrafts(parseCareGuide('## 10月\n- 浇水：干了就浇\n- 修剪：剪枯枝\n- 缓苗观察：每天看', 2026))
+      )
+      check('季节性筛选只剩修剪', seasonal.length === 1 && seasonal[0].title === '修剪', seasonal.map((d) => d.title).join(','))
+      check('月度条目落到月中', seasonal[0].dueDate === '2026-10-15', seasonal[0].dueDate)
+      check('季节性事项窗口 7 天', seasonal[0].windowDays === 7, String(seasonal[0].windowDays))
+      const dated = seasonalGuideDrafts([{ title: '换盆', dueDate: '2026-03-08', windowDays: 0, note: '', actionType: 'repot' }])
+      check('写了具体日期的尊重原日期', dated[0].dueDate === '2026-03-08')
     }
 
     /* 指南加进计划时，已经过去的条目不要再加 */
