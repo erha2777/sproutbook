@@ -544,6 +544,20 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('档案里的状态带持续天数', withDays.includes('缓苗（已 20 天）'), withDays.split('【')[1]?.slice(0, 40))
       check('档案带物种知识', dossier.includes('Rosa Molineux') && dossier.includes('蔷薇科'))
       check('档案带养护位置', dossier.includes('前院') && dossier.includes('6 小时'))
+      /*
+       * 用户「昨天已经种下了」，模型却还在写「11 月：缓苗后定植」——
+       * 因为日志只是被当成背景资料。现在日志里出现「种下」会单独提一行。
+       */
+      const planted = buildPlantDossier({
+        today: '2026-10-25',
+        plant: { nickname: '刚地栽的绣球', statusLabel: '缓苗', cultivation: '盆栽' },
+        logs: [
+          { date: '2026-10-25', kind: '记录', content: '补上之前种下的图片' },
+          { date: '2026-10-24', kind: '记录', content: '入手' }
+        ]
+      })
+      check('日志里的「种下」会单独标出', planted.includes('【栽种状态】') && planted.includes('已经种下'))
+      check('日志标成「已经发生的事」', planted.includes('已经发生的事'))
       check('档案带物候阶段和依据', dossier.includes('花期') && dossier.includes('10 月在开花期内'))
       check('档案带未完成任务，不带已完成的', dossier.includes('冬季控水') && !dossier.includes('春季换盆'))
       check('档案带最近日志', dossier.includes('浇透一次'))

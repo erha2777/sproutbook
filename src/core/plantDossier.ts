@@ -164,8 +164,17 @@ export function buildPlantDossier(input: DossierInput): string {
   }
   const recent = logs.slice(0, 10)
   if (recent.length > 0) {
+    /*
+     * 日志里写的是**已经发生的事**。用户「昨天已经种下了」之后，模型还在写
+     * 「11 月：缓苗后定植」—— 因为它把日志当成了背景资料而不是事实。
+     * 这里先明确一句，再把「已种下」单独提出来，免得和字段里的「盆栽」打架。
+     */
+    const planted = recent.find((l) => /种下|地栽|定植|入土|栽到|上盆/.test(l.content))
+    if (planted) {
+      parts.push(`【栽种状态】日志显示已经种下 / 定植（${planted.date}）—— 不要再把定植、上盆、缓苗前的步骤写成待办`)
+    }
     const rows = recent.map((l) => `- ${l.date} [${l.kind}] ${l.content}`)
-    parts.push(`【最近的养护日志】\n${rows.join('\n')}`)
+    parts.push(`【最近的养护日志】（已经发生的事，按它们修正计划）\n${rows.join('\n')}`)
   }
 
   let text = parts.join('\n')
