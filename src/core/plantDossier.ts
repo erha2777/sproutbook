@@ -126,7 +126,17 @@ export function buildPlantDossier(input: DossierInput): string {
     { label: '苗龄', value: plant.ageYears !== null && plant.ageYears !== undefined ? `${plant.ageYears} 年` : '' },
     { label: '购入价格', value: plant.price !== null && plant.price !== undefined ? `${plant.price} 元` : '' }
   )
-  for (const f of plant.attributes ?? []) p.push(f)
+  /*
+   * 属性里可能还有「购入价格 / 栽种方式 / 现状高度」这些上面已经显式写过的字段
+   * （IPC 那边两个来源都传了），直接拼会重复成「购入价格：14.8 元；购入价格：14.8 元」。
+   * 按标签去重：显式字段优先，属性里同名的跳过。
+   */
+  const seenPlant = new Set(p.map((f) => f.label))
+  for (const f of plant.attributes ?? []) {
+    if (seenPlant.has(f.label)) continue
+    seenPlant.add(f.label)
+    p.push(f)
+  }
   const plantLine = line('【植株】', joinFields(p))
   if (plantLine) parts.push(plantLine)
 
@@ -155,7 +165,12 @@ export function buildPlantDossier(input: DossierInput): string {
       { label: '科属', value: [species.family, species.genus].filter(Boolean).join(' / ') },
       { label: '别名', value: (species.aliases ?? []).join('、') }
     ]
-    for (const f of species.attributes ?? []) s.push(f)
+    const seenSpecies = new Set(s.map((f) => f.label))
+    for (const f of species.attributes ?? []) {
+      if (seenSpecies.has(f.label)) continue
+      seenSpecies.add(f.label)
+      s.push(f)
+    }
     const speciesLine = line('【物种】', joinFields(s))
     if (speciesLine) parts.push(speciesLine)
   }

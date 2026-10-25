@@ -546,6 +546,25 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('档案里的状态带持续天数', withDays.includes('缓苗（已 20 天）'), withDays.split('【')[1]?.slice(0, 40))
       check('档案带物种知识', dossier.includes('Rosa Molineux') && dossier.includes('蔷薇科'))
       check('档案带养护位置', dossier.includes('前院') && dossier.includes('6 小时'))
+
+      /*
+       * 同一字段既显式渲染、又作为属性传进来时不该出现两次
+       * （用户截图里「购入价格：14.8 元；购入价格：14.8 元」）。
+       */
+      const dup = buildPlantDossier({
+        today: '2026-10-25',
+        plant: {
+          nickname: '去重测试',
+          statusLabel: '生长期',
+          price: 14.8,
+          attributes: [
+            { label: '购入价格', value: '14.8 元' },
+            { label: '来源渠道', value: '海蒂的花园' }
+          ]
+        }
+      })
+      check('重复字段只出现一次', dup.split('购入价格').length - 1 === 1, String(dup.split('购入价格').length - 1))
+      check('属性里独有的字段仍然保留', dup.includes('来源渠道：海蒂的花园'))
       /*
        * 用户「昨天已经种下了」，模型却还在写「11 月：缓苗后定植」——
        * 因为日志只是被当成背景资料。现在日志里出现「种下」会单独提一行。
