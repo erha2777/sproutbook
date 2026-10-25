@@ -433,7 +433,7 @@ export function TodayPage({
                     ? `已有 ${groups.early.length} 项进入时间窗（最早 ${groups.early[0].dueDate.slice(5)}），还没到期，可以提前做。`
                     : groups.soon.length > 0
                       ? `有 ${groups.soon.length} 项在 7 天内进入时间窗，可以到「养护计划」里提前处理。`
-                      : '规则生成的任务会按时间窗落到这里；也可以到养护计划里手动加一条。'
+                      : '在「我的花园」里给植株加入计划（养护指南里的季节性事项），任务会按时间窗落到这里；也可以手动加一条。'
                 }
                 action={<Button onClick={onGoPlans}>去看完整养护计划</Button>}
               />

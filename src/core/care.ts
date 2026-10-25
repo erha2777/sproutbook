@@ -130,6 +130,23 @@ export function ruleMatchesSpecies(keys: string[], speciesName: string | null): 
 }
 
 /** 界面上显示用：通用 或 「月季、绣球、无花果」 */
+/**
+ * 这条规则是否覆盖某个月（考虑跨年区间，如 11 月 ~ 次年 2 月）。
+ *
+ * 规则库现在只用来「提示这个月可能要做什么」，不生成任务，
+ * 所以只要判断月份是否落在窗口里就够了。
+ */
+export function ruleCoversMonth(
+  rule: { monthFrom: number; monthTo: number | null },
+  month: number
+): boolean {
+  const from = rule.monthFrom
+  const to = rule.monthTo ?? rule.monthFrom
+  if (from <= to) return month >= from && month <= to
+  // 跨年：11、12、1、2
+  return month >= from || month <= to
+}
+
 export function describeSpeciesKeys(keys: string[]): string {
   return isUniversalRule(keys) ? '通用' : keys.join('、')
 }

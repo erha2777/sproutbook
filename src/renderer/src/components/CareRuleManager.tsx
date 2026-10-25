@@ -81,21 +81,16 @@ const BLANK: Draft = {
 
 export function CareRuleManager({
   speciesNames,
-  onClose,
-  onChanged
+  onClose
 }: {
   speciesNames: string[]
   onClose: () => void
-  /** 重新生成之后通知外面刷新（计划页的月历要跟着变） */
-  onChanged?: () => void
 }): ReactNode {
   const toast = useToast()
   const [rules, setRules] = useState<CareRule[]>([])
   const [loading, setLoading] = useState(true)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
-  /** 「按规则重新生成全部计划」正在进行中 */
-  const [regenerating, setRegenerating] = useState(false)
   /** 手填的物种名（库里还没有的那些） */
   const [newSpecies, setNewSpecies] = useState('')
   /**
@@ -512,37 +507,6 @@ export function CareRuleManager({
     )
   }
 
-  /**
-   * 按当前规则把所有植株今年的计划重排一遍。
-   *
-   * 为什么这里需要「全部」：规则一改（比如从「按植株错开」改成「同一天」），
-   * 已经生成的任务不会自己搬家，必须重新生成才生效 ——
-   * 逐株去花园点一遍太麻烦。代价要当面说清：
-   * 未完成的旧任务会被删掉替换，已完成 / 已跳过的记录不动。
-   */
-  const regenerateAll = async (): Promise<void> => {
-    const year = new Date().getFullYear()
-    const ok = window.confirm(
-      `按当前 ${rules.length} 条规则，重新生成所有植株 ${year} 年的计划？\n\n` +
-        '未完成的旧任务会被删掉、换成按新规则算出的日期；已完成 / 已跳过的记录保留。'
-    )
-    if (!ok) return
-    setRegenerating(true)
-    try {
-      const r = await window.api.care.generateAll(year)
-      toast.push(
-        r.created + r.removed > 0
-          ? `已重排 ${r.plants} 株：新增 ${r.created} 项，替换掉 ${r.removed} 项（保留 ${r.kept} 项）`
-          : `计划已是最新：${r.plants} 株，${r.kept} 项无需变动`,
-        'success'
-      )
-      onChanged?.()
-    } catch (error) {
-      toast.push(error instanceof Error ? error.message : '生成失败', 'error')
-    } finally {
-      setRegenerating(false)
-    }
-  }
 
   return (
     <Modal
@@ -552,13 +516,7 @@ export function CareRuleManager({
         <>
           <span className="small muted">共 {rules.length} 条规则</span>
           <span className="spacer" />
-          <Button
-            disabled={regenerating}
-            title="按当前规则重排所有植株今年的计划：旧的未完成任务会被替换，已完成保留"
-            onClick={() => void regenerateAll()}
-          >
-            {regenerating ? '重新生成中…' : '按规则重新生成全部计划'}
-          </Button>
+          <span className="small muted">规则只做提示，不生成任务</span>
           <Button variant="primary" onClick={onClose}>
             完成
           </Button>
@@ -567,8 +525,9 @@ export function CareRuleManager({
     >
       <div className="content-inner">
         <Notice tone="info">
-          规则只写<b>哪个月做什么</b>，不写具体哪天 —— 哪天有空、天气如何，是排期时再决定的事。
-          生成任务时会自动展开成每月一条，并给一个时间窗。改规则<b>不会</b>动到你已经打过勾的任务。
+          规则只写<b>哪个月做什么</b>，用来看「这个月大概要做什么」。
+          它<b>不会</b>生成任务 —— 植株详情里会按物种和月份显示「本月规则提示」；
+          真正的计划来自那一株的<b>全年养护指南</b>（编辑页生成，再点「加入计划」）。
         </Notice>
 
         {/* 新增的表单留在上方：触发它的按钮就在这里 */}

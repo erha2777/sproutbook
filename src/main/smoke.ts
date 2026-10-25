@@ -113,6 +113,7 @@ import {
   serializeSpeciesKeys,
   spreadDay,
   summarizeTasks,
+  ruleCoversMonth,
   urgencyOf,
   isMonthlyTask,
   todayIso,
@@ -672,6 +673,16 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('二月窗口 27 天', february.windowDays === 27, String(february.windowDays))
       const dated = careGuideTaskDrafts(parseCareGuide('## 3月\n- 换盆（03-15）：换盆', 2026))[0]
       check('写了日期就按日期算，窗口到月底', dated.dueDate === '2026-03-15' && dated.windowDays === 16, `${dated.dueDate}/${dated.windowDays}`)
+    }
+
+    /* 规则库只做提示：判断「这条规则覆盖本月吗」 */
+    {
+      check('规则覆盖区间内', ruleCoversMonth({ monthFrom: 3, monthTo: 6 }, 4))
+      check('规则不覆盖区间外', !ruleCoversMonth({ monthFrom: 3, monthTo: 6 }, 7))
+      check('单月规则只覆盖那个月', ruleCoversMonth({ monthFrom: 5, monthTo: null }, 5) && !ruleCoversMonth({ monthFrom: 5, monthTo: null }, 6))
+      check('跨年区间：12 月算在里', ruleCoversMonth({ monthFrom: 11, monthTo: 2 }, 12))
+      check('跨年区间：1 月算在里', ruleCoversMonth({ monthFrom: 11, monthTo: 2 }, 1))
+      check('跨年区间：6 月不在里', !ruleCoversMonth({ monthFrom: 11, monthTo: 2 }, 6))
     }
 
     /* 月度事项的判定：指南来源，或窗口长到覆盖大半个月 */

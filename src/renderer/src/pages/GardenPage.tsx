@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 花园页 —— 植株管理。
  *
  * 两种视图，不是替代关系：
@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { Environment, PlantStatus, Species } from '@core/types'
+import type { CareRule, Environment, PlantStatus, Species } from '@core/types'
 import type { CareTaskListItem, PlantListItem, PlantListItemStats } from '@shared/api'
 import {
   GROWTH_SOURCE_LABELS,
@@ -23,7 +23,16 @@ import {
   readMonthSet,
   sizeScaleFor
 } from '@core/growth'
-import { CARE_ACTION_ICONS, CARE_PHASE_ICONS, CARE_PHASE_LABELS, dueDescription, phaseAgeDays, urgencyOf } from '@core/care'
+import {
+  CARE_ACTION_ICONS,
+  CARE_PHASE_ICONS,
+  CARE_PHASE_LABELS,
+  dueDescription,
+  phaseAgeDays,
+  ruleCoversMonth,
+  ruleMatchesSpecies,
+  urgencyOf
+} from '@core/care'
 import { deriveCarePhase } from '@core/phase'
 import { flowerColorForSpecies } from '@core/sprite'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
@@ -71,6 +80,8 @@ export function GardenPage({
   const [categories, setCategories] = useState<string[]>([])
   /** 列表默认隐藏已枯死的植株，这个开关把它放出来 */
   const [showDead, setShowDead] = useState(false)
+  /** 规则库：只当「本月提示」用，不生成任务 */
+  const [careRules, setCareRules] = useState<CareRule[]>([])
   const [editing, setEditing] = useState<PlantListItem | 'new' | null>(null)
   /** 「问问 AI」弹窗 */
   const [asking, setAsking] = useState(false)
@@ -125,6 +136,14 @@ export function GardenPage({
   useEffect(() => {
     void reload()
   }, [reload])
+
+  /* 规则库只当提示用：加载一次，现状里显示「本月规则提示」 */
+  useEffect(() => {
+    void window.api.care
+      .rules()
+      .then(setCareRules)
+      .catch(() => undefined)
+  }, [])
 
   const envOptions = useMemo(
     () => [{ value: '', label: '全部位置' }, ...environments.map((e) => ({ value: String(e.id), label: e.name }))],
@@ -248,39 +267,31 @@ export function GardenPage({
   /**
    * 把「这一株的全年安排」加进养护计划。
    *
-   * 两件事一起做：
-   *  1. **规则库**排出规律性的活（浇水 / 施肥 / 观察…），按天铺开月历；
-   *  2. **养护指南**只贡献季节性的一次性事项（换盆 / 修剪 / 防寒 / 清园…），落在月中。
-   *
-   * 规律性的条目不再从指南变成任务 —— 那会和规则库重复，日历上堆成一坨。
-   * 没有指南时就是纯规则库计划，按钮永远有结果。
+   * 只加**养护指南里的季节性事项**（换盆 / 修剪 / 防寒 / 清园…）。
+   * 规则库不再生成任务，它只在「现状」里当本月提示（见下面的 ruleHints）。
+   * 没有指南时如实告诉用户去生成，而不是偷偷按规则排一堆任务出来。
    */
   const addToPlan = async (plant: PlantListItem): Promise<void> => {
     setGenerating(plant.id)
     try {
       const year = new Date().getFullYear()
-      const hasGuide =
-        typeof plant.attributes.care_guide === 'string' && (plant.attributes.care_guide as string).trim() !== ''
-      const r = hasGuide
-        ? await window.api.care.planFromGuide(plant.id, year)
-        : { created: 0, skipped: 0, skippedPast: 0, total: 0, rulesCreated: 0, rulesKept: 0, removed: 0 }
-      /*
-       * 没有指南时走纯规则库。有指南时 planFromGuide 里已经顺带跑过规则库了，
-       * 所以这里只在「没指南」时单独调 generate。
-       */
-      const rules = hasGuide
-        ? { created: r.rulesCreated, kept: r.rulesKept }
-        : await window.api.care.generate(plant.id, year)
-
+      const guide = typeof plant.attributes.care_guide === 'string' ? plant.attributes.care_guide : ''
+      if (!guide.trim()) {
+        toast.push('这一株还没有全年养护指南：先在编辑页生成一份，再来加入计划', 'error')
+        return
+      }
+      const r = await window.api.care.planFromGuide(plant.id, year)
       const parts: string[] = []
-      if (rules.created > 0) parts.push(`规则库 ${rules.created} 项`)
-      if (r.created > 0) parts.push(`指南 ${r.created} 项`)
+      if (r.created > 0) parts.push(`新增 ${r.created} 项`)
       if (r.skipped > 0) parts.push(`已有 ${r.skipped} 项跳过`)
       if (r.skippedPast > 0) parts.push(`${r.skippedPast} 条已过期未加入`)
       if (r.removed > 0) parts.push(`清理旧月度任务 ${r.removed} 条`)
+      const empty = r.created === 0 && r.skipped === 0 && r.skippedPast === 0
       toast.push(
-        parts.length > 0 ? `已加入计划：${parts.join('，')}` : '这一株的计划已经是最新的',
-        parts.length > 0 ? 'success' : 'error'
+        empty
+          ? '指南里没有可加入的季节性事项（浇水 / 施肥这类规律养护由规则库提示，不进计划）'
+          : `已加入计划：${parts.join('，')}`,
+        empty ? 'error' : 'success'
       )
       await refreshNextTask(plant.id)
     } catch (error) {
@@ -312,6 +323,19 @@ export function GardenPage({
       acquiredAt: plant.acquiredAt,
       today: todayIso()
     })
+    /*
+     * 规则库只当提示：这个月、这个物种适用的规则标题。
+     * 以前它直接生成任务，日历被「浇水 / 施肥」铺满，用户要求改成提示。
+     */
+    const month = currentMonth()
+    const ruleHints = careRules
+      .filter(
+        (rule) =>
+          ruleCoversMonth(rule, month) &&
+          ruleMatchesSpecies(rule.speciesKeys, plant.species?.commonName ?? null)
+      )
+      .map((rule) => rule.title)
+      .slice(0, 6)
     const task = nextTask[plant.id]
     /*
      * 当前状态持续了几天。
@@ -338,6 +362,12 @@ export function GardenPage({
           {` · 状态：${PLANT_STATUS_ICONS[plant.status]} ${PLANT_STATUS_LABELS[plant.status]}`}
           {statusDays !== null ? `（已 ${statusDays} 天）` : ''}
         </div>
+        {/* 规则库只做提示：这个月物种相关的事有哪些，不生成任务 */}
+        {ruleHints.length > 0 ? (
+          <div className="small muted" style={{ marginTop: 4 }}>
+            本月规则提示（不生成任务）：{ruleHints.join('、')}
+          </div>
+        ) : null}
         <div className="row tight" style={{ marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="small">
             {task ? (

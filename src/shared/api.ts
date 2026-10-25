@@ -436,8 +436,6 @@ export interface SproutbookApi {
       skipped: number
       skippedPast: number
       total: number
-      rulesCreated: number
-      rulesKept: number
       /** 被清掉的旧版月度任务条数 */
       removed: number
     }>
