@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 月历网格。
  *
  * 这一页是「月历 + 当天计划」两层：月历回答「这个月哪几天扎堆、哪段空着」，
@@ -92,10 +92,17 @@ export function CareCalendar({
     return 'pending'
   }
 
-  const spanBars = useMemo(() => {
+  /**
+   * 时间窗的「底色」。
+   *
+   * 试过两种更重的画法都不合适：逐日小标签像刷屏，横向粗条又糊在格子上（用户：
+   * 「更丑了」）。现在只用**一层很淡的底色**标出「这段时间可以做」，具体是什么事
+   * 交给你点开那一天看右侧列表 —— 日历本身保持干净。
+   */
+  const windowDays = useMemo(() => {
     const monthStart = `${year}-${pad(month)}-01`
     const monthEnd = `${year}-${pad(month)}-${pad(days)}`
-    const byKey = new Map<string, { title: string; from: string; to: string; count: number; tone: string }>()
+    const byDate = new Map<string, number>()
     for (const t of tasks) {
       if (t.status !== 'pending') continue
       const end = windowRange(t).to
@@ -103,41 +110,12 @@ export function CareCalendar({
       const from = t.dueDate > monthStart ? t.dueDate : monthStart
       const to = end < monthEnd ? end : monthEnd
       if (to < monthStart || from > monthEnd) continue
-      const key = `${t.ruleId ?? 'manual'}|${t.title}`
-      const hit = byKey.get(key)
-      const tone = toneOf(t.status, urgencyOf(t, today))
-      if (hit) {
-        hit.count += 1
-        if (from < hit.from) hit.from = from
-        if (to > hit.to) hit.to = to
-      } else {
-        byKey.set(key, { title: t.title, from, to, count: 1, tone })
+      for (let cursor = from; cursor <= to; cursor = addDays(cursor, 1)) {
+        byDate.set(cursor, (byDate.get(cursor) ?? 0) + 1)
       }
     }
-    // 日期 → 覆盖它的条
-    const byDate = new Map<string, Array<{ key: string; title: string; count: number; seg: 'start' | 'mid' | 'end' | 'both'; tone: string }>>()
-    for (const [key, bar] of byKey) {
-      for (let cursor = bar.from; cursor <= bar.to; cursor = addDays(cursor, 1)) {
-        const seg = cursor === bar.from && cursor === bar.to ? 'both' : cursor === bar.from ? 'start' : cursor === bar.to ? 'end' : 'mid'
-        const list = byDate.get(cursor) ?? []
-        list.push({ key, title: bar.title, count: bar.count, seg, tone: bar.tone })
-        byDate.set(cursor, list)
-      }
-    }
-    const out = new Map<string, Array<{ key: string; title: string; count: number; seg: 'start' | 'mid' | 'end' | 'both'; tone: string }>>()
-    for (const [date, list] of byDate) {
-      // 起点排前面：同一个格子里先画正在开始的那条
-      out.set(date, list.sort((a, b) => (a.seg === 'start' ? -1 : 0) - (b.seg === 'start' ? -1 : 0)))
-    }
-    return out
-  }, [tasks, year, month, days, today])
-
-  /** 跨天任务的 key：这些不在到期日画小标签，改由时间条表示，免得同一天出现两次 */
-  const spanKeys = useMemo(() => {
-    const keys = new Set<string>()
-    for (const list of spanBars.values()) for (const bar of list) keys.add(bar.key)
-    return keys
-  }, [spanBars])
+    return byDate
+  }, [tasks, year, month, days])
 
   const cells: Array<{ date: string | null; day: number | null }> = []
   for (let i = 0; i < leading; i++) cells.push({ date: null, day: null })
@@ -158,17 +136,13 @@ export function CareCalendar({
         {cells.map((cell, i) => {
           const date = cell.date
           if (!date) return <div key={`empty-${i}`} className="cal-cell empty" />
-          const bars = spanBars.get(date) ?? []
-          const due = (dueByDate.get(date) ?? []).filter(
-            ({ task }) => !spanKeys.has(`${task.ruleId ?? 'manual'}|${task.title}`)
-          )
+          const due = dueByDate.get(date) ?? []
+          const windowCount = windowDays.get(date) ?? 0
           const isToday = date === today
           const isSelected = date === selectedDate
-          // 到期标签最多 2 个；时间条最多 2 条（再多只体现在 tooltip 里，格子不再堆文字）
-          const shownDue = due.slice(0, 2)
-          const shownBars = bars.slice(0, 2)
+          const shownDue = due.slice(0, 3)
           const dueCount = due.reduce((sum, c) => sum + c.count, 0)
-          const carriedCount = bars.reduce((sum, b) => sum + b.count, 0)
+          const carriedCount = windowCount
           const title =
             `${date}：${dueCount} 项到期` +
             (carriedCount > 0 ? `，${carriedCount} 项时间窗内可做` : '') +
@@ -176,7 +150,9 @@ export function CareCalendar({
           return (
             <div
               key={date}
-              className={`cal-cell${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}`}
+              className={`cal-cell${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}${
+                windowCount > 0 ? ' in-window' : ''
+              }${windowCount > 1 ? ' in-window-more' : ''}`}
               title={title}
               onClick={() => onPickDay(date)}
             >
@@ -200,24 +176,6 @@ export function CareCalendar({
                   </button>
                 ))}
               </div>
-              {shownBars.length > 0 ? (
-                <div className="cal-spans">
-                  {shownBars.map((bar) => (
-                    <div
-                      key={`span-${bar.key}`}
-                      className={`cal-span ${bar.tone} seg-${bar.seg}`}
-                      title={`${bar.title}${bar.count > 1 ? `（${bar.count} 株）` : ''}：时间窗内可做`}
-                    >
-                      {bar.seg === 'start' || bar.seg === 'both' ? (
-                        <span className="cal-span-label">
-                          {bar.title}
-                          {bar.count > 1 ? ` ×${bar.count}` : ''}
-                        </span>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
             </div>
           )
         })}
@@ -229,7 +187,7 @@ export function CareCalendar({
         <span className="cal-dot pending" /> 计划中
         <span className="cal-dot done" /> 已完成
         <span className="cal-dot skipped" /> 已跳过
-        <span className="cal-bar-sample" /> 时间窗（可做至结束日）
+        <span className="cal-window-sample" /> 时间窗内可做
         <span style={{ marginLeft: 10 }}>点日期看当天计划，点任务可查看 / 编辑</span>
       </div>
     </div>
