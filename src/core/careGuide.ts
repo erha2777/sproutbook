@@ -76,12 +76,22 @@ export interface CareGuideMessages {
   user: string
 }
 
-export function buildCareGuideMessages(dossier: string, templateInstruction: string | null): CareGuideMessages {
+export function buildCareGuideMessages(
+  dossier: string,
+  templateInstruction: string | null,
+  /** 随请求附上的照片数量；0 / 省略表示纯文本 */
+  imageCount = 0
+): CareGuideMessages {
+  const photoNote =
+    imageCount > 0
+      ? `\n\n【随请求附上的照片】\n共 ${imageCount} 张，都是这一株的实拍照片。\n` +
+        '先看照片再写：栽在盆里还是地里、苗多大、叶片状态、土面干湿——照片和文字档案不一致时以照片为准。'
+      : ''
   const extra = templateInstruction?.trim()
   return {
     system: CARE_GUIDE_SYSTEM_PROMPT,
     user: [
-      `【这株植物的档案】\n${dossier}`,
+      `【这株植物的档案】\n${dossier}${photoNote}`,
       extra ? `【本次的额外要求（格式模板）】\n${extra}` : '',
       '【任务】\n按上面的格式写这株植物的全年（1–12 月）养护指南。'
     ]

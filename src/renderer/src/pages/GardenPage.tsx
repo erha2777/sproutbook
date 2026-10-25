@@ -38,20 +38,7 @@ import { flowerColorForSpecies } from '@core/sprite'
 import { PLANT_STATUS_ICONS, PLANT_STATUS_LABELS, PLANT_STATUS_OPTIONS, currentMonth, imageUrl } from '../lib/util'
 import { todayIso } from '@core/care'
 import { PlantSprite } from '../components/PlantSprite'
-import {
-  Badge,
-  Button,
-  EmptyState,
-  LoadFailure,
-  Modal,
-  Panel,
-  SectionTitle,
-  SelectInput,
-  Spinner,
-  TextInput,
-  useDebounced,
-  useToast
-} from '../components/ui'
+import { Badge, Button, EmptyState, LoadFailure, Panel, SectionTitle, SelectInput, Spinner, TextInput, useDebounced, useToast } from '../components/ui'
 import { PlantEditorModal } from './PlantEditor'
 import { AskAiModal } from '../components/AskAiModal'
 
@@ -250,12 +237,6 @@ export function GardenPage({
 
   /** 送人的植株不留在花园里 —— 它已经不在你这儿了。 */
   const gardenItems = useMemo(() => items.filter((p) => p.status !== 'gifted'), [items])
-  /*
-   * 「查看档案」：AI 到底读到了什么。
-   * 用户问「AI 怎么还在写盆苗」时，唯一可靠的答案在这段原文里（比如备注里的「15cm 盆」）。
-   */
-  const [dossier, setDossier] = useState<{ plantId: number; name: string; text: string } | null>(null)
-
   /** 正在给哪一株生成计划（按钮显示「生成中…」） */
   const [generating, setGenerating] = useState<number | null>(null)
 
@@ -403,21 +384,6 @@ export function GardenPage({
             放在「养护计划」页时，用户要排这一株得先离开花园、
             再按一个会动到所有植株的按钮 —— 两件都不对。
           */}
-          <Button
-            size="small"
-            variant="ghost"
-            title="看看 AI 生成指南时读到的档案原文"
-            onClick={() => {
-              void window.api.ai
-                .plantDossier(plant.id)
-                .then((text) => setDossier({ plantId: plant.id, name: plant.nickname, text }))
-                .catch((error) =>
-                  toast.push(error instanceof Error ? error.message : '读取档案失败', 'error')
-                )
-            }}
-          >
-            查看档案
-          </Button>
           <Button
               size="small"
               disabled={generating === plant.id}
@@ -624,26 +590,6 @@ export function GardenPage({
 
 
       </div>
-
-      {dossier ? (
-        <Modal
-          title={`AI 档案 · ${dossier.name}`}
-          onClose={() => setDossier(null)}
-          footer={
-            <>
-              <span className="small muted">生成指南时喂给模型的原文，只读</span>
-              <span className="spacer" />
-              <Button variant="primary" onClick={() => setDossier(null)}>
-                关闭
-              </Button>
-            </>
-          }
-        >
-          <div className="content-inner">
-            <pre className="dossier-text">{dossier.text}</pre>
-          </div>
-        </Modal>
-      ) : null}
 
       {asking ? <AskAiModal plants={items} onClose={() => setAsking(false)} /> : null}
 

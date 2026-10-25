@@ -69,6 +69,8 @@ export interface DossierInput {
   /** 最近的养护日志（新→旧） */
   logs?: DossierLog[]
   today: string
+  /** 这次随档案一起发出去的照片张数（>0 时在档案里注明，让模型知道可以看图） */
+  photoCount?: number
   /** 超过这个长度就截断（日志最后截），默认 6000 */
   maxChars?: number
 }
@@ -169,6 +171,10 @@ export function buildPlantDossier(input: DossierInput): string {
     ]
     const envLine = line('【养护位置】', joinFields(e))
     if (envLine) parts.push(envLine)
+  }
+
+  if ((input.photoCount ?? 0) > 0) {
+    parts.push(`【附带的照片】最近 ${input.photoCount} 张这一株的照片会随这次请求一起发送，请结合照片判断株型、叶片、盆土/地面状况`)
   }
 
   // 4) 计划与日志

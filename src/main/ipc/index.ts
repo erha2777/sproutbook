@@ -248,7 +248,11 @@ function fail(error: unknown): IpcResult<never> {
  * 问问 AI 和 生成全年养护指南 都用它 —— 两份提示词看到的必须是同一份事实，
  * 否则会出现"问答说花期、指南按生长期写"这种自相矛盾。
  */
-function dossierForPlant(db: Db, plant: NonNullable<ReturnType<typeof getPlant>>): string {
+function dossierForPlant(
+  db: Db,
+  plant: NonNullable<ReturnType<typeof getPlant>>,
+  opts: { forGuide?: boolean; photoCount?: number } = {}
+): string {
   const species = plant.speciesId ? getSpecies(db, plant.speciesId) : null
   const env = plant.envId ? getEnvironment(db, plant.envId) : null
   const plantDefs = loadFieldDefinitions(db, 'plant', true)
@@ -258,7 +262,11 @@ function dossierForPlant(db: Db, plant: NonNullable<ReturnType<typeof getPlant>>
     values: Record<string, unknown>
   ): Array<{ label: string; value: string }> =>
     defs
-      .filter((def) => !def.columnName)
+      /*
+       * care_guide 自己就是"要生成的东西"：把它喂回去，模型多半照着改几个字就交差
+       * （用户反馈过「生成的还是和之前一样」）。历史存档在库里，不必进档案。
+       */
+      .filter((def) => !def.columnName && def.key !== 'care_guide')
       .map((def) => {
         const raw = values[def.key] as Parameters<typeof formatFieldValue>[1] | undefined
         if (raw === null || raw === undefined) return null
@@ -281,7 +289,10 @@ function dossierForPlant(db: Db, plant: NonNullable<ReturnType<typeof getPlant>>
     today: todayIso()
   })
 
-  const tasks = listCareTasks(db, { plantId: plant.id, status: 'open' }).slice(0, 12)
+  // 生成指南用不到「接下来要做什么」（那正是它要写的东西），省得它照着现有任务抄
+  const tasks = opts.forGuide
+    ? []
+    : listCareTasks(db, { plantId: plant.id, status: 'open' }).slice(0, 12)
   const logs = listCareLogs(db, { plantId: plant.id, limit: 10 })
 
   const dossier = buildPlantDossier({
@@ -331,11 +342,13 @@ function dossierForPlant(db: Db, plant: NonNullable<ReturnType<typeof getPlant>>
         kind: logKindLabel(l.kind),
         content: (l.content ?? '').trim() || '（没有文字，只有照片）'
       })),
+    photoCount: opts.photoCount ?? 0,
     today: todayIso()
   })
 
   return dossier
 }
+
 
 function handle<T>(channel: string, fn: (...args: never[]) => T | Promise<T>): void {
   ipcMain.handle(channel, async (_event, ...args) => {
@@ -1468,6 +1481,30 @@ function registerAiIpc(): void {
     return `data:image/jpeg;base64,${readFileSync(file).toString('base64')}`
   }
 
+/**
+ * 这一株最近的照片 → 多模态 image parts（最多 4 张）。
+ *
+ * 只看文字根本分不清「盆苗」还是「已经下地」—— 用户日志里的照片就是为此存在的。
+ * 取不到文件就跳过，不让一张坏图毁掉整次生成。
+ */
+  function recentPlantPhotoParts(db: Db, plantId: number, limit = 4): ChatContentPart[] {
+  const rows = db.all<{ path: string }>(
+    `SELECT path FROM images
+      WHERE (plant_id = ? OR log_id IN (SELECT id FROM care_logs WHERE plant_id = ?))
+      ORDER BY id DESC LIMIT ?`,
+    plantId,
+    plantId,
+    limit
+  )
+  const parts: ChatContentPart[] = []
+  for (const row of rows) {
+    const file = join(imagesDir(), row.path)
+    if (!existsSync(file)) continue
+    parts.push({ type: 'image_url', image_url: { url: prepareImageDataUrl(file) } })
+  }
+  return parts
+  }
+
 
   /*
    * 识别一张**本地图片**（弹文件对话框选）。
@@ -1652,7 +1689,11 @@ function registerAiIpc(): void {
     const db = getDb()
     const plant = getPlant(db, plantId)
     if (!plant) throw new Error('植株不存在')
-    return dossierForPlant(db, plant)
+    // 这个按钮就在「AI 生成」旁边，所以按生成指南的口径来显示（含照片张数）
+    return dossierForPlant(db, plant, {
+      forGuide: true,
+      photoCount: recentPlantPhotoParts(db, plant.id).length
+    })
   })
 
   handle('ai:careGuide', async (payload: { requestId: string; plantId: number }) => {
@@ -1670,19 +1711,24 @@ function registerAiIpc(): void {
 
     const templates = readCareGuideTemplates(db)
     const active = templates.find((t) => t.id === readCareGuideTemplateId(db)) ?? templates[0] ?? null
-    const dossier = dossierForPlant(db, plant)
-    const messages = buildCareGuideMessages(dossier, active?.instruction ?? null)
+    const photos = recentPlantPhotoParts(db, plant.id)
+    const dossier = dossierForPlant(db, plant, { forGuide: true, photoCount: photos.length })
+    const messages = buildCareGuideMessages(dossier, active?.instruction ?? null, photos.length)
 
     const controller = new AbortController()
     runningAi.set(payload.requestId, controller)
     try {
+      // 带图就必须用能看图的模型（没配视觉模型时沿用对话模型）
+      const useModel = photos.length > 0 ? (settings.visionModel?.trim() || model) : model
+      const userContent: string | ChatContentPart[] =
+        photos.length > 0 ? [{ type: 'text', text: messages.user }, ...photos] : messages.user
       const outcome = await chat({
         baseUrl: settings.baseUrl,
         apiKey,
-        model,
+        model: useModel,
         messages: [
           { role: 'system', content: messages.system },
-          { role: 'user', content: messages.user }
+          { role: 'user', content: userContent }
         ],
         temperature: settings.temperature,
         // 12 个月 × 每月几条，比问答长得多
@@ -1694,7 +1740,7 @@ function registerAiIpc(): void {
       recordAiRun(db, {
         kind: 'care-guide',
         baseUrl: settings.baseUrl,
-        model: outcome.model || model,
+        model: outcome.model || useModel,
         promptVersion: 'care-guide-1',
         input: { plantId: plant.id, templateId: active?.id ?? null, dossier },
         output: { text: outcome.content, parsedItems: parsed.itemCount },

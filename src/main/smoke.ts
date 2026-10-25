@@ -85,6 +85,7 @@ import { deriveCarePhase } from '../core/phase'
 import { searchSelectView } from '../core/searchSelect'
 import { buildAskPlantMessages, buildPlantDossier } from '../core/plantDossier'
 import {
+  buildCareGuideMessages,
   careGuideTaskDrafts,
   isRecurringGuideItem,
   parseCareGuide,
@@ -715,6 +716,21 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('按植物分成两组', grouped.length === 2, String(grouped.length))
       check('同一株合并', grouped[0].tasks.length === 2 && grouped[0].name === '绣球')
       check('没有植株的归到一组', groupTasksByPlant([{ plantId: null, plantName: null, id: 9 }])[0].name === '未指定植株')
+    }
+
+
+    /* 生成指南会带图：档案里注明照片张数，消息里告诉模型「以照片为准」 */
+    {
+      const withPhotos = buildPlantDossier({
+        today: '2026-10-25',
+        plant: { nickname: '带图的株', statusLabel: '生长期' },
+        photoCount: 3
+      })
+      check('档案注明附带照片', withPhotos.includes('【附带的照片】') && withPhotos.includes('3 张'))
+      check('不带图时不写这段', !buildPlantDossier({ today: '2026-10-25', plant: { nickname: 'x', statusLabel: '生长期' } }).includes('【附带的照片】'))
+      const msgs = buildCareGuideMessages('（档案）', null, 2)
+      check('指南消息里说明照片数量', msgs.user.includes('2 张'))
+      check('照片与档案不一致时以照片为准', msgs.user.includes('以照片为准'))
     }
 
     /* 规则库只做提示：判断「这条规则覆盖本月吗」 */
