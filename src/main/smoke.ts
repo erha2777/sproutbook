@@ -559,6 +559,22 @@ export async function runSmoke(outFile: string): Promise<number> {
       })
       check('日志里的「种下」会单独标出', planted.includes('【栽种状态】') && planted.includes('已经种下'))
       check('日志标成「已经发生的事」', planted.includes('已经发生的事'))
+
+      // 地栽 + 备注提到「盆」：点破矛盾，免得模型按盆栽写
+      const groundPlant = buildPlantDossier({
+        today: '2026-10-25',
+        plant: {
+          nickname: '地栽的绣球',
+          statusLabel: '缓苗',
+          cultivation: '地栽',
+          attributes: [{ label: '备注', value: '入手的 15cm 盆' }]
+        }
+      })
+      check('地栽 + 备注提到盆时给提示', groundPlant.includes('已经地栽'))
+      check('盆栽不触发该提示', !buildPlantDossier({
+        today: '2026-10-25',
+        plant: { nickname: '盆栽的株', statusLabel: '生长期', cultivation: '盆栽' }
+      }).includes('已经地栽'))
       check('档案带物候阶段和依据', dossier.includes('花期') && dossier.includes('10 月在开花期内'))
       check('档案带未完成任务，不带已完成的', dossier.includes('冬季控水') && !dossier.includes('春季换盆'))
       check('档案带最近日志', dossier.includes('浇透一次'))

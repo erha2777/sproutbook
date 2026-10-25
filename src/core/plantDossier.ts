@@ -130,6 +130,21 @@ export function buildPlantDossier(input: DossierInput): string {
 
   if (plant.notes && plant.notes.trim()) parts.push(`【本株备注】${plant.notes.trim()}`)
 
+  /*
+   * 备注里常写着买来时的规格（「15cm 盆」「海蒂的花园入手的 15cm 盆」）。
+   * 栽种方式已经是地栽时，模型仍会把这句话读成「现在还种在盆里」，
+   * 于是写出「盆苗放半阴处…11 月再定植」这种和事实相反的指南。
+   * 这里直接把矛盾点破，省得靠提示词去猜。
+   */
+  const potMention = [plant.notes ?? '', ...(plant.attributes ?? []).map((f) => f.value)].some((v) =>
+    /盆/.test(v)
+  )
+  if (plant.cultivation === '地栽' && potMention) {
+    parts.push(
+      '【栽种方式提示】备注里的「盆 / 盆径」是买来时的规格；这一株已经地栽，不要再按盆栽写（不要提上盆、换盆、盆径）'
+    )
+  }
+
   // 2) 物种（知识层）
   if (species) {
     const s: DossierField[] = [
