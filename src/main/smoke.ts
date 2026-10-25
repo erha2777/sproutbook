@@ -113,6 +113,7 @@ import {
   serializeSpeciesKeys,
   spreadDay,
   summarizeTasks,
+  groupTasksByPlant,
   ruleCoversMonth,
   urgencyOf,
   todayIso,
@@ -686,6 +687,18 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('二月窗口 27 天', february.windowDays === 27, String(february.windowDays))
       const dated = careGuideTaskDrafts(parseCareGuide('## 3月\n- 换盆（03-15）：换盆', 2026))[0]
       check('写了日期就按日期算，窗口到月底', dated.dueDate === '2026-03-15' && dated.windowDays === 16, `${dated.dueDate}/${dated.windowDays}`)
+    }
+
+    /* 今日待办按植物分组：同一株的排在一起，顺序按首次出现 */
+    {
+      const grouped = groupTasksByPlant([
+        { plantId: 3, plantName: '绣球', id: 1 },
+        { plantId: 5, plantName: '月季', id: 2 },
+        { plantId: 3, plantName: '绣球', id: 3 }
+      ])
+      check('按植物分成两组', grouped.length === 2, String(grouped.length))
+      check('同一株合并', grouped[0].tasks.length === 2 && grouped[0].name === '绣球')
+      check('没有植株的归到一组', groupTasksByPlant([{ plantId: null, plantName: null, id: 9 }])[0].name === '未指定植株')
     }
 
     /* 规则库只做提示：判断「这条规则覆盖本月吗」 */

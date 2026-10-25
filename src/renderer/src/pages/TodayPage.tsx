@@ -20,7 +20,7 @@ import type { ReactNode } from 'react'
 import type { CareTask, Material, RecipeListItem } from '@core/types'
 import type { CareTaskListItem, WeatherRiskItem, WeatherWarningResult } from '@shared/api'
 import { suggestTask } from '@core/weather'
-import { groupTasksByRule, pendingBuckets, todayIso } from '@core/care'
+import { groupTasksByPlant, groupTasksByRule, pendingBuckets, todayIso } from '@core/care'
 import { Button, EmptyState, Panel, SectionTitle, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
@@ -191,6 +191,15 @@ export function TodayPage({
    * 用的是 core 的 pendingBuckets —— 养护计划页用同一个函数，
    * 这样「今日 该做 N」和「养护计划 该做了 N」永远是同一个数。
    */
+  /** 待办怎么分组：默认按植物（多株一起到期时最好认），也可以切回按规则 */
+  const [groupBy, setGroupBy] = useState<'plant' | 'rule'>(() =>
+    window.localStorage.getItem('today.groupBy') === 'rule' ? 'rule' : 'plant'
+  )
+  const changeGroupBy = (next: 'plant' | 'rule'): void => {
+    setGroupBy(next)
+    window.localStorage.setItem('today.groupBy', next)
+  }
+
   const groups = useMemo(
     () => pendingBuckets(openTasks, today),
     [openTasks, today]
@@ -349,6 +358,20 @@ export function TodayPage({
     )
   }
 
+  /** 今天/逾期的任务列表：按当前选择分组（植物优先，点标题右侧可切换） */
+  const renderTasks = (list: CareTaskListItem[]): ReactNode => {
+    if (groupBy === 'rule') return groupTasksByRule(list).map(renderGroup)
+    return groupTasksByPlant(list).map((group) => (
+      <div key={group.key} className="today-plant-group">
+        <div className="today-plant-head">
+          <span>{group.name}</span>
+          <span className="small muted">{group.tasks.length} 项</span>
+        </div>
+        {group.tasks.map((task) => renderRow(task))}
+      </div>
+    ))
+  }
+
   const nothingToDo = groups.overdue.length === 0 && groups.due.length === 0
   return (
     <div className="content-inner">
@@ -415,11 +438,31 @@ export function TodayPage({
           <Panel>
             <SectionTitle
               right={
-                <span className="small muted">
-                  {groups.overdue.length > 0 ? `已过期 ${groups.overdue.length} · ` : ''}
-                  今天该做 {groups.due.length}
-                  {doneToday.length > 0 ? ` · 今天完成 ${doneToday.length}` : ''}
-                </span>
+                <>
+                  <span className="small muted">
+                    {groups.overdue.length > 0 ? `已过期 ${groups.overdue.length} · ` : ''}
+                    今天该做 {groups.due.length}
+                    {doneToday.length > 0 ? ` · 今天完成 ${doneToday.length}` : ''}
+                  </span>
+                  <span className="seg">
+                    <button
+                      type="button"
+                      className={groupBy === 'plant' ? 'seg-item active' : 'seg-item'}
+                      onClick={() => changeGroupBy('plant')}
+                      title="同一株的事排在一起"
+                    >
+                      按植物
+                    </button>
+                    <button
+                      type="button"
+                      className={groupBy === 'rule' ? 'seg-item active' : 'seg-item'}
+                      onClick={() => changeGroupBy('rule')}
+                      title="同一规则的几株合成一组"
+                    >
+                      按规则
+                    </button>
+                  </span>
+                </>
               }
             >
               今日待办
@@ -441,10 +484,11 @@ export function TodayPage({
             ) : (
               <>
                 <TaskGroup title="已过期" count={groups.overdue.length} tone="safety">
+                  {renderTasks(groups.overdue)}
                   {groupTasksByRule(groups.overdue).map(renderGroup)}
                 </TaskGroup>
                 <TaskGroup title="今天该做" count={groups.due.length} tone="warn">
-                  {groupTasksByRule(groups.due).map(renderGroup)}
+                  {renderTasks(groups.due)}
                 </TaskGroup>
                 {/*
                   「已经可以做」和「快到了」都**不列出来** ——

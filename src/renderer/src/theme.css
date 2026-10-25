@@ -4297,3 +4297,43 @@ html.tex-button .home-gear.sound-ctl:hover {
   background: rgba(109, 158, 74, 0.26);
   border: 1px solid rgba(120, 80, 20, 0.35);
 }
+/* ---- 分段切换（今日待办：按植物 / 按规则） ---- */
+.seg {
+  display: inline-flex;
+  margin-left: 8px;
+  vertical-align: middle;
+  border: 2px solid var(--wood-outline, #6b4a2a);
+  background: rgba(255, 255, 255, 0.35);
+}
+.seg-item {
+  padding: 1px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink, #3b2a18);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.seg-item + .seg-item {
+  border-left: 2px solid var(--wood-outline, #6b4a2a);
+}
+.seg-item.active {
+  background: var(--leaf-dark, #4c8f2e);
+  color: #fff8e6;
+}
+
+/* ---- 今日待办：按植物分组的小标题 ---- */
+.today-plant-group + .today-plant-group {
+  margin-top: 10px;
+}
+.today-plant-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(76, 143, 46, 0.12);
+  border-left: 4px solid var(--leaf-dark, #4c8f2e);
+}

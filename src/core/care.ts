@@ -653,6 +653,25 @@ export function windowRange(task: Pick<CareTask, 'dueDate' | 'windowDays'>): Car
  * 手动任务没有 ruleId，永远各自一组（它们是各自独立的事）。
  * 返回顺序沿用原列表的首次出现顺序，不重新排序 —— 调用方已经排好了。
  */
+/**
+ * 按**植物**分组，顺序按各组第一项出现的顺序（调用方一般已按紧急度排好）。
+ *
+ * 今日页有多株一起到期时，按规则分组会把「浇水」里两株的任务混在一起，
+ * 看不出哪条是哪一株的 —— 用户要求「按植物分组，显得更容易分辨」。
+ */
+export function groupTasksByPlant<
+  T extends { plantId: number | null; plantName: string | null }
+>(tasks: T[]): Array<{ key: string; name: string; tasks: T[] }> {
+  const groups = new Map<string, { key: string; name: string; tasks: T[] }>()
+  for (const task of tasks) {
+    const key = task.plantId === null ? 'none' : `plant-${task.plantId}`
+    const hit = groups.get(key)
+    if (hit) hit.tasks.push(task)
+    else groups.set(key, { key, name: task.plantName ?? '未指定植株', tasks: [task] })
+  }
+  return [...groups.values()]
+}
+
 export function groupTasksByRule<
   T extends { id: number; ruleId: number | null; dueDate: string; title: string }
 >(tasks: T[]): T[][] {
