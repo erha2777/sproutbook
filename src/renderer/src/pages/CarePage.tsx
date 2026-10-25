@@ -629,14 +629,6 @@ export function CarePage({
                 setHighlight(t.id)
               }}
               onPickDay={(date) => setDay(date)}
-              /*
-                「时间窗内可做」的虚标任务：停在当前这天（它的到期日可能早好几天），
-                高亮这一条 —— 下方的当天列表里就有它。
-              */
-              onPickCarriedTask={(t, date) => {
-                setDay(date)
-                setHighlight(t.id)
-              }}
             />
           </Panel>
 

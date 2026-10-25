@@ -4276,3 +4276,49 @@ html.tex-button .home-gear.sound-ctl:hover {
   font-weight: 600;
   font-size: 12px;
 }
+/* ---- 月历：时间窗画成横向条（跨格子连续） ---- */
+.cal-span {
+  position: relative;
+  height: 12px;
+  margin: 1px -5px 0;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  font-size: 9px;
+  line-height: 1;
+  color: #fff8e6;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  background: #c8a05a;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: default;
+}
+/* 端点收圆：起点左圆、终点右圆，中间段是直边 —— 连起来就是一条线 */
+.cal-span.seg-start { border-radius: 7px 0 0 7px; }
+.cal-span.seg-end { border-radius: 0 6px 6px 0; }
+.cal-span.seg-both { border-radius: 6px; }
+.cal-span.due { background: #d98a2b; }
+.cal-span.overdue { background: #c0563f; }
+.cal-span.pending { background: #c8a05a; }
+.cal-span.leaf { background: #4c8f2e; }
+.cal-span-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 图例里的小样 */
+.cal-bar-sample {
+  display: inline-block;
+  width: 20px;
+  height: 6px;
+  margin: 0 4px 0 8px;
+  vertical-align: middle;
+  background: #c8a05a;
+  border-radius: 3px;
+}
+/* 时间条容器：贴到格子底部，跨格对齐 */
+.cal-spans {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: auto;
+}
