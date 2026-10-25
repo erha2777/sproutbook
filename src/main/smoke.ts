@@ -692,7 +692,8 @@ export async function runSmoke(outFile: string): Promise<number> {
       const seasonal = seasonalGuideDrafts(
         careGuideTaskDrafts(parseCareGuide('## 10月\n- 浇水：干了就浇\n- 修剪：剪枯枝\n- 缓苗观察：每天看', 2026))
       )
-      check('季节性筛选只剩修剪', seasonal.length === 1 && seasonal[0].title === '修剪', seasonal.map((d) => d.title).join(','))
+      // 规则库不再生成任务，所以指南里的每一条都要进计划（浇水 / 观察也留）
+      check('指南条目全部保留', seasonal.length === 3, seasonal.map((d) => d.title).join(','))
       check('月度条目落在当月 1 号', seasonal[0].dueDate === '2026-10-01', seasonal[0].dueDate)
       check('季节性事项窗口开到月底', seasonal[0].windowDays === 30, String(seasonal[0].windowDays))
       /*
@@ -701,7 +702,7 @@ export async function runSmoke(outFile: string): Promise<number> {
        */
       check(
         '本月季节性事项过了月中也能加入',
-        splitDraftsByDate(seasonal, '2026-10-25').upcoming.length === 1,
+        splitDraftsByDate(seasonal, '2026-10-25').upcoming.length === 3,
         String(splitDraftsByDate(seasonal, '2026-10-25').upcoming.length)
       )
       const dated = seasonalGuideDrafts([{ title: '换盆', dueDate: '2026-03-08', windowDays: 0, note: '', actionType: 'repot' }])

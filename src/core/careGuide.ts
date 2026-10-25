@@ -225,6 +225,10 @@ export function guessCareAction(title: string): CareActionType {
 /**
  * 指南里「规律性」的事：浇水、施肥、日常观察这类。
  *
+ * **现在不再用来筛任务**：规则库已经不生成任务了（只做提醒），
+ * 所以指南里的每一条都该进计划 —— 之前过滤是为了避免和规则库重复。
+ * 函数留着是因为「这条属于日常还是季节性」在提示/统计里仍然有用。
+ *
  * 它们不该从指南变成任务 —— 规则库已经按物种 / 阶段排了浇水施肥的节奏，
  * 再从指南生一份，日历上就会多出一堆重复的条目（用户就是这么看到的 21 条）。
  * 指南里保留这些文字当参考，计划只取**季节性的一次性事项**。
@@ -242,7 +246,6 @@ export function seasonalGuideDrafts(
 ): CareGuideTaskDraft[] {
   void opts
   return drafts
-    .filter((draft) => !isRecurringGuideItem(draft.title))
     .map((draft) => {
       /*
        * 日期就是**这个月的 1 号**，窗口一直到月底。
