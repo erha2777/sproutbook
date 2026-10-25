@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 养护计划页。
  *
  * 这一页只做两件事：**看这个月的节奏**，和**看某一天安排了什么**。
@@ -33,6 +33,7 @@ import { CareTaskDialog } from '../components/CareTaskDialog'
 import type { PlantOption } from '../components/CareTaskDialog'
 import { CareRuleManager } from '../components/CareRuleManager'
 import { CareCalendar } from '../components/CareCalendar'
+import { RuleReminders } from '../components/RuleReminders'
 import { CareTaskRow } from '../components/CareTaskRow'
 import { CareTaskGroup } from '../components/CareTaskGroup'
 
@@ -89,6 +90,8 @@ export function CarePage({
    */
   const [day, setDay] = useState<string | null>(today)
   const [plants, setPlants] = useState<PlantOption[]>([])
+  /** 规则提醒按物种匹配，PlantOption 只有 id/label，这里单独存一份 */
+  const [plantRefs, setPlantRefs] = useState<Array<{ nickname: string; speciesName: string | null }>>([])
   const [speciesNames, setSpeciesNames] = useState<string[]>([])
   /** 任务上要显示绑定的配方，所以把配方与物品一起取回来（都是几十条量级） */
   const [recipes, setRecipes] = useState<RecipeListItem[] | null>(null)
@@ -214,6 +217,12 @@ export function CarePage({
         plantList.items.map((p) => ({
           id: p.id,
           label: `${p.nickname}${p.species ? `（${p.species.commonName}）` : ''}`
+        }))
+      )
+      setPlantRefs(
+        plantList.items.map((p) => ({
+          nickname: p.nickname,
+          speciesName: p.species?.commonName ?? null
         }))
       )
       setSpeciesNames(speciesList.items.map((s) => s.commonName))
@@ -541,11 +550,14 @@ export function CarePage({
         看的，和列表里罗列给所有人看是两回事。
       */}
 
+      <RuleReminders plants={plantRefs} compact />
+
       {loading ? (
         <Panel>
           <Spinner label="加载中…" />
         </Panel>
       ) : (
+
         <div className="plan-split">
           <Panel className="plan-calendar">
             <div className="row" style={{ marginBottom: 8, flexWrap: 'nowrap' }}>
