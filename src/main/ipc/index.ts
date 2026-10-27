@@ -83,8 +83,10 @@ import {
   updateCareTask
 } from '../db/repo/care'
 import type { CareLogPatch, CareTaskPatch, CareTaskQuery } from '../../shared/api'
+import type { WishInput } from '../../core/types'
 import { formatFieldValue } from '../../core/fieldTypes'
 import { buildAskPlantMessages, buildPlantDossier } from '../../core/plantDossier'
+import { listWishItems, removeWishItem, saveWishItem } from '../db/repo/wishlist'
 import {
   buildCareGuideMessages,
   careGuideTaskDrafts,
@@ -368,6 +370,7 @@ const runningAi = new Map<string, AbortController>()
 
 export function registerIpc(): void {
   registerAppIpc()
+  registerWishlistIpc()
   registerSettingsIpc()
   registerFieldIpc()
   registerSpeciesIpc()
@@ -851,6 +854,17 @@ function registerAppIpc(): void {
   })
 
   /** 首页的「退出」按钮 */
+  /*
+   * 只在系统浏览器里打开 http(s) 链接。
+   * 白名单协议是必须的：file:// 或自定义协议能被用来执行本机程序。
+   */
+  handle('app:openExternal', async (url: string) => {
+    const target = String(url ?? '').trim()
+    if (!/^https?:\/\//i.test(target)) throw new Error('只支持 http / https 链接')
+    await shell.openExternal(target)
+    return true
+  })
+
   handle('app:quit', () => {
     app.quit()
     return true
@@ -1091,6 +1105,37 @@ function registerEnvironmentIpc(): void {
 // 图片
 // ---------------------------------------------------------------------------
 
+/**
+ * 种草清单。
+ *
+ * 只有 CRUD —— 这些还不是"我的植物"：没有养护状态、不进花园、也不参与提醒。
+ * 买回来了就照这条建一株真正的植物（界面上的「买到了」）。
+ */
+function registerWishlistIpc(): void {
+  handle('wishlist:list', () => listWishItems(getDb()))
+
+  handle('wishlist:save', (input: WishInput) => saveWishItem(getDb(), input))
+
+  handle('wishlist:remove', (id: number) => {
+    const db = getDb()
+    /*
+     * 先拿到图片文件名再删记录：外键级联只会删 images 行，
+     * 文件还留在 userData/images 里，越攒越多。
+     */
+    const images = db.all<{ path: string; thumb_path: string | null }>(
+      'SELECT path, thumb_path FROM images WHERE wishlist_id = ?',
+      id
+    )
+    const ok = removeWishItem(db, id)
+    if (ok) {
+      for (const image of images) {
+        removeImageFiles([image.path, image.thumb_path])
+      }
+    }
+    return ok
+  })
+}
+
 function registerImageIpc(): void {
   handle('images:list', (owner: ImageOwner) =>
     listImages(getDb(), owner)
@@ -1110,6 +1155,7 @@ function registerImageIpc(): void {
       speciesId: owner.speciesId ?? null,
       environmentId: owner.environmentId ?? null,
       materialId: owner.materialId ?? null,
+      wishlistId: owner.wishlistId ?? null,
       path: file.fileName,
       thumbPath: file.thumbName,
       origin: 'url'
@@ -1134,6 +1180,7 @@ function registerImageIpc(): void {
           speciesId: owner.speciesId ?? null,
           environmentId: owner.environmentId ?? null,
           materialId: owner.materialId ?? null,
+          wishlistId: owner.wishlistId ?? null,
           path: file.fileName,
           thumbPath: file.thumbName
         })

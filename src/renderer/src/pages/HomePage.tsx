@@ -15,6 +15,7 @@ import { PixelIcon } from '../components/PixelIcon'
 export function HomePage({
   onGarden,
   onSpecies,
+  onWishlist,
   onCare,
   onQuit,
   onSettings,
@@ -23,6 +24,7 @@ export function HomePage({
 }: {
   onGarden: () => void
   onSpecies: () => void
+  onWishlist: () => void
   onCare: () => void
   onQuit: () => void
   onSettings: () => void
@@ -52,6 +54,10 @@ export function HomePage({
         <button type="button" className="home-btn" onClick={onSpecies}>
           <span>物种库</span>
           <b><PixelIcon name="species" size={26} /></b>
+        </button>
+        <button type="button" className="home-btn" onClick={onWishlist}>
+          <span>种草清单</span>
+          <b><PixelIcon name="wish" size={26} /></b>
         </button>
         <button type="button" className="home-btn" onClick={onCare}>
           <span>

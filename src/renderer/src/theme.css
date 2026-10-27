@@ -4352,3 +4352,65 @@ html.tex-button .home-gear.sound-ctl:hover {
   background: rgba(255, 255, 255, 0.55);
   border: 2px solid var(--wood-outline, #6b4a2a);
 }
+
+/* ---- 种草清单：卡片墙 ---- */
+.wish-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+.wish-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.5);
+  border: 3px solid var(--wood-outline, #6b4a2a);
+}
+.wish-cover {
+  height: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.06);
+  border-bottom: 2px solid var(--wood-outline, #6b4a2a);
+}
+.wish-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.wish-cover-empty {
+  font-size: 11px;
+  color: var(--ink-soft, #7a6349);
+}
+.wish-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 8px 6px;
+}
+.wish-name {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.wish-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.wish-price {
+  color: #b8562f;
+}
+.wish-note {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.45;
+}
+.wish-actions {
+  margin-top: auto;
+  flex-wrap: nowrap;
+}

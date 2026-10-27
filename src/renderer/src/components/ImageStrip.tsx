@@ -12,7 +12,7 @@ import { ImageSearchModal } from './ImageSearchModal'
 import { ImageViewer } from './ImageViewer'
 
 export interface ImageStripProps {
-  owner: { plantId?: number; speciesId?: number; environmentId?: number }
+  owner: { plantId?: number; speciesId?: number; environmentId?: number; wishlistId?: number }
   disabled?: boolean
   /** 删除后回调，便于外层刷新封面 */
   onChanged?: () => void

@@ -36,6 +36,7 @@ import { createField, deleteField, fieldUsage, getField, setFieldArchived, updat
 import { getSpecies, listSpecies, saveSpecies, archiveSpecies, verifySpeciesFields } from './db/repo/species'
 import { archivePlant, getPlant, listPlantCategories, listPlants, plantStats, savePlant, setPlantCover } from './db/repo/plants'
 import { addImage, archiveEnvironment, deleteImage, getEnvironment, getSetting, listCorruptSettings, listEnvironments, listImages, saveEnvironment, setSetting } from './db/repo/misc'
+import { getWishItem, listWishItems, removeWishItem, saveWishItem } from './db/repo/wishlist'
 import { toCsv, parseCsv } from '../core/csv'
 import { applyImport, buildExport, previewImport } from './services/transfer'
 import { summarizeRecipe, scaleRecipe, validateRecipe } from '../core/recipes'
@@ -737,6 +738,40 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('没有植株的归到一组', groupTasksByPlant([{ plantId: null, plantName: null, id: 9 }])[0].name === '未指定植株')
     }
 
+
+    /* 种草清单：保存 / 列表 / 改 / 图 / 删 */
+    {
+      const created = saveWishItem(db, {
+        name: '无尽夏「新娘」',
+        shop: '海蒂的花园',
+        price: 29.9,
+        url: 'https://example.com/p/1',
+        note: '想种在前院，耐半阴'
+      })
+      check('种草记录能保存', created.id > 0 && created.name.includes('新娘'), String(created.id))
+      check('字段都存下来了', created.shop === '海蒂的花园' && created.price === 29.9 && (created.url ?? '').startsWith('https://'))
+
+      // 同一批字段再存一条：新的应该排最前（清单按"最近想买"看）
+      const second = saveWishItem(db, { name: '月季 · 龙沙宝石', shop: null, price: null, url: null, note: null })
+      const list = listWishItems(db)
+      check('列表包含两条', list.length >= 2 && list[0].id === second.id, `首条=${list[0]?.name}`)
+      check('空字段存成 null 而不是空字符串', list[0].shop === null && list[0].price === null)
+
+      // 改
+      const updated = saveWishItem(db, { ...created, id: created.id, price: 24.5 })
+      check('修改价格生效', updated.price === 24.5, String(updated.price))
+
+      // 图：挂在清单条目上，列表能带出封面
+      addImage(db, { wishlistId: created.id, path: 'wish-test.jpg', thumbPath: 'wish-test-thumb.jpg' })
+      const withImage = getWishItem(db, created.id)
+      check('封面图能带出来', withImage?.coverThumb === 'wish-test-thumb.jpg', String(withImage?.coverThumb))
+      check('图片能按清单归属查到', listImages(db, { wishlistId: created.id }).length === 1)
+
+      // 删
+      check('删除成功', removeWishItem(db, created.id))
+      check('删除后查不到', getWishItem(db, created.id) === null)
+      check('级联删掉了图片记录', listImages(db, { wishlistId: created.id }).length === 0)
+    }
 
     /* 生成指南会带图：档案里注明照片张数，消息里告诉模型「以照片为准」 */
     {

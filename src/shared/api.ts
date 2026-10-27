@@ -33,6 +33,8 @@ import type {
   NewFieldDefinition,
   Plant,
   PlantStatus,
+  WishInput,
+  WishItem,
   PlantWithSpecies,
   RecipeInput,
   RecipeListItem,
@@ -106,6 +108,8 @@ export interface ImageOwner {
   speciesId?: number
   environmentId?: number
   materialId?: number
+  /** 种草清单的封面图 */
+  wishlistId?: number
 }
 
 export interface ImportResponse {
@@ -149,6 +153,8 @@ export interface SproutbookApi {
     openImagesDir(): Promise<boolean>
     /** 打开音乐 / 背景图 / 素材总目录（不存在会先建） */
     openMediaDir(kind: 'music' | 'backgrounds' | 'root'): Promise<boolean>
+    /** 用系统浏览器打开一个链接（种草清单的「打开链接」） */
+    openExternal(url: string): Promise<boolean>
     /** 退出应用（首页的「退出」按钮） */
     quit(): Promise<boolean>
     /** 私有字体：<userData>/fonts 里放了字体就返回 data URL（不打包进仓库） */
@@ -360,6 +366,13 @@ export interface SproutbookApi {
     /** 把物种图片复制一份给植株（复制文件，删一边不影响另一边） */
     remove(id: number): Promise<ImageRecord | null>
   }
+  /** 种草清单：想买、还没买的植物 */
+  wishlist: {
+    list(): Promise<WishItem[]>
+    save(input: WishInput): Promise<WishItem>
+    remove(id: number): Promise<boolean>
+  }
+
   materials: {
     list(query?: string): Promise<Material[]>
     save(input: MaterialInput): Promise<Material>

@@ -128,6 +128,7 @@ export function archiveEnvironment(db: Db, id: number): boolean {
 interface ImageRow {
   id: number
   plant_id: number | null
+  wishlist_id: number | null
   species_id: number | null
   environment_id: number | null
   material_id: number | null
@@ -143,6 +144,7 @@ function mapImage(row: ImageRow): ImageRecord {
   return {
     id: row.id,
     plantId: row.plant_id,
+    wishlistId: row.wishlist_id,
     speciesId: row.species_id,
     environmentId: row.environment_id,
     materialId: row.material_id,
@@ -157,8 +159,19 @@ function mapImage(row: ImageRow): ImageRecord {
 
 export function listImages(
   db: Db,
-  owner: { plantId?: number; speciesId?: number; environmentId?: number; materialId?: number }
+  owner: {
+    plantId?: number
+    speciesId?: number
+    environmentId?: number
+    materialId?: number
+    wishlistId?: number
+  }
 ): ImageRecord[] {
+  if (typeof owner.wishlistId === 'number') {
+    return db
+      .all<ImageRow>('SELECT * FROM images WHERE wishlist_id = ? ORDER BY sort_order, id', owner.wishlistId)
+      .map(mapImage)
+  }
   if (typeof owner.plantId === 'number') {
     return db
       .all<ImageRow>('SELECT * FROM images WHERE plant_id = ? ORDER BY sort_order, id', owner.plantId)
@@ -189,6 +202,7 @@ export function addImage(
     speciesId?: number | null
     environmentId?: number | null
     materialId?: number | null
+    wishlistId?: number | null
     path: string
     thumbPath?: string | null
     origin?: string
@@ -198,7 +212,8 @@ export function addImage(
     db.scalar<number>(
       `SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM images
        WHERE (plant_id IS ? OR ? IS NULL) AND (species_id IS ? OR ? IS NULL)
-         AND (environment_id IS ? OR ? IS NULL) AND (material_id IS ? OR ? IS NULL)`,
+         AND (environment_id IS ? OR ? IS NULL) AND (material_id IS ? OR ? IS NULL)
+         AND (wishlist_id IS ? OR ? IS NULL)`,
       input.plantId ?? null,
       input.plantId ?? null,
       input.speciesId ?? null,
@@ -206,16 +221,19 @@ export function addImage(
       input.environmentId ?? null,
       input.environmentId ?? null,
       input.materialId ?? null,
-      input.materialId ?? null
+      input.materialId ?? null,
+      input.wishlistId ?? null,
+      input.wishlistId ?? null
     ) ?? 0
   )
   const r = db.run(
-    `INSERT INTO images (plant_id, species_id, environment_id, material_id, path, thumb_path, origin, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO images (plant_id, species_id, environment_id, material_id, wishlist_id, path, thumb_path, origin, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.plantId ?? null,
     input.speciesId ?? null,
     input.environmentId ?? null,
     input.materialId ?? null,
+    input.wishlistId ?? null,
     input.path,
     input.thumbPath ?? null,
     input.origin ?? 'user',

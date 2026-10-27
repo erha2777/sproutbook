@@ -8,6 +8,7 @@ import { PixelIcon, setIconUrls } from './components/PixelIcon'
 import { TopHud } from './components/TopHud'
 import { GardenPage } from './pages/GardenPage'
 import { SpeciesPage } from './pages/SpeciesPage'
+import { WishlistPage } from './pages/WishlistPage'
 import { SpeciesEditor } from './pages/SpeciesEditor'
 import { TemplatesPage } from './pages/TemplatesPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -27,6 +28,7 @@ type Route =
   | { name: 'home' }
   | { name: 'garden' }
   | { name: 'species' }
+  | { name: 'wishlist' }
   | { name: 'species-edit'; id: number | null }
   | { name: 'care'; tab: CareTab }
   | { name: 'templates'; owner: 'species' | 'plant' }
@@ -43,6 +45,7 @@ const CARE_TABS: Array<{ key: CareTab; icon: string; label: string }> = [
 const HASH_TO_ROUTE: Record<string, Route['name']> = {
   home: 'home',
   garden: 'garden',
+  wishlist: 'wishlist',
   species: 'species',
   care: 'care',
   templates: 'templates',
@@ -431,6 +434,7 @@ function Shell(): ReactNode {
           carePending={carePending}
           onGarden={() => setRoute({ name: 'garden' })}
           onSpecies={() => setRoute({ name: 'species' })}
+          onWishlist={() => setRoute({ name: 'wishlist' })}
           onCare={() => setRoute({ name: 'care', tab: 'today' })}
           onQuit={() => void window.api.app.quit()}
           onSettings={() => setRoute({ name: 'settings' })}
@@ -554,7 +558,15 @@ function Shell(): ReactNode {
             />
           ) : null}
 
-          {route.name === 'species' ? (
+          {route.name === 'wishlist' ? (
+          <div className="content">
+            <PageErrorBoundary resetKey="wishlist">
+              <WishlistPage />
+            </PageErrorBoundary>
+          </div>
+        ) : null}
+
+        {route.name === 'species' ? (
             <SpeciesPage
               onEdit={(id) => setRoute({ name: 'species-edit', id })}
               onCreate={() => setRoute({ name: 'species-edit', id: null })}

@@ -615,6 +615,29 @@ ALTER TABLE images ADD COLUMN environment_id INTEGER REFERENCES environments(id)
 CREATE INDEX idx_images_environment ON images(environment_id, sort_order);
 `
 
+/**
+ * 种草清单：想买但还没买的植物。
+ *
+ * 和 plants 分开存：这些还不是"我的植物"，没有养护状态、也不该出现在花园里；
+ * 但字段形状跟"买回来"要能对上（名字 / 店铺 / 价格 / 链接 / 简介 + 一张图）。
+ */
+const V26_WISHLIST = /* sql */ `
+CREATE TABLE wishlist (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  shop       TEXT,
+  price      REAL,
+  url        TEXT,
+  note       TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  updated_at TEXT
+);
+CREATE INDEX idx_wishlist_sort ON wishlist(sort_order, id);
+ALTER TABLE images ADD COLUMN wishlist_id INTEGER REFERENCES wishlist(id) ON DELETE CASCADE;
+CREATE INDEX idx_images_wishlist ON images(wishlist_id, sort_order);
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: 'init', sql: V1_INIT },
   { version: 2, name: 'relation_fields', sql: V2_RELATION_FIELDS },
@@ -640,7 +663,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 22, name: 'material_price', sql: V22_MATERIAL_PRICE },
   { version: 23, name: 'plant_category', sql: V23_PLANT_CATEGORY },
   { version: 24, name: 'plant_status_changed_at', sql: V24_PLANT_STATUS_CHANGED },
-  { version: 25, name: 'material_image', sql: V25_MATERIAL_IMAGE }
+  { version: 25, name: 'material_image', sql: V25_MATERIAL_IMAGE },
+  { version: 26, name: 'wishlist', sql: V26_WISHLIST }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

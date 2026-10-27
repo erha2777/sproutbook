@@ -36,6 +36,7 @@ const api: SproutbookApi = {
     openDataDir: () => call('app:openDataDir'),
     openImagesDir: () => call('app:openImagesDir'),
     openMediaDir: (kind) => call('app:openMediaDir', kind),
+    openExternal: (url) => call('app:openExternal', url),
     quit: () => call('app:quit'),
     fonts: () => call('app:fonts'),
     textures: () => call('app:textures'),
@@ -111,6 +112,11 @@ const api: SproutbookApi = {
     importUrl: (owner, url) => call('images:importUrl', owner, url),
     search: (query) => call('images:search', query),
     remove: (id) => call('images:delete', id),
+  },
+  wishlist: {
+    list: () => call('wishlist:list'),
+    save: (input) => call('wishlist:save', input),
+    remove: (id) => call('wishlist:remove', id)
   },
   materials: {
     list: (query) => call('materials:list', query),

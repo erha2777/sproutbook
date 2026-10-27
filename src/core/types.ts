@@ -254,6 +254,34 @@ export interface PlantWithSpecies extends Plant {
 
 export type MaterialKind = 'substrate' | 'fertilizer' | 'pesticide' | 'tool' | 'other'
 
+/**
+ * 种草清单：想买、还没买的植物。
+ *
+ * 故意和 `Plant` 分开 —— 它没有状态、没有位置，只是"记下来别忘了"。
+ * 真买回来了，再照这条建一株真正的植物。
+ */
+export interface WishItem {
+  id: number
+  name: string
+  /** 店铺 / 卖家 */
+  shop: string | null
+  /** 参考价（元） */
+  price: number | null
+  /** 商品链接 */
+  url: string | null
+  /** 简介 / 记一笔：为什么想种、品种特点 */
+  note: string | null
+  /** 封面图（第一张），没有就是 null */
+  coverImageId?: number | null
+  coverThumb?: string | null
+  sortOrder: number
+  createdAt: string
+}
+
+export type WishInput = Omit<WishItem, 'id' | 'sortOrder' | 'createdAt' | 'coverImageId' | 'coverThumb'> & {
+  id?: number
+}
+
 export interface Material {
   /** 第一张照片（买的袋装土长什么样），没有就是 null；保存时不传也行 */
   imageId?: number | null
@@ -531,6 +559,8 @@ export interface CareLogImage {
 export interface ImageRecord {
   id: number
   plantId: number | null
+  /** 种草清单条目的图片（还没买，所以不挂在 plants 上） */
+  wishlistId: number | null
   speciesId: number | null
   /** 养护位置的图片（拍窗台、架子、光照），暂时只存着，留给以后的 AI 分析 */
   environmentId: number | null
