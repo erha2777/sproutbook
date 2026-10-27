@@ -51,23 +51,26 @@ export function showPendingNotification(db: Db, options: { onOpen: () => void; f
     return false
   }
   /*
-   * 优先用托盘气泡：点击回调在进程内，免安装版也能保证"点了有反应"。
-   * 没有托盘（用户关掉了）时才退回系统通知。
+   * 系统通知优先：Windows 11 上 `displayBalloon`（老式气泡）经常根本不弹，
+   * 之前为了"点击有反应"换成气泡，结果用户连通知都看不到了 —— 得先把"看得见"保住。
+   * 气泡只在系统通知不可用时兜底。
    */
-  if (showBalloon({ title: text.title, content: text.body.replace(/\n/g, ' '), onClick: options.onOpen })) {
+  if (Notification.isSupported()) {
+    const note = new Notification({
+      title: text.title,
+      body: text.body,
+      ...(icon && !icon.isEmpty() ? { icon } : {}),
+      silent: false
+    })
+    note.on('click', () => options.onOpen())
+    note.show()
     return true
   }
 
-  if (!Notification.isSupported()) return false
-  const note = new Notification({
-    title: text.title,
-    body: text.body,
-    ...(icon && !icon.isEmpty() ? { icon } : {}),
-    silent: false
-  })
-  note.on('click', () => options.onOpen())
-  note.show()
-  return true
+  if (showBalloon({ title: text.title, content: text.body.replace(/\n/g, ' '), onClick: options.onOpen })) {
+    return true
+  }
+  return false
 }
 
 /** 到点就提醒。返回是否真的弹了（测试 / 自检用） */

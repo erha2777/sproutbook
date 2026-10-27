@@ -4441,3 +4441,13 @@ html.tex-button .home-gear.sound-ctl:hover {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* ---- 首页的今日提醒横幅 ---- */
+.home-reminder {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 30;
+  max-width: min(680px, 88vw);
+}
