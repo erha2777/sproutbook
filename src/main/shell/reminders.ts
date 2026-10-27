@@ -11,6 +11,7 @@
  */
 
 import { Notification, app } from 'electron'
+import { showBalloon } from './tray'
 import type { NativeImage } from 'electron'
 import type { Db } from '../db/connection'
 import { getSetting, setSetting } from '../db/repo/misc'
@@ -49,6 +50,14 @@ export function showPendingNotification(db: Db, options: { onOpen: () => void; f
     console.log('[reminders] 开发预览不弹系统通知（打包版才有）：', text.title, text.body.replace(/\n/g, ' '))
     return false
   }
+  /*
+   * 优先用托盘气泡：点击回调在进程内，免安装版也能保证"点了有反应"。
+   * 没有托盘（用户关掉了）时才退回系统通知。
+   */
+  if (showBalloon({ title: text.title, content: text.body.replace(/\n/g, ' '), onClick: options.onOpen })) {
+    return true
+  }
+
   if (!Notification.isSupported()) return false
   const note = new Notification({
     title: text.title,

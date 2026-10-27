@@ -53,6 +53,30 @@ export function setTrayVisible(visible: boolean): void {
   tray = null
 }
 
+/**
+ * 用托盘气泡弹一条提醒。
+ *
+ * 相比系统 toast：气泡的点击回调在**同一个进程**里，不依赖 Windows 的 COM 激活器，
+ * 所以免安装版也能保证"点了有反应"。返回 false 表示没有托盘可用。
+ */
+export function showBalloon(options: { title: string; content: string; onClick: () => void }): boolean {
+  if (!tray) return false
+  const handler = (): void => {
+    tray?.removeListener('balloon-click', handler)
+    options.onClick()
+  }
+  tray.removeAllListeners('balloon-click')
+  tray.on('balloon-click', handler)
+  tray.displayBalloon({
+    title: options.title,
+    content: options.content,
+    noSound: false,
+    respectQuietTime: true,
+    ...(icon && !icon.isEmpty() ? { icon } : {})
+  })
+  return true
+}
+
 export function isTrayVisible(): boolean {
   return tray !== null
 }
