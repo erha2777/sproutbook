@@ -303,6 +303,27 @@ function openFromTray(): void {
   refreshTrayMenu()
 }
 
+function ensureStartMenuShortcut(): void {
+  if (!app.isPackaged || process.platform !== 'win32') return
+  try {
+    const programs = join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+    const link = join(programs, 'Sproutbook.lnk')
+    /*
+     * 已存在也**更新**一次：老快捷方式可能是以前装的、没带 AppUserModelID，
+     * 那样点通知依然找不到该唤起谁。这条写入很便宜，启动时对齐一次最省心。
+     */
+    const ok = shell.writeShortcutLink(link, existsSync(link) ? 'update' : 'create', {
+      target: process.execPath,
+      description: 'Sproutbook 植物养护管理',
+      appUserModelId: 'com.sproutbook.app'
+    })
+    logStartup('开始菜单快捷方式', { path: link, ok })
+  } catch (error) {
+    // 建不出来只影响通知点击，不该拦住启动
+    logStartup('开始菜单快捷方式创建失败', error)
+  }
+}
+
 function createWindow(): void {
   const windowIcon = loadWindowIcon()
   rememberTrayIcon(windowIcon)
@@ -669,6 +690,15 @@ handleMusicProtocol()
     } catch (error) {
       logStartup('音乐目录读取失败', error)
     }
+
+    /*
+     * Windows 通知需要一个**带 AppUserModelID 的开始菜单快捷方式**，
+     * 否则点击通知时系统找不到"该唤起哪个 exe"，会去拉起一个裸的 electron.exe
+     * （用户看到的 Electron 欢迎页就是这么来的）。
+     *
+     * 免安装的 win-unpacked 没有安装器帮忙建，这里自己补一个；已存在就不动。
+     */
+    ensureStartMenuShortcut()
 
     if (!isDev) Menu.setApplicationMenu(null)
 

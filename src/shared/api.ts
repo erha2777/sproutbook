@@ -170,8 +170,8 @@ export interface SproutbookApi {
     /** 到期提醒 / 托盘 / 开机自启 的设置 */
     reminderPrefs(): Promise<ReminderPrefs>
     setReminderPrefs(patch: Partial<ReminderPrefs>): Promise<ReminderPrefs>
-    /** 立刻弹一条测试通知（验证系统通知能不能出来） */
-    testReminder(): Promise<boolean>
+    /** 立刻弹一条测试通知：sent=已发送 / dev=开发预览不弹 / unsupported=系统不支持 */
+    testReminder(): Promise<{ result: 'sent' | 'dev' | 'unsupported'; count: number }>
     /** 主进程让界面跳到某一页（点通知时用），返回取消订阅的函数 */
     onNavigate(cb: (target: 'today') => void): () => void
     /** 退出应用（首页的「退出」按钮） */

@@ -30,7 +30,14 @@ let timer: NodeJS.Timeout | null = null
 let firstTimer: NodeJS.Timeout | null = null
 let icon: NativeImage | null = null
 
-/** 弹一条通知；点它就把窗口叫出来并跳到「今日」 */
+/**
+ * 弹一条通知；点它就把窗口叫出来并跳到「今日」。
+ *
+ * **开发预览里不弹**：未打包时 Windows 没有注册 AppUserModelID / 开始菜单快捷方式，
+ * 点击通知会去启动一个"裸的 electron.exe"（没有 app 路径）—— 用户看到的是一张
+ * Electron 欢迎页，而不是 Sproutbook。打包版有正常的 exe 与快捷方式，点击会走
+ * 单实例逻辑把已有窗口提到前台。
+ */
 export function showPendingNotification(db: Db, options: { onOpen: () => void; force?: boolean }): boolean {
   const summary = summarizePending(db)
   if (!options.force && summary.total === 0) return false
@@ -38,6 +45,10 @@ export function showPendingNotification(db: Db, options: { onOpen: () => void; f
     ? { title: '提醒测试', body: '系统通知是通的。到日子会在这里提醒你今天该做什么。' }
     : buildReminderText(summary)
 
+  if (!app.isPackaged) {
+    console.log('[reminders] 开发预览不弹系统通知（打包版才有）：', text.title, text.body.replace(/\n/g, ' '))
+    return false
+  }
   if (!Notification.isSupported()) return false
   const note = new Notification({
     title: text.title,
@@ -75,11 +86,16 @@ export function startReminderLoop(options: {
   icon = options.icon
   stopReminderLoop()
 
-  // Windows 上不设这个，通知会显示成 "electron.app.Electron"
-  try {
-    app.setAppUserModelId('com.sproutbook.app')
-  } catch {
-    // 非 Windows 或者打包信息缺失时忽略
+  /*
+   * Windows 上不设这个，通知会显示成 "electron.app.Electron"。
+   * 只在打包版设置：未打包时设了反而对不上系统里注册的那份 exe。
+   */
+  if (app.isPackaged) {
+    try {
+      app.setAppUserModelId('com.sproutbook.app')
+    } catch {
+      // 非 Windows 或者打包信息缺失时忽略
+    }
   }
 
   const tick = (): void => {

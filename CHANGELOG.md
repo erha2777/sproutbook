@@ -2,6 +2,38 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.70.1] - 2026-10-27
+
+### 修：点通知弹出 Electron 欢迎页
+
+用户截图：点通知弹出的是一张 "Electron v41.10.7 … To run a local app…" 的空白页。
+
+#### 原因
+
+那个通知是**开发预览**（未打包的 electron.exe）弹的。未打包时系统里没有注册
+AppUserModelID / 开始菜单快捷方式，Windows 点击通知时只能去启动 `electron.exe` ——
+而且不带 app 路径，于是弹出 Electron 自己的欢迎页。
+
+#### 改法
+
+- **开发预览不再弹系统通知**（只写一行日志），避免产生这种点不动的通知
+- `app.setAppUserModelId` 只在打包版设置（未打包时设了反而对不上系统里的 exe）
+- **打包版启动时确保/更新开始菜单快捷方式**（带 AppUserModelID）：
+  免安装的 win-unpacked 没有安装器帮忙建，通知点击需要它来找到"该唤起哪个 exe"
+- 点通知 → 启动 `Sproutbook.exe` → 单实例逻辑 → 把已有窗口提到前台，
+  并顺便跳到「今日」（`second-instance` 里补发 `app:navigate`）
+- 设置里的「发一条测试通知」返回三态：已发送 / 开发预览不弹 / 系统不支持，提示更准确
+
+#### 实测（打包版）
+
+```
+开始菜单快捷方式 {"ok":true,"path":"…\Start Menu\Programs\Sproutbook.lnk"}
+提醒 {"enabled":true,"time":"09:00"}
+settings.remind.last = "2026-10-27"        # 通知弹出来了
+收到第二个实例的启动请求，已尝试把已有窗口带到前台   # 模拟点通知：窗口被提到前台
+```
+
+自检 1012 项不变。
 ## [1.70.0] - 2026-10-27
 
 ### 到期提醒：到日子会主动告诉你

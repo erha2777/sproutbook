@@ -85,12 +85,18 @@ export function ReminderSettings(): ReactNode {
           onClick={() => {
             void window.api.app
               .testReminder()
-              .then((ok) =>
-                toast.push(
-                  ok ? '已发送测试通知 —— 没看到的话去系统通知中心看看是否被拦截' : '系统不支持通知',
-                  ok ? 'success' : 'error'
-                )
-              )
+              .then((r) => {
+                if (r.result === 'sent') {
+                  toast.push(
+                    `已发送测试通知（今天 ${r.count} 件待办）—— 没看到就去系统通知中心看看是否被拦截`,
+                    'success'
+                  )
+                } else if (r.result === 'dev') {
+                  toast.push('开发预览里不弹系统通知；打包版（桌面快捷方式启动）才有', 'error')
+                } else {
+                  toast.push('系统不支持通知', 'error')
+                }
+              })
               .catch((error) => toast.push(error instanceof Error ? error.message : '发送失败', 'error'))
           }}
         >

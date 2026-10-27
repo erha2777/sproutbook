@@ -13,7 +13,7 @@ import { getCustomMusicDir, listMusic, musicDirs, musicUploadDir, setCustomMusic
 import { logStartup } from '../startupLog'
 import { buildCarePlanHtml } from '../../core/carePlanHtml'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
-import { readPrefs } from '../services/reminders'
+import { readPrefs, summarizePending } from '../services/reminders'
 import { refreshTrayMenu, setTrayVisible } from '../shell/tray'
 import { showPendingNotification } from '../shell/reminders'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
@@ -900,6 +900,14 @@ function registerAppIpc(): void {
    */
   handle('app:testReminder', () => {
     const window = BrowserWindow.getAllWindows()[0] ?? null
+    if (!app.isPackaged) {
+      /*
+       * 开发预览里不发系统通知：未打包的 electron 没有注册通知身份，
+       * 点通知会拉起一个"裸 electron"欢迎页（用户截图就是这个）。
+       */
+      return { result: 'dev' as const, count: 0 }
+    }
+    const count = summarizePending(getDb()).total
     const shown = showPendingNotification(getDb(), {
       force: true,
       onOpen: () => {
@@ -907,11 +915,10 @@ function registerAppIpc(): void {
         window?.focus()
       }
     })
-    if (shown) {
-      // 测试成功后清掉"今天已提醒"的标记，免得晚上的正常提醒被吞掉
-      setSetting(getDb(), 'remind.last', '')
-    }
-    return shown
+    if (!shown) return { result: 'unsupported' as const, count }
+    // 测试成功后清掉"今天已提醒"的标记，免得晚上的正常提醒被吞掉
+    setSetting(getDb(), 'remind.last', '')
+    return { result: 'sent' as const, count }
   })
 
   handle('app:quit', () => {
