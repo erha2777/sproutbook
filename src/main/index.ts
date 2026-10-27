@@ -330,6 +330,17 @@ function ensureStartMenuShortcut(): void {
   }
 }
 
+/**
+ * 这次启动是不是"点通知"触发的。
+ *
+ * Windows 的 toast 点击会用 COM 激活器启动 exe，参数是 `-Embedding`
+ * （启动日志里能看到 argv 只有这一项）。这种启动应该直接落到「今日」，
+ * 而不是先给用户看首页 —— 他点通知就是想看今天该做什么。
+ */
+const launchedByNotification = process.argv.some(
+  (arg) => arg.toLowerCase() === '-embedding' || arg.toLowerCase() === '-toastactivated'
+)
+
 function createWindow(): void {
   const windowIcon = loadWindowIcon()
   // 图标读没读到必须能在启动日志里查（「图标变默认」没法靠猜）
@@ -424,6 +435,19 @@ function createWindow(): void {
    * 关闭窗口：开着托盘就只隐藏，应用继续在托盘里待命（提醒才可能按时弹出来）。
    * 从首页「退出」、托盘菜单「退出」走的都是 app.quit()，那时 isQuitting 已经为 true。
    */
+  /*
+   * 点通知冷启动：窗口加载完成后再通知渲染层跳「今日」。
+   * 立刻发会丢 —— React 的 useEffect 订阅还没挂上，这里留 1.2 秒。
+   */
+  if (launchedByNotification) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        mainWindow?.webContents.send('app:navigate', 'today')
+        logStartup('由通知激活，已请求跳转今日')
+      }, 1200)
+    })
+  }
+
   mainWindow.on('close', (event) => {
     if (isQuitting) return
     /*
