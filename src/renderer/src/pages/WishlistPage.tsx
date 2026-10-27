@@ -87,9 +87,9 @@ export function WishlistPage(): ReactNode {
         return
       }
       const saved = await window.api.wishlist.save(input)
-      setSavedId(saved.id)
-      setDraft({ ...draft, id: saved.id })
       await load()
+      // 存完就关：用户点「保存」的意思就是"这条好了"
+      setDraft(null)
       toast.push(`已保存「${saved.name}」`, 'success')
     } catch (error) {
       toast.push(error instanceof Error ? error.message : '保存失败', 'error')
@@ -190,7 +190,7 @@ export function WishlistPage(): ReactNode {
           onClose={() => setDraft(null)}
           footer={
             <>
-              <span className="small muted">图片可以等保存后再加（要先有记录才能挂图）</span>
+              <span className="small muted">保存后直接关闭；想加图片，再点这条的「编辑」</span>
               <span className="spacer" />
               <Button onClick={() => setDraft(null)}>取消</Button>
               <Button variant="primary" onClick={() => void save()} disabled={saving}>
@@ -255,7 +255,7 @@ export function WishlistPage(): ReactNode {
                 searchHint={draft.name}
               />
             ) : (
-              <Notice tone="info">先点「保存」，记录建好之后就能加图片了。</Notice>
+              <Notice tone="info">新建的记录保存后会关闭弹窗；再点「编辑」就能加图片。</Notice>
             )}
           </div>
         </Modal>
