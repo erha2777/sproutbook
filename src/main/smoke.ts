@@ -55,6 +55,7 @@ import {
   readNumber,
   sizeScaleFor
 } from '../core/growth'
+import { weatherMattersFor } from '../core/weather'
 import type { GrowthStage } from '../core/growth'
 import { adviseToday, WEATHER_KIND_ICONS, WEATHER_KIND_LABELS, qweatherIconToKind, wmoToKind, assessWeatherRisks, dedupeByKindAndDay, effectiveColdThreshold, severityOf, suggestTask, summarizeRisks, unjudgeable } from '../core/weather'
 import type { DailyTemp, WeatherRiskInput } from '../core/weather'
@@ -785,6 +786,13 @@ export async function runSmoke(outFile: string): Promise<number> {
       const msgs = buildCareGuideMessages('（档案）', null, 2)
       check('指南消息里说明照片数量', msgs.user.includes('2 张'))
       check('照片与档案不一致时以照片为准', msgs.user.includes('以照片为准'))
+    }
+
+    /* 天气预警只关心还活着的植株 */
+    {
+      check('枯死的不再参与天气预警', !weatherMattersFor('dead'))
+      check('送人的也不参与', !weatherMattersFor('gifted'))
+      check('生长期的照常判断', weatherMattersFor('growing') && weatherMattersFor('dormant'))
     }
 
     /* 规则库只做提示：判断「这条规则覆盖本月吗」 */

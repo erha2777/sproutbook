@@ -35,6 +35,7 @@ import { listSpecies } from '../db/repo/species'
 import {
   assessWeatherRisks,
   summarizeRisks,
+  weatherMattersFor,
   unjudgeable
 } from '../../core/weather'
 import type { DailyTemp, HourlyWeather, WeatherRisk, WeatherRiskInput } from '../../core/weather'
@@ -245,7 +246,8 @@ export async function assessPlantsWeather(
 
   const config = readWeatherConfig(db, qweatherKey)
 
-  const plants = listPlants(db, { limit: 1000 }).items.filter((p) => p.status !== 'gifted')
+  // 送人的、枯死的都不再参与天气预警（见 core/weather 的 weatherMattersFor）
+  const plants = listPlants(db, { limit: 1000 }).items.filter((p) => weatherMattersFor(p.status))
   const environments = listEnvironments(db)
   const envById = new Map(environments.map((e) => [e.id, e]))
   const speciesById = new Map(listSpecies(db, { limit: 1000 }).items.map((s) => [s.id, s]))

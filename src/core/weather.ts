@@ -10,6 +10,8 @@
  * 这和养护规则里「没标记阶段就不生成阶段任务」是同一个立场。
  */
 
+import type { PlantStatus } from './types'
+
 export type WeatherRiskKind = 'frost' | 'heat'
 
 /** 预报里的一天。只留判断需要的两个温度。 */
@@ -329,6 +331,16 @@ function fmt(temp: number): string {
  * 城市尺度的网格数据和实际院子可能差几度（热岛、地形、朝向都不在内）。
  * 把不确定的东西说成确定的，比不说还糟。
  */
+/**
+ * 这株还要不要跟着看天气。
+ *
+ * 送人的（gifted）已经不在你这儿；枯死的（dead）再怎么防寒防暑也没意义 ——
+ * 它们还会挤进「未来天气」和「没填耐寒温度」的名单里，看着像系统没记住它已经死了。
+ */
+export function weatherMattersFor(status: PlantStatus): boolean {
+  return status !== 'gifted' && status !== 'dead'
+}
+
 export function assessWeatherRisks(
   plants: WeatherRiskInput[],
   forecast: DailyTemp[],
