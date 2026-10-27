@@ -12,7 +12,13 @@ import { ImageSearchModal } from './ImageSearchModal'
 import { ImageViewer } from './ImageViewer'
 
 export interface ImageStripProps {
-  owner: { plantId?: number; speciesId?: number; environmentId?: number; wishlistId?: number }
+  owner: {
+    plantId?: number
+    speciesId?: number
+    environmentId?: number
+    materialId?: number
+    wishlistId?: number
+  }
   disabled?: boolean
   /** 删除后回调，便于外层刷新封面 */
   onChanged?: () => void
@@ -69,10 +75,23 @@ export function ImageStrip({
     }
   }, [speciesId])
 
-  const ownerKey = [owner.plantId ?? "", owner.speciesId ?? "", owner.environmentId ?? ""].join(":")
+  /*
+   * owner 判断只写一处：以后再加新的归属（物品、种草清单…）只要往这里加一个字段，
+   * 不会再出现"已经保存了却提示先保存"这种事。
+   */
+  const ownerKey = [
+    owner.plantId ?? '',
+    owner.speciesId ?? '',
+    owner.environmentId ?? '',
+    owner.materialId ?? '',
+    owner.wishlistId ?? ''
+  ].join(':')
+  const hasOwner = Boolean(
+    owner.plantId || owner.speciesId || owner.environmentId || owner.materialId || owner.wishlistId
+  )
 
   const load = useCallback(async () => {
-    if (!owner.plantId && !owner.speciesId && !owner.environmentId) {
+    if (!hasOwner) {
       setImages([])
       return
     }
@@ -91,7 +110,7 @@ export function ImageStrip({
   }, [load])
 
   const pick = async (): Promise<void> => {
-    if (!owner.plantId && !owner.speciesId) {
+    if (!hasOwner) {
       toast.push('请先保存记录，再添加图片', 'error')
       return
     }

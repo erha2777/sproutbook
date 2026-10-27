@@ -2,6 +2,21 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.69.1] - 2026-10-27
+
+### 修：种草记录已经保存了，加图还是提示「请先保存」
+
+用户截图：编辑一条已保存的种草记录，点「添加图片」弹「请先保存记录，再添加图片」。
+
+`ImageStrip` 的归属判断写死了三种：`plantId / speciesId / environmentId`。
+物品（`materialId`，上一版加的）和种草清单（`wishlistId`，这版加的）都不在里面，
+于是 owner 明明有值，守卫仍然认为"还没保存"。
+
+- 判断收成一处：`hasOwner` 覆盖 plant / species / environment / material / wishlist 五种
+- `ownerKey` 同步补上 materialId / wishlistId（切换归属时才会重新加载图片）
+- owner 的类型签名也补上 `materialId`（之前只有内部调用，类型没暴露出来）
+
+自检 1001 项不变（纯前端守卫）。
 ## [1.69.0] - 2026-10-27
 
 ### 新功能：种草清单
