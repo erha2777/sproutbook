@@ -12,6 +12,7 @@ import type { AiSettings, AppInfo, SandboxStatus } from '@core/types'
 import type { AppPaths, BackupInfo, WeatherConfigSnapshot } from '@shared/api'
 import { formatBytes, formatDateTime } from '../lib/util'
 import { MediaSettings } from '../components/MediaSettings'
+import { ReminderSettings } from '../components/ReminderSettings'
 import { CareGuideTemplates } from '../components/CareGuideTemplates'
 import { Badge, Button, EmptyState, Field, Notice, Panel, SectionTitle, SelectInput, Sign, Spinner, TextInput, useToast } from '../components/ui'
 import { EnvironmentManager } from '../components/EnvironmentManager'
@@ -340,6 +341,11 @@ export function SettingsPage({ themeBackdrop = null }: { themeBackdrop?: string 
       <Panel>
         <SectionTitle>全年养护指南模板</SectionTitle>
         <CareGuideTemplates />
+      </Panel>
+
+      <Panel>
+        <SectionTitle right={<span className="small muted">到日子提醒你做该做的事</span>}>提醒与启动</SectionTitle>
+        <ReminderSettings />
       </Panel>
 
       <Panel>

@@ -14,6 +14,16 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname, join, resolve } from 'node:path'
 import { closeDatabase, dataDir, dbFilePath, getDb, getLastReport, imagesDir, initDatabase } from './db'
 import { getSetting } from './db/repo/misc'
+import {
+  getTrayIcon,
+  initTray,
+  isTrayVisible,
+  refreshTrayMenu,
+  rememberTrayIcon,
+  setTrayVisible
+} from './shell/tray'
+import { startReminderLoop } from './shell/reminders'
+import { readPrefs, summarizePending } from './services/reminders'
 import { setCustomMusicDir } from './services/music'
 import { registerIpc } from './ipc'
 import { handleImageProtocol, registerImageScheme } from './services/images'
@@ -265,8 +275,37 @@ function loadWindowIcon(): Electron.NativeImage | null {
   return null
 }
 
+/**
+ * 真的在退出吗。
+ *
+ * 托盘常驻时，点窗口的 ✕ 只是隐藏到托盘；只有走「退出」（首页按钮 / 托盘菜单 /
+ * 系统注销）才应该真的关掉窗口 —— 否则窗口关不掉，进程也退不出去。
+ */
+let isQuitting = false
+
+/** 托盘菜单里的待办数：和界面角标同一口径 */
+function pendingForTray(): number {
+  try {
+    return summarizePending(getDb()).total
+  } catch {
+    return 0
+  }
+}
+
+function openFromTray(): void {
+  if (!mainWindow) {
+    createWindow()
+    return
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+  refreshTrayMenu()
+}
+
 function createWindow(): void {
   const windowIcon = loadWindowIcon()
+  rememberTrayIcon(windowIcon)
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 880,
@@ -352,6 +391,27 @@ function createWindow(): void {
   })
 
   // 外部链接一律交给系统浏览器，绝不在应用内打开
+  /*
+   * 关闭窗口：开着托盘就只隐藏，应用继续在托盘里待命（提醒才可能按时弹出来）。
+   * 从首页「退出」、托盘菜单「退出」走的都是 app.quit()，那时 isQuitting 已经为 true。
+   */
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return
+    /*
+     * 只有**托盘真的建起来了**才允许隐藏 —— 否则窗口没了、托盘也没有，
+     * 用户既看不到界面也退不出去，只能去任务管理器杀进程。
+     */
+    if (!isTrayVisible()) return
+    try {
+      if (readPrefs((key, fallback) => getSetting(getDb(), key, fallback)).tray) {
+        event.preventDefault()
+        mainWindow?.hide()
+      }
+    } catch {
+      // 读设置失败就按普通关闭处理，别把人卡在隐藏窗口里
+    }
+  })
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       void shell.openExternal(url)
@@ -613,6 +673,39 @@ handleMusicProtocol()
     if (!isDev) Menu.setApplicationMenu(null)
 
     createWindow()
+
+    /*
+     * 托盘 + 提醒 + 开机自启。
+     *
+     * 放这里（窗口创建之后）：托盘菜单要读待办数，提醒要弹通知，
+     * 两者都依赖数据库已经打开、窗口已经存在。
+     */
+    try {
+      const prefs = readPrefs((key, fallback) => getSetting(getDb(), key, fallback))
+      initTray({ icon: getTrayIcon(), onOpen: openFromTray, getPending: pendingForTray })
+      setTrayVisible(prefs.tray)
+      // 托盘建没建起来必须能查：建失败时"关窗只是隐藏"会让窗口消失且没有入口
+      logStartup('托盘', {
+        wanted: prefs.tray,
+        visible: isTrayVisible(),
+        hasIcon: Boolean(getTrayIcon())
+      })
+      logStartup('提醒', { enabled: prefs.enabled, time: prefs.time })
+      // 设置里改了自启，重启后这里再对齐一次（系统设置被外部改过也能纠正）
+      app.setLoginItemSettings({ openAtLogin: prefs.autoLaunch })
+      startReminderLoop({
+        db: getDb(),
+        icon: getTrayIcon(),
+        onOpen: () => {
+          openFromTray()
+          // 点通知 = 直接去「今日」
+          mainWindow?.webContents.send('app:navigate', 'today')
+        },
+        onChecked: refreshTrayMenu
+      })
+    } catch (error) {
+      logStartup('托盘 / 提醒初始化失败', error)
+    }
   } catch (error) {
     logStartup('界面初始化失败', error)
     const logPath = startupLogPath()
@@ -694,7 +787,12 @@ handleMusicProtocol()
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  // 托盘常驻时不退出：隐藏到托盘才是用户点 ✕ 的预期
+  if (process.platform !== 'darwin' && !isTrayVisible()) app.quit()
+})
+
+app.on('before-quit', () => {
+  isQuitting = true
 })
 
 let cleanedUp = false

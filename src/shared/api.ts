@@ -103,6 +103,18 @@ export interface SavePlantResponse {
 }
 
 /** 图片的归属：四种 owner 之一（植株 / 物种 / 养护位置 / 物品） */
+/** 到期提醒 / 托盘 / 开机自启 */
+export interface ReminderPrefs {
+  /** 每天提醒开不开 */
+  enabled: boolean
+  /** 提醒时间 HH:mm */
+  time: string
+  /** 关闭窗口时留在托盘（而不是退出） */
+  tray: boolean
+  /** 开机自启 */
+  autoLaunch: boolean
+}
+
 export interface ImageOwner {
   plantId?: number
   speciesId?: number
@@ -155,6 +167,13 @@ export interface SproutbookApi {
     openMediaDir(kind: 'music' | 'backgrounds' | 'root'): Promise<boolean>
     /** 用系统浏览器打开一个链接（种草清单的「打开链接」） */
     openExternal(url: string): Promise<boolean>
+    /** 到期提醒 / 托盘 / 开机自启 的设置 */
+    reminderPrefs(): Promise<ReminderPrefs>
+    setReminderPrefs(patch: Partial<ReminderPrefs>): Promise<ReminderPrefs>
+    /** 立刻弹一条测试通知（验证系统通知能不能出来） */
+    testReminder(): Promise<boolean>
+    /** 主进程让界面跳到某一页（点通知时用），返回取消订阅的函数 */
+    onNavigate(cb: (target: 'today') => void): () => void
     /** 退出应用（首页的「退出」按钮） */
     quit(): Promise<boolean>
     /** 私有字体：<userData>/fonts 里放了字体就返回 data URL（不打包进仓库） */

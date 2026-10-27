@@ -37,6 +37,14 @@ const api: SproutbookApi = {
     openImagesDir: () => call('app:openImagesDir'),
     openMediaDir: (kind) => call('app:openMediaDir', kind),
     openExternal: (url) => call('app:openExternal', url),
+    reminderPrefs: () => call('app:reminderPrefs'),
+    setReminderPrefs: (patch) => call('app:setReminderPrefs', patch),
+    testReminder: () => call('app:testReminder'),
+    onNavigate: (cb) => {
+      const handler = (_event: unknown, target: 'today'): void => cb(target)
+      ipcRenderer.on('app:navigate', handler)
+      return () => ipcRenderer.removeListener('app:navigate', handler)
+    },
     quit: () => call('app:quit'),
     fonts: () => call('app:fonts'),
     textures: () => call('app:textures'),

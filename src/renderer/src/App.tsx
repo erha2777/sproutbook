@@ -162,6 +162,16 @@ function Shell(): ReactNode {
     }
   }, [])
 
+  /*
+   * 点系统通知 → 直接去「今日」。
+   * 通知是主进程发的，这里只负责接住跳转意图；页面不存在时也不该崩。
+   */
+  useEffect(() => {
+    return window.api.app.onNavigate((target) => {
+      if (target === 'today') setRoute({ name: 'care', tab: 'today' })
+    })
+  }, [])
+
   useEffect(() => {
     void (async () => {
       try {

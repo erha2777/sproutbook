@@ -56,6 +56,7 @@ import {
   sizeScaleFor
 } from '../core/growth'
 import { weatherMattersFor } from '../core/weather'
+import { buildReminderText, shouldRemind } from './services/reminders'
 import type { GrowthStage } from '../core/growth'
 import { adviseToday, WEATHER_KIND_ICONS, WEATHER_KIND_LABELS, qweatherIconToKind, wmoToKind, assessWeatherRisks, dedupeByKindAndDay, effectiveColdThreshold, severityOf, suggestTask, summarizeRisks, unjudgeable } from '../core/weather'
 import type { DailyTemp, WeatherRiskInput } from '../core/weather'
@@ -786,6 +787,24 @@ export async function runSmoke(outFile: string): Promise<number> {
       const msgs = buildCareGuideMessages('（档案）', null, 2)
       check('指南消息里说明照片数量', msgs.user.includes('2 张'))
       check('照片与档案不一致时以照片为准', msgs.user.includes('以照片为准'))
+    }
+
+    /* 到期提醒：什么时候弹、弹什么 */
+    {
+      const summary = { overdue: 1, due: 2, total: 3, titles: ['浇水', '修剪', '施肥'] }
+      const at = (h: number, m: number): Date => new Date(2026, 9, 27, h, m)
+      const base = { enabled: true, time: '09:00', last: null as string | null }
+
+      check('关掉提醒就不弹', !shouldRemind({ ...base, enabled: false }, summary, at(10, 0)))
+      check('没有待办不弹', !shouldRemind(base, { overdue: 0, due: 0, total: 0, titles: [] }, at(10, 0)))
+      check('没到点不弹', !shouldRemind(base, summary, at(8, 59)))
+      check('到点就弹', shouldRemind(base, summary, at(9, 0)))
+      check('同一天只弹一次', !shouldRemind({ ...base, last: '2026-10-27' }, summary, at(10, 0)))
+      check('隔天可以再弹', shouldRemind({ ...base, last: '2026-10-26' }, summary, at(10, 0)))
+
+      const text = buildReminderText(summary)
+      check('标题写明总件数与过期数', text.title.includes('3') && text.title.includes('1'), text.title)
+      check('正文列出具体事项', text.body.includes('浇水') && text.body.includes('修剪'), text.body)
     }
 
     /* 天气预警只关心还活着的植株 */

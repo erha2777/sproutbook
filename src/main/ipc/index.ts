@@ -13,6 +13,9 @@ import { getCustomMusicDir, listMusic, musicDirs, musicUploadDir, setCustomMusic
 import { logStartup } from '../startupLog'
 import { buildCarePlanHtml } from '../../core/carePlanHtml'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
+import { readPrefs } from '../services/reminders'
+import { refreshTrayMenu, setTrayVisible } from '../shell/tray'
+import { showPendingNotification } from '../shell/reminders'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
 import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -84,6 +87,7 @@ import {
 } from '../db/repo/care'
 import type { CareLogPatch, CareTaskPatch, CareTaskQuery } from '../../shared/api'
 import type { WishInput } from '../../core/types'
+import type { ReminderPrefs } from '../../shared/api'
 import { formatFieldValue } from '../../core/fieldTypes'
 import { buildAskPlantMessages, buildPlantDossier } from '../../core/plantDossier'
 import { listWishItems, removeWishItem, saveWishItem } from '../db/repo/wishlist'
@@ -863,6 +867,51 @@ function registerAppIpc(): void {
     if (!/^https?:\/\//i.test(target)) throw new Error('只支持 http / https 链接')
     await shell.openExternal(target)
     return true
+  })
+
+  /*
+   * 到期提醒 / 托盘 / 开机自启。
+   *
+   * 存在 settings 表里（和主题、音乐偏好一样），不额外建表：
+   * 这几项都是"整个应用一份"的开关。
+   */
+  handle('app:reminderPrefs', () => readPrefs((key, fallback) => getSetting(getDb(), key, fallback)))
+
+  handle('app:setReminderPrefs', (patch: Partial<ReminderPrefs>) => {
+    const db = getDb()
+    if (patch.enabled !== undefined) setSetting(db, 'remind.enabled', patch.enabled)
+    if (patch.time !== undefined) setSetting(db, 'remind.time', patch.time)
+    if (patch.tray !== undefined) {
+      setSetting(db, 'tray.enabled', patch.tray)
+      setTrayVisible(patch.tray)
+      refreshTrayMenu()
+    }
+    if (patch.autoLaunch !== undefined) {
+      setSetting(db, 'app.autoLaunch', patch.autoLaunch)
+      app.setLoginItemSettings({ openAtLogin: patch.autoLaunch })
+    }
+    return readPrefs((key, fallback) => getSetting(db, key, fallback))
+  })
+
+  /*
+   * 测试提醒：立刻弹一条，不管有没有待办。
+   * 系统通知在 Windows 上有一堆开关（专注助手、通知权限），没有这个按钮
+   * 用户根本没法确认"到底是没提醒还是被系统拦了"。
+   */
+  handle('app:testReminder', () => {
+    const window = BrowserWindow.getAllWindows()[0] ?? null
+    const shown = showPendingNotification(getDb(), {
+      force: true,
+      onOpen: () => {
+        window?.show()
+        window?.focus()
+      }
+    })
+    if (shown) {
+      // 测试成功后清掉"今天已提醒"的标记，免得晚上的正常提醒被吞掉
+      setSetting(getDb(), 'remind.last', '')
+    }
+    return shown
   })
 
   handle('app:quit', () => {
