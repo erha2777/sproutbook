@@ -139,14 +139,6 @@ function Shell(): ReactNode {
   /** 版本号从主进程读，避免界面写死后与 package.json 脱节 */
   const [appVersion, setAppVersion] = useState<string | null>(null)
 
-  /*
-   * 今日提醒横幅。
-   *
-   * 系统通知的"点击"在免安装版上不可靠（Windows 的 COM 激活经常不回调），
-   * 所以给应用内留一个确定能看到、能点进去的入口：一天最多一次，可手动关掉。
-   */
-  const [reminderBanner, setReminderBanner] = useState<{ total: number } | null>(null)
-
   /** 侧栏角标：已过期 + 该做了的养护任务数 */
   const [carePending, setCarePending] = useState(0)
 
@@ -166,21 +158,10 @@ function Shell(): ReactNode {
       const buckets = pendingBuckets(open, todayIso())
       const total = buckets.overdue.length + buckets.due.length
       setCarePending(total)
-
-      // 横幅：今天还没关过，并且确实有事要做
-      const today = todayIso()
-      const dismissed = window.localStorage.getItem('reminderBanner.dismissed')
-      setReminderBanner(total > 0 && dismissed !== today ? { total } : null)
     } catch {
       // 养护表还没就绪时静默跳过，不因为角标影响启动
     }
   }, [])
-
-  /** 关掉今天的横幅（今天不再出现） */
-  const dismissReminderBanner = (): void => {
-    window.localStorage.setItem('reminderBanner.dismissed', todayIso())
-    setReminderBanner(null)
-  }
 
   /*
    * 点系统通知 → 直接去「今日」。
@@ -470,23 +451,6 @@ function Shell(): ReactNode {
           onSettings={() => setRoute({ name: 'settings' })}
         />
         <MusicButton music={music} soundOn={soundOn} onToggleSound={toggleSound} />
-        {/*
-          首页也要能看到"今天有事要做"：系统通知的点击不可靠，
-          这里给一个一定点得进去的入口（一天一条，可关掉）。
-        */}
-        {reminderBanner ? (
-          <div className="home-reminder">
-            <Notice tone="info">
-              今天还有 <b>{reminderBanner.total}</b> 件养护要做{' '}
-              <Button size="small" onClick={() => setRoute({ name: 'care', tab: 'today' })}>
-                去今日
-              </Button>{' '}
-              <Button size="small" variant="ghost" onClick={dismissReminderBanner}>
-                今天不再提示
-              </Button>
-            </Notice>
-          </div>
-        ) : null}
       </div>
     )
   }
@@ -536,23 +500,6 @@ function Shell(): ReactNode {
             onGoToday={() => setRoute({ name: 'care', tab: 'today' })}
           />
         </div>
-        {/*
-          今日提醒横幅：系统通知的点击在便携版上不可靠，这里给一个一定看得见、
-          一定点得进去的入口。一天一条，可手动关掉。
-        */}
-        {reminderBanner && !(route.name === 'care' && route.tab === 'today') ? (
-          <div style={{ padding: '0 0 2px' }}>
-            <Notice tone="info">
-              今天还有 <b>{reminderBanner.total}</b> 件养护要做{' '}
-              <Button size="small" onClick={() => setRoute({ name: 'care', tab: 'today' })}>
-                去今日看看
-              </Button>{' '}
-              <Button size="small" variant="ghost" onClick={dismissReminderBanner}>
-                今天不再提示
-              </Button>
-            </Notice>
-          </div>
-        ) : null}
         {compatHint ? (
           <div style={{ padding: '0 0 2px' }}>
             <Notice tone="warn">
