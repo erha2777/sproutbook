@@ -2390,6 +2390,8 @@ lobal-sound:active {
 }
 
 .weather-risk-head {
+  flex-wrap: wrap;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2476,6 +2478,8 @@ lobal-sound:active {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 窄窗口 / 长株名时换行，别把整行撑出横向滚动条 */
+  flex-wrap: wrap;
   font-size: 12px;
   line-height: 1.7;
 }
@@ -2519,9 +2523,14 @@ lobal-sound:active {
 }
 
 .weather-day-risk {
-  width: 130px;
-  flex: none;
+  /* 可以缩、可以省略，但不再撑破父级 */
+  flex: 1 1 130px;
+  min-width: 0;
+  max-width: 260px;
   text-align: right;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* ---------------------------------------------------------------------------
@@ -4413,4 +4422,22 @@ html.tex-button .home-gear.sound-ctl:hover {
 .wish-actions {
   margin-top: auto;
   flex-wrap: nowrap;
+}
+
+/* 弹窗正文：任何子项都不该把它顶宽（天气弹窗里有一串株名） */
+.modal-body > * {
+  min-width: 0;
+}
+/* 日期行右侧的风险标签：株名可能很长，超出就省略，不要顶破弹窗 */
+.weather-day-risk {
+  display: flex;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.weather-day-risk .weather-badge {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

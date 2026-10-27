@@ -4,6 +4,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { ChangeEvent, ReactNode } from 'react'
 import { formatMonthSet, normalizeMonths } from '@core/fieldTypes'
 import { PixelIcon } from './PixelIcon'
@@ -554,7 +555,17 @@ export function Modal({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
+  /*
+   * **必须挂到 body**（portal）。
+   *
+   * 面板上有一条 `panel-rise` 进场动画，动画带 `transform`；带 transform 的祖先
+   * 会成为 `position: fixed` 的包含块 —— 于是弹窗不再是"相对窗口居中"，
+   * 而是相对那块面板居中。面板比弹窗窄时，弹窗就溢出到左边界外面被裁掉
+   * （用户截图：「未来天气」弹窗左半边看不见、还多出横向滚动条）。
+   *
+   * 这也是 ImageViewer 之前踩过的同一个坑。
+   */
+  return createPortal(
     <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className={cx('pixel-frame', 'modal', narrow && 'narrow')}>
         <div className="modal-header">
@@ -568,7 +579,8 @@ export function Modal({
         <div className="modal-body">{children}</div>
         {footer ? <div className="modal-footer">{footer}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
