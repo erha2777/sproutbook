@@ -260,9 +260,13 @@ let mainWindow: BrowserWindow | null = null
  * 放在真实文件系统上，路径一定读得到。
  */
 function loadWindowIcon(): Electron.NativeImage | null {
+  /*
+   * Windows 任务栏对 **ico** 的识别最稳；png 也能用，但个别系统上会退回默认图标。
+   * 打包时两个文件都在 exe 同级，这里按 ico → png 的顺序找。
+   */
   const candidates = app.isPackaged
-    ? [join(dirname(app.getPath('exe')), 'icon.png')]
-    : [join(app.getAppPath(), 'build', 'icon.png')]
+    ? [join(dirname(app.getPath('exe')), 'icon.ico'), join(dirname(app.getPath('exe')), 'icon.png')]
+    : [join(app.getAppPath(), 'build', 'icon.ico'), join(app.getAppPath(), 'build', 'icon.png')]
   for (const file of candidates) {
     try {
       const image = nativeImage.createFromPath(file)
@@ -315,7 +319,9 @@ function ensureStartMenuShortcut(): void {
     const ok = shell.writeShortcutLink(link, existsSync(link) ? 'update' : 'create', {
       target: process.execPath,
       description: 'Sproutbook 植物养护管理',
-      appUserModelId: 'com.sproutbook.app'
+      // 显式指向 ico：快捷方式图标不依赖 exe 里的图标组，换图标也不会被缓存卡住
+      icon: join(dirname(process.execPath), 'icon.ico'),
+      iconIndex: 0
     })
     logStartup('开始菜单快捷方式', { path: link, ok })
   } catch (error) {
@@ -326,6 +332,8 @@ function ensureStartMenuShortcut(): void {
 
 function createWindow(): void {
   const windowIcon = loadWindowIcon()
+  // 图标读没读到必须能在启动日志里查（「图标变默认」没法靠猜）
+  logStartup('窗口图标', { loaded: Boolean(windowIcon), exe: app.getPath('exe') })
   rememberTrayIcon(windowIcon)
   mainWindow = new BrowserWindow({
     width: 1360,

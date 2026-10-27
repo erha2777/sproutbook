@@ -87,16 +87,12 @@ export function startReminderLoop(options: {
   stopReminderLoop()
 
   /*
-   * Windows 上不设这个，通知会显示成 "electron.app.Electron"。
-   * 只在打包版设置：未打包时设了反而对不上系统里注册的那份 exe。
+   * **不设自定义 AppUserModelID。**
+   *
+   * 设了以后任务栏会按这个 ID 去找「已安装的应用身份 + 图标」；
+   * 免安装版（win-unpacked）没有对应注册项，于是退回 Electron 的默认原子图标。
+   * 用默认身份时任务栏直接取 exe 的图标 —— 就是我们要的植物图标。
    */
-  if (app.isPackaged) {
-    try {
-      app.setAppUserModelId('com.sproutbook.app')
-    } catch {
-      // 非 Windows 或者打包信息缺失时忽略
-    }
-  }
 
   const tick = (): void => {
     try {

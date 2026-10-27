@@ -2,6 +2,40 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.70.2] - 2026-10-27
+
+### 修：任务栏图标变回 Electron 原子
+
+用户截图：从桌面快捷方式启动后，任务栏图标变成了 Electron 的默认原子。
+
+#### 原因
+
+1.70.1 为了让通知有"身份"，在打包版里设了自定义 `AppUserModelID = com.sproutbook.app`。
+但这是**免安装版**（win-unpacked），系统里没有与之对应的"已安装应用"注册，
+任务栏按 AUMID 找不到图标来源，就退回 Electron 的默认图标。
+
+另一个隐患：`BrowserWindow` 的 icon 原来只找 `icon.png`，而 Windows 任务栏对 **ico** 更稳。
+
+#### 改法
+
+- **不再设置自定义 AppUserModelID**：用默认身份（`electron.app.Sproutbook`），
+  任务栏直接取 exe 的图标 —— 也就是植物图标。快捷方式的 AUMID 由系统自动对齐（已核对一致）
+- 窗口 / 托盘图标改成 **先找 `icon.ico`，再退回 `icon.png`**
+- 开始菜单快捷方式显式写 `icon: <exe 目录>\icon.ico, 0`，不依赖 exe 里的图标组
+- 启动日志新增 `窗口图标 {"loaded":true,...}`，以后"图标不对"可直接查是没读到还是被系统缓存
+
+#### 实测
+
+```
+窗口图标 {"loaded":true,"exe":"…\release\win-unpacked\Sproutbook.exe"}
+开始菜单快捷方式 {"ok":true}
+AUMID = electron.app.Sproutbook    ToastCLSID → Sproutbook.exe
+settings.remind.last 被写成当天   → 通知仍然正常弹出（去掉自定义 AUMID 没有影响提醒）
+```
+
+桌面快捷方式的图标位置也顺手改成显式指向 `icon.ico`（换图后不会被 Windows 图标缓存卡住）。
+
+自检 1012 项不变。
 ## [1.70.1] - 2026-10-27
 
 ### 修：点通知弹出 Electron 欢迎页
