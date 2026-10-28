@@ -181,14 +181,6 @@ export function WishlistPage(): ReactNode {
                       </Button>
                     ) : null}
                     <span className="spacer" />
-                    <Button
-                      size="small"
-                      variant={item.analysis ? 'ghost' : 'primary'}
-                      onClick={() => setAnalyzing(item)}
-                      title="按品类和养护位置评估适不适合种"
-                    >
-                      {item.analysis ? '看分析' : 'AI 分析'}
-                    </Button>
                     <Button size="small" variant="ghost" onClick={() => openEdit(item)}>
                       编辑
                     </Button>
@@ -278,15 +270,52 @@ export function WishlistPage(): ReactNode {
               图片必须挂在**已保存**的记录上（images.wishlist_id 需要真实 id），
               所以新条目先保存再加图；这里如实告诉用户。
             */}
+            {/*
+              分析入口放在编辑里：卡片上只留「编辑 / 删除」，界面更干净。
+              分析需要记录已存在（要按 id 存结果），新建时先提示保存。
+            */}
+            {draft.id ? (
+              (() => {
+                const current = items.find((it) => it.id === draft.id)
+                if (!current) return null
+                return (
+                  <div className="wish-edit-analysis">
+                    <div className="wish-list-title">AI 适配分析</div>
+                    {current.analysis ? (
+                      <div className="row tight" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span className={`wish-score-badge ${scoreTone(current.analysis.score)}`}>
+                          适配 {current.analysis.score}
+                        </span>
+                        <span className="small muted">{current.analysis.verdict}</span>
+                        <span className="spacer" />
+                        <Button size="small" onClick={() => setAnalyzing(current)}>
+                          查看 / 重新分析
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="row tight" style={{ alignItems: 'center' }}>
+                        <span className="small muted">还没做过分析：按品类与养护位置评估适不适合种。</span>
+                        <span className="spacer" />
+                        <Button size="small" variant="primary" onClick={() => setAnalyzing(current)}>
+                          开始分析
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()
+            ) : (
+              <Notice tone="info">先保存这条记录，再回来做 AI 适配分析。</Notice>
+            )}
+
             {savedId !== null ? (
               <ImageStrip
                 owner={{ wishlistId: savedId }}
                 onChanged={() => void load()}
                 searchHint={draft.name}
               />
-            ) : (
-              <Notice tone="info">新建的记录保存后会关闭弹窗；再点「编辑」就能加图片。</Notice>
-            )}
+            ) : null}
+            <span className="small muted">图片可以随时加；保存后会关闭弹窗，再点「编辑」继续。</span>
           </div>
         </Modal>
       ) : null}

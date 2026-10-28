@@ -4547,3 +4547,13 @@ html.tex-button .home-gear.sound-ctl:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 编辑弹窗里的分析入口 */
+.wish-edit-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 9px;
+  background: rgba(255, 255, 255, 0.35);
+  border: 2px dashed rgba(107, 74, 42, 0.45);
+}
