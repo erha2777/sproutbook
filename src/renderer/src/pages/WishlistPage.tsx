@@ -11,8 +11,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { WishInput, WishItem } from '@core/types'
+import { scoreTone } from '@core/wishAnalysis'
 import { imageUrl } from '../lib/util'
 import { ImageStrip } from '../components/ImageStrip'
+import { WishAnalysisModal } from '../components/WishAnalysisModal'
 import { Button, EmptyState, Modal, Notice, Panel, SectionTitle, Spinner, TextArea, TextInput, useToast } from '../components/ui'
 
 interface Draft {
@@ -34,6 +36,8 @@ export function WishlistPage(): ReactNode {
   const [saving, setSaving] = useState(false)
   /** 正在编辑的条目（有了 id 才能挂图片） */
   const [savedId, setSavedId] = useState<number | null>(null)
+  /** 正在做适配分析的那一条 */
+  const [analyzing, setAnalyzing] = useState<WishItem | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -157,7 +161,14 @@ export function WishlistPage(): ReactNode {
                   )}
                 </div>
                 <div className="wish-body">
-                  <div className="wish-name">{item.name}</div>
+                  <div className="wish-name">
+                    {item.name}
+                    {item.analysis ? (
+                      <span className={`wish-score-badge ${scoreTone(item.analysis.score)}`} title={item.analysis.verdict}>
+                        适配 {item.analysis.score}
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="wish-meta small muted">
                     {item.shop ? <span>{item.shop}</span> : null}
                     {item.price !== null ? <span className="wish-price">¥{item.price}</span> : null}
@@ -170,6 +181,14 @@ export function WishlistPage(): ReactNode {
                       </Button>
                     ) : null}
                     <span className="spacer" />
+                    <Button
+                      size="small"
+                      variant={item.analysis ? 'ghost' : 'primary'}
+                      onClick={() => setAnalyzing(item)}
+                      title="按品类和养护位置评估适不适合种"
+                    >
+                      {item.analysis ? '看分析' : 'AI 分析'}
+                    </Button>
                     <Button size="small" variant="ghost" onClick={() => openEdit(item)}>
                       编辑
                     </Button>
@@ -183,6 +202,17 @@ export function WishlistPage(): ReactNode {
           </div>
         )}
       </Panel>
+
+      {analyzing ? (
+        <WishAnalysisModal
+          item={analyzing}
+          onClose={() => setAnalyzing(null)}
+          onSaved={(next) => {
+            setItems((prev) => prev.map((it) => (it.id === next.id ? next : it)))
+            setAnalyzing(next)
+          }}
+        />
+      ) : null}
 
       {draft ? (
         <Modal

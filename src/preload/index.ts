@@ -78,6 +78,7 @@ const api: SproutbookApi = {
     askPlant: (payload) => call('ai:askPlant', payload),
     careGuide: (payload) => call('ai:careGuide', payload),
     plantDossier: (plantId) => call('ai:plantDossier', plantId),
+    wishAnalysis: (payload) => call('ai:wishAnalysis', payload),
     cancel: (requestId) => call('ai:cancel', requestId),
   },
   careGuide: {
@@ -125,7 +126,8 @@ const api: SproutbookApi = {
   wishlist: {
     list: () => call('wishlist:list'),
     save: (input) => call('wishlist:save', input),
-    remove: (id) => call('wishlist:remove', id)
+    remove: (id) => call('wishlist:remove', id),
+    saveAnalysis: (id, analysis) => call('wishlist:saveAnalysis', id, analysis)
   },
   materials: {
     list: (query) => call('materials:list', query),

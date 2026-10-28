@@ -4441,3 +4441,109 @@ html.tex-button .home-gear.sound-ctl:hover {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* ---- 种草：AI 适配分析 ---- */
+.wish-score-badge {
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 3px;
+  color: #fff8e6;
+  vertical-align: middle;
+}
+.wish-score-badge.good { background: #3d7a29; }
+.wish-score-badge.ok { background: #7d8f22; }
+.wish-score-badge.warn { background: #b07b1e; }
+.wish-score-badge.bad { background: #a5422c; }
+
+.wish-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wish-score-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 2px solid var(--wood-outline, #6b4a2a);
+}
+.wish-score {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 96px;
+  text-align: center;
+}
+.wish-score.good { color: #3d7a29; }
+.wish-score.ok { color: #6f7f1f; }
+.wish-score.warn { color: #a4700f; }
+.wish-score.bad { color: #a5422c; }
+.wish-score-unit {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.6;
+}
+.wish-verdict-text {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.wish-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.wish-list-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+.wish-list-title.good { color: #3d7a29; }
+.wish-list-title.bad { color: #a5422c; }
+.wish-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.wish-dim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 2px 0;
+}
+.wish-dim-label {
+  width: 76px;
+  flex: none;
+}
+.wish-dim-bar {
+  width: 140px;
+  height: 8px;
+  flex: none;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.wish-dim-fill {
+  display: block;
+  height: 100%;
+}
+.wish-dim-fill.good { background: #4c8f2e; }
+.wish-dim-fill.ok { background: #8c9c25; }
+.wish-dim-fill.warn { background: #c08a22; }
+.wish-dim-fill.bad { background: #b4503a; }
+.wish-dim-score {
+  width: 26px;
+  flex: none;
+  text-align: right;
+  font-weight: 700;
+}
+.wish-dim-comment {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -33,6 +33,8 @@ import type {
   NewFieldDefinition,
   Plant,
   PlantStatus,
+  WishAnalysis,
+  WishCategory,
   WishInput,
   WishItem,
   PlantWithSpecies,
@@ -293,6 +295,13 @@ export interface SproutbookApi {
      * 生成全年养护指南（按月分节，每条可解析成一条任务）。
      * 只生成、不保存 —— 界面先给用户看和改，确认后由保存植株写字段。
      */
+    /** 种草适配分析：按品类 + 养护位置打分 */
+    wishAnalysis(payload: {
+      requestId: string
+      wishId: number
+      locationId: number | null
+      category: WishCategory
+    }): Promise<{ ok: boolean; analysis?: WishAnalysis; message?: string; model?: string | null }>
     /** 生成指南时喂给模型的档案原文（排查「AI 为什么这么写」用） */
     plantDossier(plantId: number): Promise<string>
     careGuide(payload: { requestId: string; plantId: number }): Promise<{
@@ -392,6 +401,8 @@ export interface SproutbookApi {
     list(): Promise<WishItem[]>
     save(input: WishInput): Promise<WishItem>
     remove(id: number): Promise<boolean>
+    /** 保存一次 AI 适配分析（存回这条记录） */
+    saveAnalysis(id: number, analysis: WishAnalysis): Promise<WishItem>
   }
 
   materials: {

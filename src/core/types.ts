@@ -260,6 +260,35 @@ export type MaterialKind = 'substrate' | 'fertilizer' | 'pesticide' | 'tool' | '
  * 故意和 `Plant` 分开 —— 它没有状态、没有位置，只是"记下来别忘了"。
  * 真买回来了，再照这条建一株真正的植物。
  */
+/** 种草分析的品类：月季有专门维度，其它走通用 */
+export type WishCategory = 'rose' | 'hydrangea' | 'bougainvillea' | 'other'
+
+export interface WishDimScore {
+  key: string
+  label: string
+  /** 1~100 */
+  score: number
+  comment: string
+}
+
+/** 一次 AI 适配分析的完整结果（存进 wishlist.analysis_json） */
+export interface WishAnalysis {
+  /** 总评 1~100 */
+  score: number
+  verdict: string
+  pros: string[]
+  cons: string[]
+  dims: WishDimScore[]
+  tips: string[]
+  category: WishCategory
+  /** 分析时选的养护位置（名字 + 当时的条件快照） */
+  locationName: string | null
+  locationSnapshot: string
+  /** ISO 时间 */
+  at: string
+  model: string | null
+}
+
 export interface WishItem {
   id: number
   name: string
@@ -274,6 +303,8 @@ export interface WishItem {
   /** 封面图（第一张），没有就是 null */
   coverImageId?: number | null
   coverThumb?: string | null
+  /** 最近一次 AI 适配分析（没有就是 null） */
+  analysis?: WishAnalysis | null
   sortOrder: number
   createdAt: string
 }

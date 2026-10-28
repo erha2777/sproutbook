@@ -621,6 +621,12 @@ CREATE INDEX idx_images_environment ON images(environment_id, sort_order);
  * 和 plants 分开存：这些还不是"我的植物"，没有养护状态、也不该出现在花园里；
  * 但字段形状跟"买回来"要能对上（名字 / 店铺 / 价格 / 链接 / 简介 + 一张图）。
  */
+/** 种草记录的 AI 适配分析结果（JSON 整存，读取时解析） */
+const V27_WISH_ANALYSIS = /* sql */ `
+ALTER TABLE wishlist ADD COLUMN analysis_json TEXT;
+ALTER TABLE wishlist ADD COLUMN analysis_at TEXT;
+`
+
 const V26_WISHLIST = /* sql */ `
 CREATE TABLE wishlist (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -664,7 +670,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 23, name: 'plant_category', sql: V23_PLANT_CATEGORY },
   { version: 24, name: 'plant_status_changed_at', sql: V24_PLANT_STATUS_CHANGED },
   { version: 25, name: 'material_image', sql: V25_MATERIAL_IMAGE },
-  { version: 26, name: 'wishlist', sql: V26_WISHLIST }
+  { version: 26, name: 'wishlist', sql: V26_WISHLIST },
+  { version: 27, name: 'wish_analysis', sql: V27_WISH_ANALYSIS }
 ]
 
 /** 加列 + 搬盆径的值。两件事合在一个迁移里，因为它们属于同一次结构变更。 */

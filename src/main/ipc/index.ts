@@ -87,11 +87,16 @@ import {
   updateCareTask
 } from '../db/repo/care'
 import type { CareLogPatch, CareTaskPatch, CareTaskQuery } from '../../shared/api'
-import type { WishInput } from '../../core/types'
+import type { WishAnalysis, WishCategory, WishInput } from '../../core/types'
+import {
+  buildWishAnalysisMessages,
+  describeLocation,
+  parseWishAnalysis
+} from '../../core/wishAnalysis'
 import type { ReminderPrefs } from '../../shared/api'
 import { formatFieldValue } from '../../core/fieldTypes'
 import { buildAskPlantMessages, buildPlantDossier } from '../../core/plantDossier'
-import { listWishItems, removeWishItem, saveWishItem } from '../db/repo/wishlist'
+import { getWishItem, listWishItems, removeWishItem, saveWishAnalysis, saveWishItem } from '../db/repo/wishlist'
 import {
   buildCareGuideMessages,
   careGuideTaskDrafts,
@@ -1183,6 +1188,10 @@ function registerWishlistIpc(): void {
 
   handle('wishlist:save', (input: WishInput) => saveWishItem(getDb(), input))
 
+  handle('wishlist:saveAnalysis', (id: number, analysis: WishAnalysis) =>
+    saveWishAnalysis(getDb(), id, analysis)
+  )
+
   handle('wishlist:remove', (id: number) => {
     const db = getDb()
     /*
@@ -1799,6 +1808,108 @@ function registerAiIpc(): void {
    * 用户问「AI 怎么还在写盆苗」时，唯一靠谱的排查方式是把档案原样看一眼 ——
    * 光看界面上的字段永远对不上（比如备注里的「15cm 盆」）。
    */
+  /*
+   * 种草适配分析：品类 + 养护位置 → 打分 + 优缺点。
+   *
+   * 品类会改变**评分维度**（月季看抗病/耐性，其它走通用），
+   * 位置决定"这个品种在这里到底行不行"——两者都写进提示词。
+   */
+  handle(
+    'ai:wishAnalysis',
+    async (payload: { requestId: string; wishId: number; locationId: number | null; category: WishCategory }) => {
+      const db = getDb()
+      const settings = readAiSettings(db)
+      const apiKey = getApiKey()
+      if (!apiKey) return { ok: false as const, message: '还没有配置 API Key。到「设置 → AI 配置」填一个就能用。' }
+      const model = (settings.chatModel ?? '').trim()
+      if (!model) return { ok: false as const, message: '还没有配置对话模型。到「设置 → AI 配置」填一个。' }
+
+      const wish = getWishItem(db, payload.wishId)
+      if (!wish) return { ok: false as const, message: '这条种草记录已经不在了。' }
+
+      const env = payload.locationId ? getEnvironment(db, payload.locationId) : null
+      const ctx = {
+        name: wish.name,
+        note: wish.note,
+        shop: wish.shop,
+        price: wish.price,
+        category: payload.category,
+        location: env
+          ? {
+              name: env.name,
+              lightLevel: env.lightLevel,
+              lightHours: env.lightHours,
+              province: env.province,
+              city: env.city,
+              district: env.district,
+              frostProtected: env.frostProtected,
+              canHeat: env.canHeat,
+              notes: env.notes
+            }
+          : null
+      }
+
+      const messages = buildWishAnalysisMessages(ctx)
+      logStartup('种草分析：开始', { wishId: wish.id, category: payload.category, model, hasLocation: Boolean(env) })
+      const controller = new AbortController()
+      runningAi.set(payload.requestId, controller)
+      try {
+        const outcome = await chat({
+          baseUrl: settings.baseUrl,
+          apiKey,
+          model,
+          messages: [
+            { role: 'system', content: messages.system },
+            { role: 'user', content: messages.user }
+          ],
+          // 打分类任务要稳，别发散
+          temperature: 0.2,
+          // 结构化评分不需要重试三轮：超时就如实报错，用户可自己再点一次
+          timeoutMs: Math.max(settings.timeoutMs ?? 60000, 120000),
+          maxRetries: 0,
+          signal: controller.signal
+        })
+        recordAiRun(db, {
+          kind: 'wish-analysis',
+          baseUrl: settings.baseUrl,
+          model: outcome.model || model,
+          promptVersion: 'wish-analysis-1',
+          input: { wishId: wish.id, category: payload.category, locationId: payload.locationId },
+          output: { content: outcome.content },
+          status: outcome.ok ? 'ok' : 'error',
+          error: outcome.error ?? null,
+          usage: outcome.usage,
+          durationMs: outcome.durationMs
+        })
+        logStartup('种草分析：AI 返回', {
+          ok: outcome.ok,
+          durationMs: outcome.durationMs,
+          error: outcome.error ?? null,
+          chars: (outcome.content ?? '').length
+        })
+        if (!outcome.ok) {
+          return { ok: false as const, message: outcome.error ?? 'AI 没有返回内容。' }
+        }
+        const parsed = parseWishAnalysis(outcome.content ?? '', {
+          category: payload.category,
+          locationName: env?.name ?? null,
+          locationSnapshot: describeLocation(ctx.location)
+        })
+        if (!parsed) {
+          return { ok: false as const, message: 'AI 返回的格式不对，没能解析出评分，请再试一次。' }
+        }
+        const analysis: WishAnalysis = {
+          ...parsed,
+          at: new Date().toISOString(),
+          model: outcome.model || model
+        }
+        return { ok: true as const, analysis, model: analysis.model }
+      } finally {
+        runningAi.delete(payload.requestId)
+      }
+    }
+  )
+
   handle('ai:plantDossier', (plantId: number) => {
     const db = getDb()
     const plant = getPlant(db, plantId)

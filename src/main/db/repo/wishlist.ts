@@ -6,7 +6,7 @@
  */
 
 import type { Db } from '../connection'
-import type { WishInput, WishItem } from '../../../core/types'
+import type { WishAnalysis, WishInput, WishItem } from '../../../core/types'
 
 interface WishRow {
   id: number
@@ -19,6 +19,8 @@ interface WishRow {
   created_at: string
   image_id: number | null
   image_thumb: string | null
+  analysis_json: string | null
+  analysis_at: string | null
 }
 
 /** 左连第一张图当封面（和物品列表一个写法：没有图就是 null，不改行数） */
@@ -30,6 +32,18 @@ const SELECT_WISH = `
    AND i.id = (SELECT MIN(id) FROM images WHERE wishlist_id = w.id)
 `
 
+/** 分析结果整存 JSON；读不出来就当没有，不让一条坏数据把整页列表打挂 */
+function parseAnalysis(json: string | null): WishAnalysis | null {
+  if (!json) return null
+  try {
+    const parsed = JSON.parse(json) as WishAnalysis
+    if (!parsed || typeof parsed.score !== 'number' || !Array.isArray(parsed.pros)) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
 function mapWish(row: WishRow): WishItem {
   return {
     id: row.id,
@@ -38,6 +52,7 @@ function mapWish(row: WishRow): WishItem {
     price: row.price,
     url: row.url,
     note: row.note,
+    analysis: parseAnalysis(row.analysis_json),
     coverImageId: row.image_id,
     coverThumb: row.image_thumb,
     sortOrder: row.sort_order,
@@ -94,4 +109,17 @@ export function removeWishItem(db: Db, id: number): boolean {
   // 图片会被外键 ON DELETE CASCADE 带走（文件由 IPC 那边删）
   const r = db.run('DELETE FROM wishlist WHERE id = ?', id)
   return Number(r.changes) > 0
+}
+
+/** 保存一次 AI 适配分析（覆盖旧的） */
+export function saveWishAnalysis(db: Db, id: number, analysis: WishAnalysis): WishItem {
+  db.run(
+    "UPDATE wishlist SET analysis_json = ?, analysis_at = ?, updated_at = datetime('now','localtime') WHERE id = ?",
+    JSON.stringify(analysis),
+    analysis.at,
+    id
+  )
+  const updated = getWishItem(db, id)
+  if (!updated) throw new Error('这条种草记录已经不在了')
+  return updated
 }

@@ -56,6 +56,12 @@ import {
   sizeScaleFor
 } from '../core/growth'
 import { weatherMattersFor } from '../core/weather'
+import {
+  buildWishAnalysisMessages,
+  dimsFor,
+  extractJsonObject,
+  parseWishAnalysis
+} from '../core/wishAnalysis'
 import { buildReminderText, shouldRemind } from './services/reminders'
 import type { GrowthStage } from '../core/growth'
 import { adviseToday, WEATHER_KIND_ICONS, WEATHER_KIND_LABELS, qweatherIconToKind, wmoToKind, assessWeatherRisks, dedupeByKindAndDay, effectiveColdThreshold, severityOf, suggestTask, summarizeRisks, unjudgeable } from '../core/weather'
@@ -805,6 +811,64 @@ export async function runSmoke(outFile: string): Promise<number> {
       const text = buildReminderText(summary)
       check('标题写明总件数与过期数', text.title.includes('3') && text.title.includes('1'), text.title)
       check('正文列出具体事项', text.body.includes('浇水') && text.body.includes('修剪'), text.body)
+    }
+
+    /* 种草 AI 适配分析：提示词维度 + 结果解析 */
+    {
+      const rose = buildWishAnalysisMessages({
+        name: '月季 奥利维亚',
+        note: '据说抗病性好',
+        shop: '春色满园',
+        price: 4.07,
+        category: 'rose',
+        location: { name: '后院', lightLevel: 'part_shade', lightHours: 4, province: '湖南', city: '岳阳', district: '湘阴县', frostProtected: false, canHeat: false, notes: null }
+      })
+      check('月季提示词包含抗黑斑/白粉/霜霉', rose.user.includes('black_spot') && rose.user.includes('powdery') && rose.user.includes('downy'))
+      check('月季提示词包含耐雨淋/耐晒/耐阴', rose.user.includes('rain') && rose.user.includes('sun') && rose.user.includes('shade'))
+      check('提示词带上位置条件', rose.user.includes('后院') && rose.user.includes('4 小时'))
+      check('提示词强调分数要拉开', rose.system.includes('禁止大量同分'))
+
+      const other = buildWishAnalysisMessages({
+        name: '龟背竹',
+        note: null,
+        shop: null,
+        price: null,
+        category: 'other',
+        location: null
+      })
+      check('非月季用通用维度', other.user.includes('light') && !other.user.includes('black_spot'))
+
+      check('月季维度 9 项', dimsFor('rose').length === 9, String(dimsFor('rose').length))
+      check('通用维度 6 项', dimsFor('other').length === 6, String(dimsFor('other').length))
+
+      // 解析：容忍围栏 + 缺维度补位 + 越界钳制
+      const wrapped = [
+        '```json',
+        JSON.stringify({
+          score: 120,
+          verdict: '适合半阴，但抗黑斑一般',
+          pros: ['耐阴', '复花勤'],
+          cons: ['黑斑高发'],
+          dims: [
+            { key: 'black_spot', score: 40, comment: '易感' },
+            { key: 'vigor', score: 190, comment: '强' }
+          ],
+          tips: ['梅雨季提前打药']
+        }),
+        '```'
+      ].join('\n')
+      // 注意：围栏行里的反引号不能在模板字符串里裸写，这里用拼接避开
+      const parsed = parseWishAnalysis(wrapped, { category: 'rose', locationName: '后院', locationSnapshot: '后院；半阴' })
+      check('解析成功', parsed !== null)
+      check('总分钳到 100', parsed?.score === 100, String(parsed?.score))
+      check('越界维度钳到 100', parsed?.dims.find((d) => d.key === 'vigor')?.score === 100, String(parsed?.dims.find((d) => d.key === 'vigor')?.score))
+      check('缺的维度补位为 60', parsed?.dims.filter((d) => d.score === 60).length === 7, String(parsed?.dims.filter((d) => d.score === 60).length))
+      check('优点缺点都保留', parsed?.pros.length === 2 && parsed?.cons.length === 1)
+
+      check('没有优缺点判为失败', parseWishAnalysis('{"score":80,"pros":[],"cons":[]}', { category: 'rose', locationName: null, locationSnapshot: '' }) === null)
+      check('不是 JSON 判为失败', parseWishAnalysis('抱歉我不能判断', { category: 'other', locationName: null, locationSnapshot: '' }) === null)
+      check('能从前言里抠出 JSON', extractJsonObject('好的，结果如下：{"a":1} 以上') === '{"a":1}')
+      check('字符串里的花括号不算结束', extractJsonObject('{"note":"}{","b":2}') === '{"note":"}{","b":2}')
     }
 
     /* 天气预警只关心还活着的植株 */
