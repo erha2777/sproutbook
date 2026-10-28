@@ -1,4 +1,4 @@
-﻿import { Component, useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Button, Notice, Panel, ToastProvider, cx, useToast } from './components/ui'
 import { TitleBar } from './components/TitleBar'
@@ -287,6 +287,26 @@ function Shell(): ReactNode {
   }, [route.name])
 
   /*
+   * 启动握手：皮肤与背景都套上之后才告诉主进程"可以显示了"。
+   * 主进程据此决定窗口 show 的时机（见 main/index.ts 的 maybeShow）——
+   * 否则窗口会先闪一下没有皮肤的默认外观，再"跳"成有皮肤的样子。
+   */
+  const [bootTex, setBootTex] = useState(false)
+  const [bootMedia, setBootMedia] = useState(false)
+  const bootSent = useRef(false)
+
+  useEffect(() => {
+    if (!bootTex || !bootMedia || bootSent.current) return
+    bootSent.current = true
+    // 连等两帧：确保刚设的 CSS 变量 / 图片进了这一帧的绘制
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        void window.api.app.rendererReady().catch(() => undefined)
+      })
+    })
+  }, [bootTex, bootMedia])
+
+  /*
    * 私有素材（可选）：<userData>/textures 里有图片就套上。
    * 星露谷 wiki 的图是版权素材，不能随仓库分发 —— 只在本机生效。
    */
@@ -339,6 +359,8 @@ function Shell(): ReactNode {
         }
       } catch {
         // 素材读不到就用画出来的默认外观
+      } finally {
+        setBootTex(true)
       }
     })()
   }, [])
@@ -366,9 +388,16 @@ function Shell(): ReactNode {
   // 之前 Promise.all 一起 reject 时，偏好和列表同时丢掉，背景直接变回默认，看着像"背景没了"。
   useEffect(() => {
     void (async () => {
-      const [list, prefs] = await Promise.allSettled([window.api.app.backdrops(), window.api.app.mediaPrefs()])
-      if (list.status === 'fulfilled') setUploadedBackdrops(list.value)
-      if (prefs.status === 'fulfilled') setBackdropPref(prefs.value.backdrop)
+      try {
+        const [list, prefs] = await Promise.allSettled([
+          window.api.app.backdrops(),
+          window.api.app.mediaPrefs()
+        ])
+        if (list.status === 'fulfilled') setUploadedBackdrops(list.value)
+        if (prefs.status === 'fulfilled') setBackdropPref(prefs.value.backdrop)
+      } finally {
+        setBootMedia(true)
+      }
     })()
   }, [mediaVersion])
 

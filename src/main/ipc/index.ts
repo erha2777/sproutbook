@@ -14,6 +14,7 @@ import { logStartup } from '../startupLog'
 import { buildCarePlanHtml } from '../../core/carePlanHtml'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { readPrefs, summarizePending } from '../services/reminders'
+import { notifyRendererReady } from '../shell/boot'
 import { refreshTrayMenu, setTrayVisible } from '../shell/tray'
 import { showPendingNotification } from '../shell/reminders'
 import { getWeatherKey, setWeatherKey } from '../services/secrets'
@@ -919,6 +920,16 @@ function registerAppIpc(): void {
     // 测试成功后清掉"今天已提醒"的标记，免得晚上的正常提醒被吞掉
     setSetting(getDb(), 'remind.last', '')
     return { result: 'sent' as const, count }
+  })
+
+  /*
+   * 渲染层报告"首屏画好了"。
+   * 窗口的显示时机由它决定（见 main/index.ts 的 showWindow），
+   * 这样启动时不会先露出没有皮肤、没有背景的默认外观。
+   */
+  handle('app:rendererReady', () => {
+    notifyRendererReady()
+    return true
   })
 
   handle('app:quit', () => {

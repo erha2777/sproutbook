@@ -23,6 +23,7 @@ import {
   setTrayVisible
 } from './shell/tray'
 import { startReminderLoop } from './shell/reminders'
+import { onRendererReady, resetRendererReady } from './shell/boot'
 import { readPrefs, summarizePending } from './services/reminders'
 import { setCustomMusicDir } from './services/music'
 import { registerIpc } from './ipc'
@@ -409,7 +410,46 @@ function createWindow(): void {
     logStartup('窗口已显示', reason)
   }
 
-  mainWindow.once('ready-to-show', () => showWindow('ready-to-show 事件'))
+  /*
+   * 显示时机 = **Chromium 画完第一帧** 且 **渲染层把皮肤 / 背景都套上了**。
+   *
+   * 只看 ready-to-show 会闪：那一帧的 React 可能刚挂载，皮肤（CSS 变量 + 图片）、
+   * 背景图、图标都还在异步加载 —— 窗口先露出默认外观，再"跳"成有皮肤的样子。
+   * 渲染层会在画完两帧后调 app:rendererReady（见 App.tsx 的 boot 信号）。
+   */
+  resetRendererReady()
+  let readyToShow = false
+  let rendererReady = false
+  let rendererWaitTimer: NodeJS.Timeout | null = null
+
+  const maybeShow = (): void => {
+    if (readyToShow && rendererReady) showWindow('首屏就绪（皮肤 + 背景已套上）')
+  }
+
+  mainWindow.once('ready-to-show', () => {
+    readyToShow = true
+    readyToShowAt = Date.now()
+    maybeShow()
+    if (!windowShown) {
+      /*
+       * 渲染层的信号可能因为异常没发出来 —— 等 2.5 秒兜底，
+       * 宁可露出一次不完整外观，也不能让窗口一直不出来。
+       */
+      rendererWaitTimer = setTimeout(() => {
+        if (!windowShown) {
+          logStartup('渲染层未在 2.5 秒内报告首屏就绪，先显示窗口')
+          showWindow('首屏信号超时兜底')
+        }
+      }, 2500)
+    }
+  })
+
+  let readyToShowAt = 0
+  onRendererReady(() => {
+    rendererReady = true
+    logStartup('渲染层首屏就绪', readyToShowAt ? { afterReadyToShowMs: Date.now() - readyToShowAt } : {})
+    maybeShow()
+  })
 
   const showFallbackTimer = setTimeout(() => {
     if (!windowShown) {
@@ -426,6 +466,7 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     clearTimeout(showFallbackTimer)
+    if (rendererWaitTimer) clearTimeout(rendererWaitTimer)
     windowShown = false
     mainWindow = null
   })

@@ -37,6 +37,7 @@ const api: SproutbookApi = {
     openImagesDir: () => call('app:openImagesDir'),
     openMediaDir: (kind) => call('app:openMediaDir', kind),
     openExternal: (url) => call('app:openExternal', url),
+    rendererReady: () => call('app:rendererReady'),
     reminderPrefs: () => call('app:reminderPrefs'),
     setReminderPrefs: (patch) => call('app:setReminderPrefs', patch),
     testReminder: () => call('app:testReminder'),
