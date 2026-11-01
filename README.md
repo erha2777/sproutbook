@@ -10,14 +10,15 @@
 |---|---|---|
 | ![我的花园](docs/screenshot-garden.png) | ![物种库](docs/screenshot-species.png) | ![信息模板](docs/screenshot-templates.png) |
 
-| 今日（按植物分组 + 本月规则提醒） | 养护计划（月历 + 时间窗底色） | 种草清单 |
+| 今日（天气 + 本月规则提醒 + 按植物分组） | 养护计划（月历 + 时间窗底色） | 种草清单 |
 |---|---|---|
 | ![今日](docs/screenshot-today.png) | ![养护计划](docs/screenshot-plans.png) | ![种草清单](docs/screenshot-wishlist.png) |
 
-![AI 适配分析](docs/screenshot-analysis.png)
-
-> 以上截图由应用自身的 `--screenshot` 开关生成（见下文），数据来自 `scripts/seed-demo.mjs`，
-> 全部使用**默认外观**（不含任何私有皮肤 / 背景素材），也不含真实用户数据。
+> 截图由应用自身的 `--screenshot` 开关生成。
+> **皮肤 / 背景素材是作者本机的私有素材，不随仓库分发**（`textures/` 在 `.gitignore` 里），
+> 所以直接 clone 下来跑会是默认外观；数据也是作者自己的植株，不是演示库。
+> 想造一份演示数据看界面：`node scripts/seed-demo.mjs .cache/demo`，
+> 再 `electron . --data-dir=.cache/demo`。
 
 > 名称 `Sproutbook` 是**暂定代号**，与任何商业游戏无关。仓库内不含任何第三方游戏素材。
 

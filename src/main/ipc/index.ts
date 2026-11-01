@@ -635,7 +635,13 @@ function registerAppIpc(): void {
         seen.add(file)
         backgrounds.push(url)
       }
-      logStartup('皮肤 theme.json', { dir, slots: Object.keys(slots), slices })
+      logStartup('皮肤 theme.json', {
+        dir,
+        slots: Object.keys(slots),
+        slices,
+        backgrounds: backgrounds.length,
+        icons: Object.keys(icons).length
+      })
       return { slots, slices, backgrounds, icons }
     }
 
