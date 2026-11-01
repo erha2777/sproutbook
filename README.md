@@ -4,13 +4,20 @@
 
 用「物种库 + 我的植株」两层结构管理植物档案，用可编辑的信息模板定义你想记录什么，用 AI 帮你查资料——但 AI 只是**建议**，永远不会绕过你的确认直接写入。
 
-![我的花园](docs/screenshot-garden.png)
+![首页](docs/screenshot-home.png)
 
-| 物种库 | 可编辑信息模板 | 设置与养护位置 |
+| 我的花园 | 物种库 | 可编辑信息模板 |
 |---|---|---|
-| ![物种库](docs/screenshot-species.png) | ![信息模板](docs/screenshot-templates.png) | ![设置](docs/screenshot-settings.png) |
+| ![我的花园](docs/screenshot-garden.png) | ![物种库](docs/screenshot-species.png) | ![信息模板](docs/screenshot-templates.png) |
 
-> 以上截图由应用自身的 `--screenshot` 自检开关生成（见下文），数据来自 `scripts/seed-demo.mjs`。
+| 今日（按植物分组 + 本月规则提醒） | 养护计划（月历 + 时间窗底色） | 种草清单 |
+|---|---|---|
+| ![今日](docs/screenshot-today.png) | ![养护计划](docs/screenshot-plans.png) | ![种草清单](docs/screenshot-wishlist.png) |
+
+![AI 适配分析](docs/screenshot-analysis.png)
+
+> 以上截图由应用自身的 `--screenshot` 开关生成（见下文），数据来自 `scripts/seed-demo.mjs`，
+> 全部使用**默认外观**（不含任何私有皮肤 / 背景素材），也不含真实用户数据。
 
 > 名称 `Sproutbook` 是**暂定代号**，与任何商业游戏无关。仓库内不含任何第三方游戏素材。
 
