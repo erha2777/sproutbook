@@ -16,9 +16,9 @@
 
 > 截图由应用自身的 `--screenshot` 开关生成。
 > **皮肤 / 背景素材是作者本机的私有素材，不随仓库分发**（`textures/` 在 `.gitignore` 里），
-> 所以直接 clone 下来跑会是默认外观；数据也是作者自己的植株，不是演示库。
-> 想造一份演示数据看界面：`node scripts/seed-demo.mjs .cache/demo`，
-> 再 `electron . --data-dir=.cache/demo`。
+> 所以直接 clone 下来跑会是默认外观。
+> 「我的花园」与「今日」两张用的是演示数据（`node scripts/seed-demo.mjs .cache/demo`，
+> 跑起来加 `--user-data-dir=.cache/demo`），其余是作者本机界面，不含私人植株信息。
 
 > 名称 `Sproutbook` 是**暂定代号**，与任何商业游戏无关。仓库内不含任何第三方游戏素材。
 
