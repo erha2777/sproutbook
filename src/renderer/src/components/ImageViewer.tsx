@@ -13,7 +13,9 @@ import type { ReactNode } from 'react'
 import { Button } from './ui'
 
 function fullSrc(image: { path: string }): string {
-  return `plantimg://local/${encodeURIComponent(image.path)}`
+  // 逐段编码：路径里现在是 年-月/归属/文件名，整段编码会把 / 变成 %2F
+  const rel = image.path.split(/[\\/]+/).filter(Boolean).map(encodeURIComponent).join('/')
+  return `plantimg://local/${rel}`
 }
 
 export interface ViewerImage {
@@ -103,6 +105,20 @@ export function ImageViewer({ images, index, onIndex, onClose, title = '照片',
       <div className="image-viewer-foot">
         {current.caption ? <span className="small muted">{current.caption}</span> : null}
         <span className="spacer" />
+        {/*
+         * 找文件用：图片按 年-月/归属 分目录后，有时就是想把它拖出去 / 复制给别人。
+         * 用 showItemInFolder 会直接选中这张图，不用翻了再找。
+         */}
+        <Button
+          onClick={() => {
+            void window.api.app.revealImage(current.path).then((ok) => {
+              if (!ok) window.alert('找不到这张图片的文件（可能已经被移动或删除）')
+            })
+          }}
+          title="在资源管理器里选中这张图"
+        >
+          打开所在文件夹
+        </Button>
         {actions ? actions(current, safeIndex) : null}
         <Button onClick={onClose}>关闭</Button>
       </div>

@@ -133,7 +133,14 @@ import { identifyPlant } from '../services/ai/identify'
 import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } from '../services/ai/client'
 import type { ChatContentPart } from '../services/ai/client'
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
-import { importImage, importImageFromUrl, removeImageFiles, searchWebImages, type ImageGroup } from '../services/images'
+import {
+  importImage,
+  importImageFromUrl,
+  removeImageFiles,
+  resolveImagePath,
+  searchWebImages,
+  type ImageGroup
+} from '../services/images'
 import { imagesRootInfo, moveImagesRoot, organizeImages } from '../services/imageOrganize'
 import { EMPTY_MEDIA_PREFS, MEDIA_KEY, backdropsDir, listBackdrops, readBackdrop, type MediaPrefs } from '../services/media'
 import { normalizeMusicMode } from '../../core/music'
@@ -439,6 +446,20 @@ function registerAppIpc(): void {
 
   handle('app:openDataDir', async () => {
     await shell.openPath(dataDir())
+    return true
+  })
+
+  /*
+   * 在大图里「打开所在文件夹」。
+   * 用 showItemInFolder 而不是 openPath：直接把这张图选中，
+   * 一个文件夹里几十张图时不用再自己找。
+   */
+  handle('app:revealImage', (path: string) => {
+    const target = resolveImagePath(path)
+    const ok = Boolean(target && existsSync(target))
+    logStartup('打开图片所在目录', { path, ok })
+    if (!ok || !target) return false
+    shell.showItemInFolder(target)
     return true
   })
 

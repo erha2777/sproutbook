@@ -165,6 +165,8 @@ export interface SproutbookApi {
     backupNow(): Promise<BackupInfo | null>
     openDataDir(): Promise<boolean>
     openImagesDir(): Promise<boolean>
+    /** 在资源管理器里定位某张图片（选中它所在的文件夹） */
+    revealImage(path: string): Promise<boolean>
     /** 图片存放位置：当前目录 + 是否改过 */
     imagesRoot(): Promise<{ dir: string; defaultValue: string; isCustom: boolean }>
     /** 选一个新目录并把现有图片复制过去（不删旧目录） */

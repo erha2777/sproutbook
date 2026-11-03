@@ -579,8 +579,17 @@ function createWindow(): void {
                    const target = ${JSON.stringify(text)};
                    const deadline = Date.now() + 8000;
                    while (Date.now() < deadline) {
-                     const nodes = Array.from(document.querySelectorAll('button, .pixel-card, .nav-item, .cal-cell'));
-                     const hit = nodes.find((n) => (n.textContent || '').includes(target));
+                     const nodes = Array.from(document.querySelectorAll('button, .pixel-card, .nav-item, .cal-cell, [title]'));
+                     /*
+                      * 除了可见文字，也认 title / aria-label —— 缩略图这类按钮只有
+                      * title="点开看大图"，没有文字，只按 textContent 找永远点不到。
+                      */
+                     const hit = nodes.find((n) => {
+                       if ((n.textContent || '').includes(target)) return true;
+                       const t = n.getAttribute('title') || '';
+                       const a = n.getAttribute('aria-label') || '';
+                       return t.includes(target) || a.includes(target);
+                     });
                      if (hit) {
                        hit.click();
                        return true;
