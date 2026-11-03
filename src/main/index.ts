@@ -689,6 +689,39 @@ app.whenReady().then(async () => {
     logWritability('图片目录', imagesDir())
 
     const result = initDatabase()
+
+    /*
+     * 图片根目录存在设置里（可改到别的盘）。要在任何导入 / 读取之前装上，
+     * 否则会先按默认路径建目录、看起来像"设置没生效"。
+     */
+    const { applyImagesRootSetting, organizeImages } = await import('./services/imageOrganize')
+    const imagesRoot = applyImagesRootSetting(getDb())
+    try {
+      mkdirSync(imagesRoot, { recursive: true })
+    } catch {
+      // 目录建不出来时，后面导入会报错并提示具体原因，这里不拦启动
+    }
+    logStartup('图片目录', { dir: imagesRoot, custom: imagesDir() !== join(app.getPath('userData'), 'images') })
+
+    /*
+     * 老版本的图片是平铺在根目录的，文件名还是 UUID —— 在资源管理器里根本分不清
+     * 哪几张是一起传的。这里每次启动顺手归位（幂等：已经在子目录里的直接跳过，
+     * 只做字符串比路径，很便宜），用户不需要知道"整理"这件事存在。
+     * 设置页仍有手动按钮，用于失败后重试。
+     */
+    try {
+      const organized = organizeImages(getDb())
+      if (organized.moved > 0 || organized.failed.length > 0) {
+        logStartup('图片整理', {
+          moved: organized.moved,
+          missing: organized.missing,
+          failed: organized.failed.length
+        })
+      }
+    } catch (error) {
+      logStartup('图片整理失败', { message: error instanceof Error ? error.message : String(error) })
+    }
+
     if (result.report.applied.length > 0) {
       console.log(
         `[db] 迁移完成：${result.report.from} → ${result.report.to}（${result.report.applied.map((a) => a.name).join(', ')}）`

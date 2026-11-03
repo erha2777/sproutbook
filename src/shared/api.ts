@@ -165,6 +165,14 @@ export interface SproutbookApi {
     backupNow(): Promise<BackupInfo | null>
     openDataDir(): Promise<boolean>
     openImagesDir(): Promise<boolean>
+    /** 图片存放位置：当前目录 + 是否改过 */
+    imagesRoot(): Promise<{ dir: string; defaultValue: string; isCustom: boolean }>
+    /** 选一个新目录并把现有图片复制过去（不删旧目录） */
+    chooseImagesRoot(): Promise<
+      { canceled: true } | { canceled: false; dir: string; copied: boolean; images: number }
+    >
+    /** 把平铺的老图片整理进「年-月 / 归属」子目录（幂等） */
+    organizeImages(): Promise<{ moved: number; already: number; missing: number; failed: string[] }>
     /** 打开音乐 / 背景图 / 素材总目录（不存在会先建） */
     openMediaDir(kind: 'music' | 'backgrounds' | 'root'): Promise<boolean>
     /** 用系统浏览器打开一个链接（种草清单的「打开链接」） */

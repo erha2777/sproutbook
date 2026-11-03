@@ -133,7 +133,8 @@ import { identifyPlant } from '../services/ai/identify'
 import { chat, DEFAULT_BASE_URL, listModels, normalizeBaseUrl, recordAiRun } from '../services/ai/client'
 import type { ChatContentPart } from '../services/ai/client'
 import { clearApiKey, getApiKey, hasApiKey, isEncryptionAvailable, isKeyPlaintext, setApiKey } from '../services/secrets'
-import { importImage, importImageFromUrl, removeImageFiles, searchWebImages } from '../services/images'
+import { importImage, importImageFromUrl, removeImageFiles, searchWebImages, type ImageGroup } from '../services/images'
+import { imagesRootInfo, moveImagesRoot, organizeImages } from '../services/imageOrganize'
 import { EMPTY_MEDIA_PREFS, MEDIA_KEY, backdropsDir, listBackdrops, readBackdrop, type MediaPrefs } from '../services/media'
 import { normalizeMusicMode } from '../../core/music'
 import {
@@ -1218,10 +1219,44 @@ function registerWishlistIpc(): void {
   })
 }
 
+/**
+ * 图片落盘分组：同一条养护记录 / 同一株 / 同一个月传的图放进同一个文件夹，
+ * 这样在资源管理器里能一眼看出一批图是一起的。
+ */
+function groupForOwner(owner: ImageOwner): ImageGroup {
+  if (typeof owner.plantId === 'number') return { kind: 'plant', id: owner.plantId }
+  if (typeof owner.speciesId === 'number') return { kind: 'species', id: owner.speciesId }
+  if (typeof owner.environmentId === 'number') return { kind: 'env', id: owner.environmentId }
+  if (typeof owner.materialId === 'number') return { kind: 'material', id: owner.materialId }
+  if (typeof owner.wishlistId === 'number') return { kind: 'wishlist', id: owner.wishlistId }
+  return { kind: 'misc' }
+}
+
 function registerImageIpc(): void {
   handle('images:list', (owner: ImageOwner) =>
     listImages(getDb(), owner)
   )
+
+  /* ------------------------------------------------------------------ *
+   * 图片存放位置
+   *
+   * 默认 <userData>/images，可以整个换到别的盘（图片最占空间）。
+   * 库里存的是相对路径，所以换根目录只是「复制文件 + 改一个设置」。
+   * ------------------------------------------------------------------ */
+  handle('app:imagesRoot', () => imagesRootInfo())
+
+  handle('app:chooseImagesRoot', async () => {
+    const result = await dialog.showOpenDialog({
+      title: '选择图片存放位置',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return { canceled: true as const }
+    const moved = moveImagesRoot(getDb(), result.filePaths[0])
+    return { canceled: false as const, ...moved }
+  })
+
+  /** 把平铺的老图片整理进「年-月 / 归属」子目录（幂等） */
+  handle('app:organizeImages', () => organizeImages(getDb()))
 
   handle('images:search', (query: string) => searchWebImages(query, 12))
   /*
@@ -1231,7 +1266,7 @@ function registerImageIpc(): void {
    * 所以先给一条「浏览器里看到图 → 复制图片地址 → 粘贴」的路。
    */
   handle('images:importUrl', async (owner: ImageOwner, url: string) => {
-    const file = await importImageFromUrl(url)
+    const file = await importImageFromUrl(url, groupForOwner(owner))
     return addImage(getDb(), {
       plantId: owner.plantId ?? null,
       speciesId: owner.speciesId ?? null,
@@ -1256,7 +1291,7 @@ function registerImageIpc(): void {
     const failures: string[] = []
     for (const filePath of result.filePaths) {
       try {
-        const file = importImage(filePath)
+        const file = importImage(filePath, groupForOwner(owner))
         const record = addImage(getDb(), {
           plantId: owner.plantId ?? null,
           speciesId: owner.speciesId ?? null,

@@ -57,6 +57,15 @@ import {
 } from '../core/growth'
 import { weatherMattersFor } from '../core/weather'
 import {
+  groupFolder,
+  groupName,
+  groupOfRow,
+  monthBucket,
+  relativeFromImageUrl,
+  resolveInsideRoot,
+  toPosixPath
+} from '../core/imagePaths'
+import {
   buildWishAnalysisMessages,
   dimsFor,
   extractJsonObject,
@@ -3352,7 +3361,35 @@ export async function runSmoke(outFile: string): Promise<number> {
     {
       const base = ["theme-1"]
       const uploaded = [{ name: "a.png", url: "data:a" }, { name: "b.png", url: "data:b" }]
-      check('背景：主题背景只给主题的', JSON.stringify(resolveBackdrops(base, uploaded, THEME_BACKDROP)) === '["theme-1"]')
+      /* 图片分桶：年-月 / 归属 的路径规则 */
+    {
+      const bucket = monthBucket(new Date(2026, 10, 3)) // 2026-11-03 本地时间
+      check('分桶：年-月两位补零', bucket === '2026-11', bucket)
+      check('分桶：植株目录', groupFolder({ kind: 'plant', id: 7 }, new Date(2026, 10, 3)) === '2026-11/plant-7')
+      check('分桶：养护记录目录', groupFolder({ kind: 'log', id: 142 }, new Date(2026, 10, 3)) === '2026-11/log-142')
+      check('分桶：没有归属时落 misc', groupFolder(null, new Date(2026, 0, 9)) === '2026-01/misc')
+      check('分桶：id 非数字也落 misc', groupName({ kind: 'plant', id: Number.NaN }) === 'misc')
+
+      check('路径：Windows 分隔符统一成 /', toPosixPath('2026-11\\plant-7\\a.jpg') === '2026-11/plant-7/a.jpg')
+      check('路径：多余分隔符被折叠', toPosixPath('//2026-11//plant-7//') === '2026-11/plant-7')
+
+      const root = 'C:\\images'
+      check('路径：正常子路径可通过', resolveInsideRoot(root, '2026-11/log-3/a.jpg') === 'C:\\images\\2026-11\\log-3\\a.jpg')
+      check('路径：挡住 ..', resolveInsideRoot(root, '../secret.txt') === null)
+      check('路径：挡住绝对路径', resolveInsideRoot(root, '/etc/passwd') === null)
+      check('路径：挡住盘符', resolveInsideRoot(root, 'C:\\Windows\\win.ini') === null)
+      check('路径：挡住中间夹的 ..', resolveInsideRoot(root, '2026-11/../../x.jpg') === null)
+      check('路径：空路径返回 null', resolveInsideRoot(root, '') === null)
+
+      check('归属：养护记录优先于植株', groupOfRow({ log_id: 5, plant_id: 2 }).kind === 'log')
+      check('归属：没有养护记录时按植株', groupName(groupOfRow({ log_id: null, plant_id: 2 })) === 'plant-2')
+      check('归属：什么都没有就是 misc', groupName(groupOfRow({})) === 'misc')
+      check('归属：种草图走 wishlist', groupName(groupOfRow({ wishlist_id: 4 })) === 'wishlist-4')
+
+      check('URL：中文与空格能还原', relativeFromImageUrl('/2026-11/plant-7/%E7%85%A7%20%E7%89%87.jpg') === '2026-11/plant-7/照 片.jpg')
+    }
+
+    check('背景：主题背景只给主题的', JSON.stringify(resolveBackdrops(base, uploaded, THEME_BACKDROP)) === '["theme-1"]')
       check('背景：全部轮播 = 主题 + 上传', resolveBackdrops(base, uploaded, null).length === 3)
       check('背景：选中一张就只用它', JSON.stringify(resolveBackdrops(base, uploaded, "b.png")) === '["data:b"]')
       check('背景：选中的不在列表里就退回全部，不清空', resolveBackdrops(base, uploaded, "c.png").length === 3)

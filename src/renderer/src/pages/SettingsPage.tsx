@@ -39,6 +39,9 @@ export function SettingsPage({ themeBackdrop = null }: { themeBackdrop?: string 
   const [paths, setPaths] = useState<AppPaths | null>(null)
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [backups, setBackups] = useState<BackupInfo[]>([])
+  /** 图片存放位置（可改到别的盘） */
+  const [imagesRoot, setImagesRoot] = useState<{ dir: string; defaultValue: string; isCustom: boolean } | null>(null)
+  const [organizing, setOrganizing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [sandbox, setSandbox] = useState<SandboxStatus | null>(null)
   /**
@@ -101,6 +104,7 @@ export function SettingsPage({ themeBackdrop = null }: { themeBackdrop?: string 
       setBackups(b)
       setKeyWarning(w)
       setSandbox(sb)
+      setImagesRoot(await window.api.app.imagesRoot())
     } catch (error) {
       toast.push(`加载失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }
@@ -364,7 +368,8 @@ export function SettingsPage({ themeBackdrop = null }: { themeBackdrop?: string 
               </div>
               <div>
                 <b>图片目录：</b>
-                <span className="mono">{paths.images}</span>
+                <span className="mono">{imagesRoot?.dir ?? paths.images}</span>
+                {imagesRoot?.isCustom ? <span className="small muted">（自定义）</span> : null}
               </div>
               <div>
                 <b>备份目录：</b>
@@ -379,6 +384,48 @@ export function SettingsPage({ themeBackdrop = null }: { themeBackdrop?: string 
             <div className="row">
               <Button onClick={() => void window.api.app.openDataDir()}>打开数据目录</Button>
               <Button onClick={() => void window.api.app.openImagesDir()}>打开图片目录</Button>
+              <Button
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  try {
+                    const result = await window.api.app.chooseImagesRoot()
+                    if (result.canceled) return
+                    setImagesRoot(await window.api.app.imagesRoot())
+                    toast.push(
+                      `图片目录已改为 ${result.dir}（共 ${result.images} 条图片记录；旧目录保留，确认无误后可自行删除）`,
+                      'success'
+                    )
+                  } catch (error) {
+                    toast.push(error instanceof Error ? error.message : '更改图片目录失败', 'error')
+                  } finally {
+                    setBusy(false)
+                  }
+                }}
+              >
+                更改图片位置…
+              </Button>
+              <Button
+                disabled={organizing}
+                onClick={async () => {
+                  setOrganizing(true)
+                  try {
+                    const r = await window.api.app.organizeImages()
+                    const extra = r.already > 0 ? `，已在正确位置 ${r.already} 张` : ''
+                    const fail = r.failed.length > 0 ? `，失败 ${r.failed.length} 张` : ''
+                    toast.push(
+                      r.moved > 0 ? `整理完成：移动 ${r.moved} 张${extra}${fail}` : `没有需要移动的图片${extra}${fail}`,
+                      r.failed.length > 0 ? 'error' : 'success'
+                    )
+                  } catch (error) {
+                    toast.push(error instanceof Error ? error.message : '整理失败', 'error')
+                  } finally {
+                    setOrganizing(false)
+                  }
+                }}
+              >
+                {organizing ? '整理中…' : '整理到子文件夹'}
+              </Button>
               <Button
                 variant="primary"
                 disabled={busy}
@@ -398,6 +445,13 @@ export function SettingsPage({ themeBackdrop = null }: { themeBackdrop?: string 
                 立即备份
               </Button>
             </div>
+
+            <Notice tone="info">
+              图片按 <b>年-月 / 归属</b> 分文件夹存放（例如 <span className="mono">2026-11/plant-7/</span>），
+              同一次上传、同一株植物的照片会挨在一起，方便在资源管理器里找。
+              升级前传的图平铺在根目录，点「整理到子文件夹」会把它们归位（只改路径，不动内容）。
+              图片目录也可以换到别的盘：换的时候先复制文件，旧目录保留。
+            </Notice>
 
             <Notice tone="info">
               应用会在每次启动、退出以及数据库结构升级前自动备份，滚动保留最近 5 份。

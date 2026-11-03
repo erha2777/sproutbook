@@ -2,28 +2,68 @@
  * 图片服务：导入、生成缩略图、自定义协议读取。
  *
  * 设计要点：
- *  - 文件放 userData/images，数据库只存**文件名**，绝不存绝对路径（换机器就失效）。
+ *  - 文件放图片根目录（默认 userData/images，可改），数据库只存**相对路径**，绝不存绝对路径。
  *  - 绝不把图片存成 base64 塞进数据库（会撑爆数据库、拖慢备份）。
  *  - 读取走自定义协议 plantimg://，并做路径穿越防护。
  */
 
 import { app, nativeImage, net, protocol } from 'electron'
 import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { basename, extname, join, normalize } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { normalizeQuery, parseBingResults, queryTokens, rankHits, type BingImageHit } from '../../core/imageSearch'
+import { groupFolder, resolveInsideRoot, toPosixPath, type ImageGroup } from '../../core/imagePaths'
 
 const IMAGE_SCHEME = 'plantimg'
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'])
 
+/**
+ * 图片根目录。
+ *
+ * 默认 <userData>/images，但可以在设置里改到别的盘（图片是应用里最占空间的东西，
+ * 很多人想放到 D 盘）。改的是**根目录**，数据库里存的仍然是相对路径，
+ * 所以换目录不需要动任何一条记录 —— 见 changeImagesRoot()。
+ */
+let customRoot: string | null = null
+
+export function setImagesRoot(dir: string | null): void {
+  customRoot = dir && dir.trim() !== '' ? dir : null
+}
+
 export function imagesDir(): string {
-  return join(app.getPath('userData'), 'images')
+  return customRoot ?? join(app.getPath('userData'), 'images')
 }
 
 function ensureImagesDir(): string {
   const dir = imagesDir()
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   return dir
+}
+
+/*
+ * 归属分桶的规则（年-月 / plant-7 之类）放在 core/imagePaths 里 —— 那部分是纯函数，
+ * 自检可以直接跑；这里只留需要 Electron / 文件系统的部分。
+ */
+export {
+  groupFolder,
+  groupName,
+  monthBucket,
+  toPosixPath,
+  type ImageGroup,
+  type ImageGroupKind
+} from '../../core/imagePaths'
+
+function ensureDirFor(relDir: string): void {
+  const dir = join(imagesDir(), ...relDir.split('/'))
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+}
+
+/**
+ * 把相对路径解析到根目录内，并挡住路径穿越。
+ * 返回 null 表示这个路径不能碰（绝对路径、`..`、盘符……）。
+ */
+export function resolveImagePath(rel: string | null | undefined): string | null {
+  return resolveInsideRoot(imagesDir(), rel)
 }
 
 export interface ImportedImage {
@@ -173,7 +213,7 @@ async function fetchAsDataUrl(url: string, maxBytes = 3_000_000): Promise<string
  *
  * 约束：只接受 http(s)、只接受 image/*、40MB 上限、超时 20 秒。
  */
-export async function importImageFromUrl(url: string): Promise<ImportedImage> {
+export async function importImageFromUrl(url: string, group?: ImageGroup | null): Promise<ImportedImage> {
   let parsed: URL
   try {
     parsed = new URL(url.trim())
@@ -209,7 +249,7 @@ export async function importImageFromUrl(url: string): Promise<ImportedImage> {
   if (buffer.length === 0) throw new Error('下载到的图片是空的')
   if (buffer.length > 40 * 1024 * 1024) throw new Error('图片超过 40MB，请先压缩后再导入')
 
-  return saveImageBuffer(buffer, ext)
+  return saveImageBuffer(buffer, ext, group)
 }
 
 function extFromContentType(contentType: string): string | null {
@@ -222,9 +262,13 @@ function extFromContentType(contentType: string): string | null {
 }
 
 /** 把内存里的图片写进 images 目录并生成缩略图（链接导入与本地导入共用） */
-function saveImageBuffer(buffer: Buffer, ext: string): ImportedImage {
-  const dir = ensureImagesDir()
+function saveImageBuffer(buffer: Buffer, ext: string, group?: ImageGroup | null): ImportedImage {
+  ensureImagesDir()
+  const folder = groupFolder(group)
+  ensureDirFor(folder)
   const fileName = `${randomUUID()}${ext}`
+  const relPath = `${folder}/${fileName}`
+  const dir = join(imagesDir(), ...folder.split('/'))
   const target = join(dir, fileName)
   writeFileSync(target, buffer)
 
@@ -240,21 +284,22 @@ function saveImageBuffer(buffer: Buffer, ext: string): ImportedImage {
       const maxEdge = 640
       const scale = Math.min(1, maxEdge / Math.max(size.width, size.height))
       const resized = scale < 1 ? image.resize({ width: Math.round(size.width * scale) }) : image
-      thumbName = `${basename(fileName, ext)}_thumb.jpg`
-      writeFileSync(join(dir, thumbName), resized.toJPEG(82))
+      const thumbFile = `${basename(fileName, ext)}_thumb.jpg`
+      writeFileSync(join(dir, thumbFile), resized.toJPEG(82))
+      thumbName = `${folder}/${thumbFile}`
     }
   } catch {
     // 缩略图失败不影响主流程，前端会退回显示原图
     thumbName = null
   }
-  return { fileName, thumbName, width, height }
+  return { fileName: relPath, thumbName, width, height }
 }
 
 /**
  * 把一个外部图片文件复制进应用数据目录，并生成缩略图。
  * 失败时抛错，由调用方转成用户可读的提示 —— 不静默失败。
  */
-export function importImage(sourcePath: string): ImportedImage {
+export function importImage(sourcePath: string, group?: ImageGroup | null): ImportedImage {
   if (!existsSync(sourcePath)) throw new Error('图片文件不存在')
   const stat = statSync(sourcePath)
   if (!stat.isFile()) throw new Error('选择的不是一个文件')
@@ -265,8 +310,12 @@ export function importImage(sourcePath: string): ImportedImage {
     throw new Error(`不支持的图片格式：${ext || '(无扩展名)'}。支持 png / jpg / webp / gif / bmp。`)
   }
 
-  const dir = ensureImagesDir()
+  ensureImagesDir()
+  const folder = groupFolder(group)
+  ensureDirFor(folder)
   const fileName = `${randomUUID()}${ext}`
+  const relPath = `${folder}/${fileName}`
+  const dir = join(imagesDir(), ...folder.split('/'))
   const target = join(dir, fileName)
   copyFileSync(sourcePath, target)
 
@@ -283,26 +332,25 @@ export function importImage(sourcePath: string): ImportedImage {
       const maxEdge = 640
       const scale = Math.min(1, maxEdge / Math.max(size.width, size.height))
       const resized = scale < 1 ? image.resize({ width: Math.round(size.width * scale) }) : image
-      thumbName = `${basename(fileName, ext)}_thumb.jpg`
-      writeFileSync(join(dir, thumbName), resized.toJPEG(82))
+      const thumbFile = `${basename(fileName, ext)}_thumb.jpg`
+      writeFileSync(join(dir, thumbFile), resized.toJPEG(82))
+      thumbName = `${folder}/${thumbFile}`
     }
   } catch {
     // 缩略图失败不影响主流程，前端会退回显示原图
     thumbName = null
   }
 
-  return { fileName, thumbName, width, height }
+  return { fileName: relPath, thumbName, width, height }
 }
 
 
 /** 删除图片文件。文件不存在时也返回 true（幂等）。 */
 export function removeImageFiles(fileNames: Array<string | null | undefined>): void {
-  const dir = imagesDir()
   for (const name of fileNames) {
-    if (!name) continue
-    // 只允许删除 images 目录内的文件，杜绝通过构造文件名删除任意文件
-    const target = normalize(join(dir, basename(name)))
-    if (!target.startsWith(normalize(dir))) continue
+    // 只允许删除图片根目录内的文件，杜绝通过构造路径删除任意文件
+    const target = resolveImagePath(name)
+    if (!target) continue
     try {
       if (existsSync(target)) unlinkSync(target)
     } catch {
@@ -325,18 +373,17 @@ export function registerImageScheme(): void {
 }
 
 export function handleImageProtocol(): void {
-  const dir = imagesDir()
   protocol.handle(IMAGE_SCHEME, async (request) => {
     try {
       const url = new URL(request.url)
-      // plantimg://local/<filename>  →  取最后一段作为文件名
-      const name = basename(decodeURIComponent(url.pathname))
-      if (!name) return new Response('bad request', { status: 400 })
-
-      const target = normalize(join(dir, name))
-      if (!target.startsWith(normalize(dir))) {
-        return new Response('forbidden', { status: 403 })
-      }
+      /*
+       * plantimg://local/<相对路径>
+       * 现在文件按 年-月/归属 分目录，所以这里必须整段取，不能再只认最后一段。
+       * 路径规则由 resolveImagePath 统一把关（穿越、绝对路径都会返回 null）。
+       */
+      const rel = toPosixPath(decodeURIComponent(url.pathname))
+      const target = resolveImagePath(rel)
+      if (!target) return new Response('forbidden', { status: 403 })
       if (!existsSync(target)) return new Response('not found', { status: 404 })
 
       return await net.fetch(`file://${target.replace(/\\/g, '/')}`)
@@ -349,5 +396,7 @@ export function handleImageProtocol(): void {
 /** 渲染进程使用的 URL 形式。 */
 export function imageUrl(fileName: string | null | undefined): string | null {
   if (!fileName) return null
-  return `${IMAGE_SCHEME}://local/${encodeURIComponent(basename(fileName))}`
+  const rel = toPosixPath(fileName)
+  if (!rel) return null
+  return `${IMAGE_SCHEME}://local/${rel.split('/').map(encodeURIComponent).join('/')}`
 }

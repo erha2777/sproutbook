@@ -6,6 +6,7 @@ import { app } from 'electron'
 import { dirname, join } from 'node:path'
 import { Db } from './connection'
 import { backupDatabase, ensureDir, listBackups } from './backup'
+import { imagesDir } from '../services/images'
 import type { BackupInfo } from './backup'
 import { migrate, rebuildAttrIndex } from './migrate'
 import type { MigrationReport } from './migrate'
@@ -22,9 +23,11 @@ export function dbFilePath(): string {
   return join(dataDir(), 'sproutbook.db')
 }
 
-export function imagesDir(): string {
-  return join(app.getPath('userData'), 'images')
-}
+/*
+ * 图片目录可能被用户改到别的盘（设置 → 数据与备份 → 更改位置），
+ * 解析逻辑统一放在 services/images 里，这里只做转出，避免两处各算一遍。
+ */
+export { imagesDir }
 
 export function backupsDir(): string {
   return join(app.getPath('userData'), 'backups')
