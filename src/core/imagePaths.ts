@@ -97,3 +97,45 @@ export function resolveInsideRoot(root: string, rel: string | null | undefined):
 export function relativeFromImageUrl(pathname: string): string {
   return toPosixPath(decodeURIComponent(pathname))
 }
+
+/* ------------------------------------------------------------------ *
+ * 文件名里的顺序
+ *
+ * 原来文件名是纯 UUID，资源管理器按名字排序 = 随机顺序，和 App 里看到的顺序
+ * 完全对不上。现在文件名带**上传时间 + 批次内序号**：
+ *
+ *   20261103-193012-01-9f3c2a.jpg
+ *   └─ 年月日  └─ 时分秒  └ 序号
+ *
+ * 这样在文件夹里按名字排就是上传顺序，App 里也是这个顺序（新图总是追加到末尾）。
+ * 老文件在整理时会被重命名成 `上传时间-排序号-记录id`，同样能排出顺序。
+ * ------------------------------------------------------------------ */
+
+/** `2026-11-03 19:30:12` / Date → `20261103-193012` */
+export function formatStamp(value: Date | string): string {
+  const d = value instanceof Date ? value : new Date(value.replace(' ', 'T'))
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  if (Number.isNaN(d.getTime())) return '00000000-000000'
+  return (
+    `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+    `-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+  )
+}
+
+/** 新导入：`<时间戳>-<两位数序号>-<6 位随机>.<扩展名>` */
+export function buildImageName(stamp: string, seq: number, ext: string, rand: string): string {
+  const order = String(Math.max(0, Math.trunc(seq)) + 1).padStart(2, '0')
+  return `${stamp}-${order}-${rand}${ext}`
+}
+
+/** 整理老文件：用 created_at + sort_order + id 造一个可排序且不重名的名字 */
+export function orderedNameFromRow(createdAt: string, sortOrder: number, id: number, ext: string): string {
+  const stamp = formatStamp(createdAt)
+  const order = String(Math.max(0, Math.trunc(sortOrder))).padStart(3, '0')
+  return `${stamp}-${order}-${id}${ext}`
+}
+
+/** 文件名是否已经是「有序命名」（避免重复重命名） */
+export function isOrderedFileName(name: string): boolean {
+  return /^\d{8}-\d{6}-\d+(-[0-9a-f]+)?\.[a-z0-9]+$/i.test(name)
+}

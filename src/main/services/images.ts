@@ -12,7 +12,14 @@ import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync, writeFileSyn
 import { basename, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { normalizeQuery, parseBingResults, queryTokens, rankHits, type BingImageHit } from '../../core/imageSearch'
-import { groupFolder, resolveInsideRoot, toPosixPath, type ImageGroup } from '../../core/imagePaths'
+import {
+  buildImageName,
+  formatStamp,
+  groupFolder,
+  resolveInsideRoot,
+  toPosixPath,
+  type ImageGroup
+} from '../../core/imagePaths'
 
 const IMAGE_SCHEME = 'plantimg'
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'])
@@ -213,7 +220,7 @@ async function fetchAsDataUrl(url: string, maxBytes = 3_000_000): Promise<string
  *
  * 约束：只接受 http(s)、只接受 image/*、40MB 上限、超时 20 秒。
  */
-export async function importImageFromUrl(url: string, group?: ImageGroup | null): Promise<ImportedImage> {
+export async function importImageFromUrl(url: string, group?: ImageGroup | null, seq = 0): Promise<ImportedImage> {
   let parsed: URL
   try {
     parsed = new URL(url.trim())
@@ -249,7 +256,7 @@ export async function importImageFromUrl(url: string, group?: ImageGroup | null)
   if (buffer.length === 0) throw new Error('下载到的图片是空的')
   if (buffer.length > 40 * 1024 * 1024) throw new Error('图片超过 40MB，请先压缩后再导入')
 
-  return saveImageBuffer(buffer, ext, group)
+  return saveImageBuffer(buffer, ext, group, seq)
 }
 
 function extFromContentType(contentType: string): string | null {
@@ -262,11 +269,12 @@ function extFromContentType(contentType: string): string | null {
 }
 
 /** 把内存里的图片写进 images 目录并生成缩略图（链接导入与本地导入共用） */
-function saveImageBuffer(buffer: Buffer, ext: string, group?: ImageGroup | null): ImportedImage {
+function saveImageBuffer(buffer: Buffer, ext: string, group?: ImageGroup | null, seq = 0): ImportedImage {
   ensureImagesDir()
   const folder = groupFolder(group)
   ensureDirFor(folder)
-  const fileName = `${randomUUID()}${ext}`
+  // 文件名带上传时间 + 批次序号：在资源管理器里按名字排就是上传顺序
+  const fileName = buildImageName(formatStamp(new Date()), seq, ext, randomUUID().slice(0, 6))
   const relPath = `${folder}/${fileName}`
   const dir = join(imagesDir(), ...folder.split('/'))
   const target = join(dir, fileName)
@@ -299,7 +307,7 @@ function saveImageBuffer(buffer: Buffer, ext: string, group?: ImageGroup | null)
  * 把一个外部图片文件复制进应用数据目录，并生成缩略图。
  * 失败时抛错，由调用方转成用户可读的提示 —— 不静默失败。
  */
-export function importImage(sourcePath: string, group?: ImageGroup | null): ImportedImage {
+export function importImage(sourcePath: string, group?: ImageGroup | null, seq = 0): ImportedImage {
   if (!existsSync(sourcePath)) throw new Error('图片文件不存在')
   const stat = statSync(sourcePath)
   if (!stat.isFile()) throw new Error('选择的不是一个文件')
@@ -313,7 +321,7 @@ export function importImage(sourcePath: string, group?: ImageGroup | null): Impo
   ensureImagesDir()
   const folder = groupFolder(group)
   ensureDirFor(folder)
-  const fileName = `${randomUUID()}${ext}`
+  const fileName = buildImageName(formatStamp(new Date()), seq, ext, randomUUID().slice(0, 6))
   const relPath = `${folder}/${fileName}`
   const dir = join(imagesDir(), ...folder.split('/'))
   const target = join(dir, fileName)

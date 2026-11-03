@@ -1310,9 +1310,10 @@ function registerImageIpc(): void {
 
     const imported = []
     const failures: string[] = []
-    for (const filePath of result.filePaths) {
+    // 序号让文件名可排序：一次选 5 张，名字里就是 01…05
+    for (const [index, filePath] of result.filePaths.entries()) {
       try {
-        const file = importImage(filePath, groupForOwner(owner))
+        const file = importImage(filePath, groupForOwner(owner), index)
         const record = addImage(getDb(), {
           plantId: owner.plantId ?? null,
           speciesId: owner.speciesId ?? null,

@@ -57,10 +57,14 @@ import {
 } from '../core/growth'
 import { weatherMattersFor } from '../core/weather'
 import {
+  buildImageName,
+  formatStamp,
   groupFolder,
   groupName,
   groupOfRow,
+  isOrderedFileName,
   monthBucket,
+  orderedNameFromRow,
   relativeFromImageUrl,
   resolveInsideRoot,
   toPosixPath
@@ -3361,7 +3365,29 @@ export async function runSmoke(outFile: string): Promise<number> {
     {
       const base = ["theme-1"]
       const uploaded = [{ name: "a.png", url: "data:a" }, { name: "b.png", url: "data:b" }]
-      /* 图片分桶：年-月 / 归属 的路径规则 */
+      /* 图片文件名里的顺序：按名字排序 = 上传顺序 */
+    {
+      const stamp = formatStamp(new Date(2026, 10, 3, 19, 30, 12))
+      check('命名：时间戳格式', stamp === '20261103-193012', stamp)
+      check('命名：数据库时间字符串也能转', formatStamp('2026-11-03 19:30:12') === '20261103-193012')
+      check('命名：新图带两位序号', buildImageName(stamp, 0, '.jpg', 'abc123') === '20261103-193012-01-abc123.jpg')
+      check('命名：序号从 1 开始且补零', buildImageName(stamp, 9, '.png', 'ffffff') === '20261103-193012-10-ffffff.png')
+      check('命名：老文件重命名可排序', orderedNameFromRow('2026-11-03 19:30:12', 7, 42, '.jpg') === '20261103-193012-007-42.jpg')
+
+      check('命名：认得新命名', isOrderedFileName('20261103-193012-01-9f3c2a.jpg'))
+      check('命名：也认整理后的命名', isOrderedFileName('20261103-193012-007-42.png'))
+      check('命名：UUID 不算有序', !isOrderedFileName('9f3c2a6b-1f55-4a4c-9d21-0d7a1b2c3d4e.jpg'))
+
+      const shuffled = ['20261103-193012-10-aaaaaa.jpg', '20261103-193012-02-bbbbbb.jpg', '20261103-193011-01-cccccc.jpg']
+      const sorted = [...shuffled].sort()
+      check(
+        '命名：排序后就是上传顺序',
+        sorted[0].includes('-193011-01') && sorted[1].includes('-193012-02') && sorted[2].includes('-193012-10'),
+        sorted.join(' | ')
+      )
+    }
+
+    /* 图片分桶：年-月 / 归属 的路径规则 */
     {
       const bucket = monthBucket(new Date(2026, 10, 3)) // 2026-11-03 本地时间
       check('分桶：年-月两位补零', bucket === '2026-11', bucket)

@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path'
 import type { Db } from '../db/connection'
 import { getSetting, setSetting } from '../db/repo/misc'
 import { imagesDir, resolveImagePath, setImagesRoot, toPosixPath } from './images'
-import { groupName, groupOfRow, monthBucket } from '../../core/imagePaths'
+import { groupName, groupOfRow, isOrderedFileName, monthBucket, orderedNameFromRow } from '../../core/imagePaths'
 
 export const IMAGES_DIR_KEY = 'images.dir'
 
@@ -27,6 +27,7 @@ interface ImageRowForOrganize {
   path: string
   thumb_path: string | null
   created_at: string
+  sort_order: number
   plant_id: number | null
   species_id: number | null
   environment_id: number | null
@@ -61,7 +62,18 @@ export function organizeImages(db: Db): OrganizeReport {
     const group = groupOfRow(row)
     const bucket = bucketOf(row.created_at)
     const targetFolder = `${bucket}/${groupName(group)}`
-    const name = row.path.split(/[\\/]/).pop() ?? ''
+    const currentName = row.path.split(/[\\/]/).pop() ?? ''
+
+    /*
+     * 老文件名是纯 UUID，在资源管理器里排序是乱的 —— 顺便重命名成
+     * `上传时间-排序号-记录id`，这样按名字排就是 App 里看到的顺序。
+     * 已经是新命名的（或看不出扩展名的）保持不动。
+     */
+    const extMatch = /\.[a-z0-9]+$/i.exec(currentName)
+    const name =
+      !isOrderedFileName(currentName) && extMatch
+        ? orderedNameFromRow(row.created_at, Number(row.sort_order ?? 0), row.id, extMatch[0].toLowerCase())
+        : currentName
     const targetRel = toPosixPath(`${targetFolder}/${name}`)
     if (toPosixPath(row.path) === targetRel) {
       report.already++
@@ -85,7 +97,12 @@ export function organizeImages(db: Db): OrganizeReport {
 
       let thumbRel: string | null = null
       if (row.thumb_path) {
-        const thumbName = row.thumb_path.split(/[\\/]/).pop() ?? ''
+        const oldThumb = row.thumb_path.split(/[\\/]/).pop() ?? ''
+        // 主图改名了，缩略图就跟着叫 <新主图名>_thumb.jpg
+        const thumbName =
+          name !== currentName
+            ? `${name.slice(0, name.length - extMatch![0].length)}_thumb.jpg`
+            : oldThumb
         thumbRel = toPosixPath(`${targetFolder}/${thumbName}`)
         const thumbFrom = resolveImagePath(row.thumb_path)
         const thumbTo = resolveImagePath(thumbRel)
