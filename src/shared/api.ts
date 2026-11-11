@@ -406,6 +406,10 @@ export interface SproutbookApi {
     /** 把物种图片复制一份给植株（复制文件，删一边不影响另一边） */
     remove(id: number): Promise<ImageRecord | null>
   }
+  /** 分享海报：把植株 / 某月计划 / 最近日志导出成一张 PNG */
+  poster: {
+    export(request: PosterRequest): Promise<{ canceled: boolean; path: string | null }>
+  }
   /** 种草清单：想买、还没买的植物 */
   wishlist: {
     list(): Promise<WishItem[]>
@@ -547,6 +551,12 @@ export interface CareLogPatch {
 // ---------------------------------------------------------------------------
 // 养护计划（跨进程契约）
 // ---------------------------------------------------------------------------
+
+/** 海报导出的请求：三种海报共用一条通道 */
+export type PosterRequest =
+  | { kind: 'plant'; plantId: number }
+  | { kind: 'plan'; year: number; month: number; plantId?: number }
+  | { kind: 'log'; limit?: number }
 
 /** 任务带上植物与物种名 —— 列表里只说「施肥」没人知道是哪一盆 */
 export interface CareTaskListItem extends CareTask {

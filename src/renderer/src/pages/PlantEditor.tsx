@@ -339,6 +339,27 @@ export function PlantEditorModal({
             </Button>
           ) : null}
           <span className="spacer" />
+          {/*
+           * 分享海报：先保存再导出，否则海报里是旧数据。
+           * 只在已有植株时出现（新建还没有 id）。
+           */}
+          {plant ? (
+            <Button
+              onClick={() => {
+                void window.api.poster
+                  .export({ kind: 'plant', plantId: plant.id })
+                  .then((r) => {
+                    if (!r.canceled) toast.push(`海报已保存：${r.path ?? ''}`, 'success')
+                  })
+                  .catch((error) => {
+                    toast.push(error instanceof Error ? error.message : '导出海报失败', 'error')
+                  })
+              }}
+              title="把这一株的现状导出成一张图，用来分享"
+            >
+              分享海报
+            </Button>
+          ) : null}
           <Button onClick={onClose}>取消</Button>
           <Button variant="primary" onClick={() => void save()} disabled={saving}>
             {saving ? '保存中…' : '保存'}

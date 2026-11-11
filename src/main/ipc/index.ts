@@ -12,6 +12,8 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electro
 import { getCustomMusicDir, listMusic, musicDirs, musicUploadDir, setCustomMusicDir } from '../services/music'
 import { logStartup } from '../startupLog'
 import { buildCarePlanHtml } from '../../core/carePlanHtml'
+import { actionLabel, buildPosterHtml, POSTER_HEIGHT, POSTER_WIDTH } from '../../core/poster'
+import { renderHtmlToPng } from '../services/posterRender'
 import { assessPlantsWeather, clearWeatherCache } from '../services/weather'
 import { readPrefs, summarizePending } from '../services/reminders'
 import { notifyRendererReady } from '../shell/boot'
@@ -1424,6 +1426,161 @@ function registerImageIpc(): void {
    * 导出「这一株的全年计划」为独立 HTML。
    * 只读数据库 + 拼字符串，然后弹保存框；不写库，也不依赖渲染进程。
    */
+  /* ------------------------------------------------------------------ *
+   * 分享海报
+   *
+   * 三种海报：植株 / 某月计划 / 最近日志。都走同一条链路：
+   *   收数据 → core 拼 HTML → 隐藏窗口渲染 → capturePage → 保存 PNG
+   * 海报只是"导出图片"，不写数据库。
+   * ------------------------------------------------------------------ */
+
+  /** 图片文件 → data URL（海报要单文件带走，不能依赖 plantimg 协议） */
+  function posterImage(rel: string | null | undefined, maxWidth = 1400): string | null {
+    if (!rel) return null
+    const file = resolveImagePath(rel)
+    if (!file || !existsSync(file)) return null
+    try {
+      const img = nativeImage.createFromPath(file)
+      if (img.isEmpty()) return null
+      const size = img.getSize()
+      const scale = Math.min(1, maxWidth / Math.max(size.width, size.height, 1))
+      const out = scale < 1 ? img.resize({ width: Math.max(1, Math.round(size.width * scale)) }) : img
+      return `data:image/jpeg;base64,${out.toJPEG(86).toString('base64')}`
+    } catch {
+      return null
+    }
+  }
+
+  function posterFooter(): string {
+    return `生成于 ${new Date().toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+  }
+
+  handle('poster:export', async (request: { kind: 'plant' | 'plan' | 'log'; plantId?: number; year?: number; month?: number; limit?: number }) => {
+    const db = getDb()
+    const kind = request.kind
+
+    let html: string
+    let defaultName: string
+
+    if (kind === 'plant') {
+      const plantId = Number(request.plantId)
+      const plant = getPlant(db, plantId)
+      if (!plant) throw new Error('植株不存在')
+      const logs = listCareLogs(db, { plantId, limit: 3 })
+      const photos = listImages(db, { plantId })
+      const hero =
+        posterImage(plant.coverImagePath) ??
+        posterImage(photos[0]?.path) ??
+        posterImage(plant.coverThumb, 900)
+
+      const days = plant.statusChangedAt
+        ? Math.max(1, Math.round((Date.now() - new Date(plant.statusChangedAt).getTime()) / 86400000))
+        : null
+
+      html = buildPosterHtml({
+        kind,
+        title: plant.nickname,
+        subtitle: [plant.species?.commonName, plant.envName].filter(Boolean).join(' · ') || null,
+        hero,
+        stats: [
+          { label: '状态', value: `${PLANT_STATUS_LABELS[plant.status] ?? plant.status}${days ? ` ${days} 天` : ''}` },
+          { label: '入手', value: plant.acquiredAt ? plant.acquiredAt.slice(0, 10) : '—' },
+          { label: '养护位置', value: plant.envName ?? '未设置' }
+        ],
+        sections: [
+          {
+            title: '最近的养护',
+            lines: logs.map(
+              (log) => `${log.logDate.slice(5)} ${actionLabel(log.kind)}${log.content ? `：${log.content}` : ''}`
+            )
+          }
+        ],
+        thumbs: photos
+          .slice(0, 4)
+          .map((img) => posterImage(img.path, 600))
+          .filter((url): url is string => Boolean(url)),
+        footer: posterFooter()
+      })
+      defaultName = `sproutbook-${plant.nickname.replace(/[\\/:*?"<>|]/g, '_')}.png`
+    } else if (kind === 'plan') {
+      const year = Number(request.year) || new Date().getFullYear()
+      const month = Math.min(Math.max(Number(request.month) || new Date().getMonth() + 1, 1), 12)
+      const from = `${year}-${String(month).padStart(2, '0')}-01`
+      const to = `${year}-${String(month).padStart(2, '0')}-31`
+      const plantId = request.plantId ? Number(request.plantId) : undefined
+      const tasks = listCareTasks(db, { from, to, plantId: plantId || undefined })
+      const done = tasks.filter((t) => t.status === 'done').length
+      const pending = tasks.length - done
+
+      // 按植株分组，每条一行；一个月的任务可能很多，海报上只放得下前 4 组
+      const groups = new Map<string, string[]>()
+      for (const task of tasks) {
+        const name = task.plantName ?? '未命名'
+        const line = `${task.dueDate.slice(5)} ${task.title}`
+        groups.set(name, [...(groups.get(name) ?? []), line])
+      }
+
+      html = buildPosterHtml({
+        kind,
+        title: `${year} 年 ${month} 月养护计划`,
+        subtitle: plantId ? (tasks[0]?.plantName ?? null) : '全部植株',
+        hero: null,
+        stats: [
+          { label: '任务', value: String(tasks.length) },
+          { label: '已完成', value: String(done) },
+          { label: '待办', value: String(pending) }
+        ],
+        sections: [...groups.entries()].map(([name, lines]) => ({ title: name, lines })),
+        thumbs: [],
+        footer: posterFooter()
+      })
+      defaultName = `sproutbook-${year}-${String(month).padStart(2, '0')}-养护计划.png`
+    } else {
+      const limit = Math.min(Math.max(Number(request.limit) || 5, 1), 8)
+      const logs = listCareLogs(db, { limit })
+      const plants = new Set(logs.map((l) => l.plantId))
+      const withPhotos = logs.filter((l) => (l.images?.length ?? 0) > 0)
+      const photos = logs
+        .flatMap((l) => l.images ?? [])
+        .slice(0, 4)
+        .map((img) => posterImage(img.thumbPath ?? img.path, 600))
+        .filter((url): url is string => Boolean(url))
+
+      html = buildPosterHtml({
+        kind,
+        title: '最近养护记录',
+        subtitle: logs.length > 0 ? `${logs[logs.length - 1].logDate} ~ ${logs[0].logDate}` : null,
+        hero: logs.length > 0 ? posterImage((logs[0].images ?? [])[0]?.path ?? null) : null,
+        stats: [
+          { label: '记录', value: String(logs.length) },
+          { label: '涉及植株', value: String(plants.size) },
+          { label: '带照片', value: String(withPhotos.length) }
+        ],
+        sections: [
+          {
+            title: '记录',
+            lines: logs.map(
+              (log) => `${log.logDate.slice(5)} ${actionLabel(log.kind)}${log.content ? `：${log.content}` : ''}`
+            )
+          }
+        ],
+        thumbs: photos,
+        footer: posterFooter()
+      })
+      defaultName = 'sproutbook-最近养护记录.png'
+    }
+
+    const png = await renderHtmlToPng(html, { width: POSTER_WIDTH, height: POSTER_HEIGHT })
+    const result = await dialog.showSaveDialog({
+      title: '导出海报',
+      defaultPath: join(app.getPath('pictures'), defaultName),
+      filters: [{ name: 'PNG 图片', extensions: ['png'] }]
+    })
+    if (result.canceled || !result.filePath) return { canceled: true, path: null }
+    writeFileSync(result.filePath, png)
+    return { canceled: false, path: result.filePath }
+  })
+
   handle('care:plan.exportHtml', async (plantId: number, year: number) => {
     const db = getDb()
     const plant = getPlant(db, plantId)

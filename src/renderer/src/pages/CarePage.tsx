@@ -462,6 +462,23 @@ export function CarePage({
         >
           导出计划
         </Button>
+        {/* 分享海报：当月任务的图片版，发给家人 / 发朋友圈都不用截图拼图 */}
+        <Button
+          size="small"
+          title="把这个月的养护计划导出成一张图"
+          onClick={() => {
+            void window.api.poster
+              .export({ kind: 'plan', year, month, plantId: plantFilter ? Number(plantFilter) : undefined })
+              .then((r) => {
+                if (!r.canceled) toast.push(`海报已保存：${r.path ?? ''}`, 'success')
+              })
+              .catch((error) => {
+                toast.push(error instanceof Error ? error.message : '导出海报失败', 'error')
+              })
+          }}
+        >
+          分享海报
+        </Button>
         <Button variant="primary" onClick={() => setEditing('new')}>
           ＋ 新增任务
         </Button>

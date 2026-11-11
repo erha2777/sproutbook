@@ -127,6 +127,9 @@ const api: SproutbookApi = {
     search: (query) => call('images:search', query),
     remove: (id) => call('images:delete', id),
   },
+  poster: {
+    export: (request) => call('poster:export', request)
+  },
   wishlist: {
     list: () => call('wishlist:list'),
     save: (input) => call('wishlist:save', input),

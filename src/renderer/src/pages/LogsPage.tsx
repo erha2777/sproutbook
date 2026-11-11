@@ -243,7 +243,29 @@ export function LogsPage(): ReactNode {
   return (
     <div className="content-inner">
       <Panel className="sticky-head">
-        <SectionTitle right={<span className="small muted">{plantId ? `已完成 ${logs.length} 条` : `最近 ${logs.length} 条`}</span>}>
+        <SectionTitle
+          right={
+            <span className="row tight" style={{ alignItems: 'center' }}>
+              <span className="small muted">{plantId ? `已完成 ${logs.length} 条` : `最近 ${logs.length} 条`}</span>
+              <Button
+                size="small"
+                title="把最近几条记录导出成一张图"
+                onClick={() => {
+                  void window.api.poster
+                    .export({ kind: 'log', limit: 5 })
+                    .then((r) => {
+                      if (!r.canceled) toast.push(`海报已保存：${r.path ?? ''}`, 'success')
+                    })
+                    .catch((error) => {
+                      toast.push(error instanceof Error ? error.message : '导出海报失败', 'error')
+                    })
+                }}
+              >
+                分享海报
+              </Button>
+            </span>
+          }
+        >
           养护日志
         </SectionTitle>
 

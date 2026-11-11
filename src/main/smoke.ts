@@ -56,6 +56,7 @@ import {
   sizeScaleFor
 } from '../core/growth'
 import { weatherMattersFor } from '../core/weather'
+import { actionLabel, buildPosterHtml, clampText } from '../core/poster'
 import {
   buildImageName,
   formatStamp,
@@ -3365,7 +3366,49 @@ export async function runSmoke(outFile: string): Promise<number> {
     {
       const base = ["theme-1"]
       const uploaded = [{ name: "a.png", url: "data:a" }, { name: "b.png", url: "data:b" }]
-      /* 图片文件名里的顺序：按名字排序 = 上传顺序 */
+      /* 分享海报：HTML 结构与文本安全 */
+    {
+      const html = buildPosterHtml({
+        kind: 'plant',
+        title: '绣球 <蓝水晶> & "测试"',
+        subtitle: '大花绣球 · 后院',
+        hero: 'data:image/png;base64,AAA',
+        stats: [
+          { label: '状态', value: '缓苗 28 天' },
+          { label: '入手', value: '2026-10-24' }
+        ],
+        sections: [{ title: '最近的养护', lines: ['10-24 浇水：定植后浇透'] }],
+        thumbs: ['data:image/png;base64,BBB'],
+        footer: '生成于 2026-11-11'
+      })
+      check('海报：标题做了 HTML 转义', html.includes('&lt;蓝水晶&gt;') && !html.includes('<蓝水晶>'))
+      check('海报：引号也转义', html.includes('&quot;测试&quot;'))
+      check('海报：带主图', html.includes('class="hero"') && html.includes('data:image/png;base64,AAA'))
+      check('海报：带统计与分节', html.includes('缓苗 28 天') && html.includes('最近的养护'))
+      check('海报：带缩略图', html.includes('data:image/png;base64,BBB'))
+      check('海报：带页脚品牌', html.includes('生成于 2026-11-11') && html.includes('Sproutbook'))
+
+      const noPhoto = buildPosterHtml({
+        kind: 'log',
+        title: '最近养护记录',
+        subtitle: null,
+        hero: null,
+        stats: [],
+        sections: [{ title: '记录', lines: ['11-03 浇水'] }],
+        thumbs: [],
+        footer: 'x'
+      })
+      check('海报：没有主图就不出现占位框', !noPhoto.includes('还没有照片') && noPhoto.includes('data-nophoto'))
+
+      check('海报：长文本截断带省略号', clampText('a'.repeat(100), 10) === 'aaaaaaaaa…')
+      check('海报：短文本不截断', clampText('短文本', 10) === '短文本')
+      check('海报：换行折成空格', clampText('第一行\n第二行', 20) === '第一行 第二行')
+
+      check('海报：动作类型转中文', actionLabel('water') === '浇水' && actionLabel('repot') === '翻盆换土')
+      check('海报：未知类型原样返回', actionLabel('custom-thing') === 'custom-thing')
+    }
+
+    /* 图片文件名里的顺序：按名字排序 = 上传顺序 */
     {
       const stamp = formatStamp(new Date(2026, 10, 3, 19, 30, 12))
       check('命名：时间戳格式', stamp === '20261103-193012', stamp)
