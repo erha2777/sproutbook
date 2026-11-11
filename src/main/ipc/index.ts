@@ -1565,9 +1565,24 @@ function registerImageIpc(): void {
       if (!plant) throw new Error('植株不存在')
       const logs = listCareLogs(db, { plantId, limit: 3 })
       const photos = listImages(db, { plantId })
+
+      /*
+       * 照片按「最新的在前」取。
+       *
+       * listImages 是按 sort_order / id 升序（= 上传顺序），以前直接取 photos[0] 和
+       * slice(0,4)，等于把**最早**的几张放上海报 —— 用户看到的是刚买来时的样子，
+       * 而不是最近的状态。
+       *
+       * 另外主图优先用封面那张的**原图**：coverImagePath 给的是缩略图（640px），
+       * 铺到 950px 宽会发虚。
+       */
+      const newestPhotos = [...photos].reverse()
+      const coverPhoto = plant.coverImageId
+        ? photos.find((img) => img.id === plant.coverImageId)
+        : undefined
       const hero =
-        posterImage(plant.coverImagePath) ??
-        posterImage(photos[0]?.path) ??
+        posterImage(coverPhoto?.path) ??
+        posterImage(newestPhotos[0]?.path) ??
         posterImage(plant.coverThumb, 900)
 
       const days = plant.statusChangedAt
@@ -1596,10 +1611,25 @@ function registerImageIpc(): void {
             )
           }
         ],
-        thumbs: photos
-          .slice(0, 4)
-          .map((img) => posterImage(img.path, 600))
-          .filter((url): url is string => Boolean(url)),
+        /*
+         * 底部小图优先用**最近这几条养护记录**里的照片 —— 和上面那段文字对应；
+         * 不够 4 张再拿最新的补，最后才不管有没有图。
+         */
+        thumbs: (() => {
+          const paths: string[] = []
+          for (const log of logs) {
+            for (const img of log.images ?? []) {
+              if (paths.length < 4 && !paths.includes(img.path)) paths.push(img.path)
+            }
+          }
+          for (const img of newestPhotos) {
+            if (paths.length >= 4) break
+            if (!paths.includes(img.path)) paths.push(img.path)
+          }
+          return paths
+            .map((path) => posterImage(path, 600))
+            .filter((url): url is string => Boolean(url))
+        })(),
         footer: posterFooter()
       })
       defaultName = `sproutbook-${plant.nickname.replace(/[\\/:*?"<>|]/g, '_')}.png`
