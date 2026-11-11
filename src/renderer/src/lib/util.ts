@@ -48,3 +48,9 @@ export function currentMonth(): number {
 export function makeRequestId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
+
+/** 本地「今天」的 YYYY-MM-DD（用 UTC 拼会差一天） */
+export function todayISO(now: Date = new Date()): string {
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}

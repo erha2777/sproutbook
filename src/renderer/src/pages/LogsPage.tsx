@@ -16,6 +16,7 @@ import type { CareLog, CareLogImage, ImageRecord } from '@core/types'
 import { CARE_ACTION_OPTIONS, logKindLabel } from '@core/care'
 import { Badge, Button, EmptyState, Panel, SearchSelect, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
 import { ImageViewer } from '../components/ImageViewer'
+import { todayISO } from '../lib/util'
 import type { PlantOption } from '../components/CareTaskDialog'
 
 /**
@@ -35,6 +36,8 @@ export function LogsPage(): ReactNode {
   const [plantId, setPlantId] = useState('')
   const [kind, setKind] = useState('note')
   const [draft, setDraft] = useState('')
+  /** 新记录的日期：默认今天，补记以前的记录时改这里 */
+  const [newDate, setNewDate] = useState(todayISO())
   /** 已经导入、但还没随这条记录保存的照片 */
   const [picked, setPicked] = useState<ImageRecord[]>([])
   /** 预览大图 */
@@ -125,12 +128,15 @@ export function LogsPage(): ReactNode {
         plantId: id,
         content,
         kind,
+        logDate: newDate,
         imageIds: picked.map((p) => p.id)
       })
       setDraft('')
       setPicked([])
+      // 日期回到今天：补一条以前的记录之后，下一条多半又是今天的事
+      setNewDate(todayISO())
       await load(plantId)
-      toast.push('已记一笔', 'success')
+      toast.push(`已记在 ${newDate === todayISO() ? '今天' : newDate}`, 'success')
     } catch (error) {
       toast.push(`记录失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }
@@ -248,7 +254,7 @@ export function LogsPage(): ReactNode {
         </SectionTitle>
 
         {/* 手动记一笔：空态里写着「也可以随时手动记一笔」，入口就在这里 */}
-        <div className="row tight" style={{ marginBottom: 8 }}>
+        <div className="row tight" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
           <div style={{ width: 200 }}>
             {/*
               植株一多，原生下拉只能首字符跳转、中文根本跳不动。
@@ -285,6 +291,18 @@ export function LogsPage(): ReactNode {
               placeholder="记一句做了什么，例如「换了盆，土是泥炭 5 : 珍珠岩 3」"
             />
           </div>
+          {/*
+            日期：默认今天。补记以前的养护（比如上个月换的盆）时改这里，
+            记录会按这个日期归档到时间线里，不会全挤在今天。
+          */}
+          <input
+            className="pixel-input"
+            type="date"
+            style={{ width: 150 }}
+            value={newDate}
+            onChange={(event) => setNewDate(event.target.value || todayISO())}
+            title="记录日期，默认今天"
+          />
           <Button onClick={() => void pickImages()} title="给这条记录配照片">
             📷 照片
           </Button>
@@ -373,7 +391,12 @@ export function LogsPage(): ReactNode {
                             />
                           </div>
                           <div style={{ width: 140 }}>
-                            <TextInput value={editDate} onChange={setEditDate} placeholder="2026-10-18" />
+                            <input
+            className="pixel-input"
+            type="date"
+            value={editDate}
+            onChange={(event) => setEditDate(event.target.value)}
+          />
                           </div>
                           <div style={{ flex: 1 }}>
                             <TextInput
