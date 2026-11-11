@@ -558,11 +558,31 @@ export interface CareLogPatch {
 // 养护计划（跨进程契约）
 // ---------------------------------------------------------------------------
 
-/** 海报导出的请求：三种海报共用一条通道 */
-export type PosterRequest =
-  | { kind: 'plant'; plantId: number }
-  | { kind: 'plan'; year: number; month: number; plantId?: number }
-  | { kind: 'log'; limit?: number }
+/** 海报导出的请求：多种海报共用一条通道，都可以覆盖标题 / 配色 / 版式 */
+export interface PosterCommonOptions {
+  /** 自定义标题 / 副标题（留空用默认） */
+  title?: string
+  subtitle?: string
+  /** 配色 */
+  theme?: 'paper' | 'night' | 'garden'
+}
+
+export type PosterRequest = PosterCommonOptions &
+  (
+    | { kind: 'plant'; plantId: number }
+    | { kind: 'plan'; year: number; month: number; plantId?: number }
+    | { kind: 'log'; limit?: number }
+    | {
+        kind: 'growth' | 'collage'
+        plantId: number
+        /** 图片日期范围，YYYY-MM-DD */
+        from?: string
+        to?: string
+        /** 最多几张（1~9） */
+        maxPhotos?: number
+        layout?: 'hero' | 'grid' | 'timeline'
+      }
+  )
 
 /** 任务带上植物与物种名 —— 列表里只说「施肥」没人知道是哪一盆 */
 export interface CareTaskListItem extends CareTask {

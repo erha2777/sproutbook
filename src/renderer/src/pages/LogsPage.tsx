@@ -16,7 +16,7 @@ import type { CareLog, CareLogImage, ImageRecord } from '@core/types'
 import { CARE_ACTION_OPTIONS, logKindLabel } from '@core/care'
 import { Badge, Button, EmptyState, Panel, SearchSelect, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
 import { ImageViewer } from '../components/ImageViewer'
-import { PosterPreviewModal } from '../components/PosterPreviewModal'
+import { PosterStudioModal } from '../components/PosterStudioModal'
 import type { PlantOption } from '../components/CareTaskDialog'
 
 /**
@@ -504,7 +504,7 @@ export function LogsPage(): ReactNode {
       </Panel>
 
       {posterOpen ? (
-        <PosterPreviewModal request={{ kind: 'log', limit: 5 }} onClose={() => setPosterOpen(false)} />
+        <PosterStudioModal defaults={{ kind: 'log', limit: 5 }} onClose={() => setPosterOpen(false)} />
       ) : null}
 
       {/* 大图预览：缩略图看细节不够，点开看原图 */}

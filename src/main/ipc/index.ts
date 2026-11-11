@@ -1481,11 +1481,61 @@ function registerImageIpc(): void {
   }
 
   type PosterRequestInput = {
-    kind: 'plant' | 'plan' | 'log'
+    kind: 'plant' | 'plan' | 'log' | 'growth' | 'collage'
     plantId?: number
     year?: number
     month?: number
     limit?: number
+    /** 自定义标题 / 副标题（留空就用默认的） */
+    title?: string
+    subtitle?: string
+    theme?: 'paper' | 'night' | 'garden'
+    layout?: 'hero' | 'grid' | 'timeline'
+    /** 图片日期范围（拼贴 / 时间轴），YYYY-MM-DD */
+    from?: string
+    to?: string
+    /** 最多放几张（拼贴 2×2 / 3×3，时间轴 6 行） */
+    maxPhotos?: number
+  }
+
+  /**
+   * 一株植物的照片时间线。
+   *
+   * 养护记录里挂的照片用**记录日期**，单独上传的照片退回到上传日期 ——
+   * 「开花那阵子」按这个日期筛才有意义。
+   */
+  function plantPhotoTimeline(
+    db: ReturnType<typeof getDb>,
+    plantId: number,
+    from?: string,
+    to?: string
+  ): Array<{ path: string; thumb: string | null; date: string; kind: string | null; content: string | null }> {
+    const rows = db.all<{
+      path: string
+      thumb_path: string | null
+      created_at: string
+      log_date: string | null
+      log_kind: string | null
+      content: string | null
+    }>(
+      `SELECT i.path, i.thumb_path, i.created_at,
+              l.log_date AS log_date, l.kind AS log_kind, l.content AS content
+         FROM images i
+         LEFT JOIN care_logs l ON l.id = i.log_id
+        WHERE i.plant_id = ?
+        ORDER BY COALESCE(l.log_date, substr(i.created_at, 1, 10)) ASC, i.id ASC`,
+      plantId
+    )
+    return rows
+      .map((row) => ({
+        path: row.path,
+        thumb: row.thumb_path,
+        date: (row.log_date ?? row.created_at ?? '').slice(0, 10),
+        kind: row.log_kind,
+        content: row.content
+      }))
+      .filter((row) => row.date !== '')
+      .filter((row) => (!from || row.date >= from) && (!to || row.date <= to))
   }
 
   function assemblePoster(request: PosterRequestInput): { html: string; defaultName: string } {
@@ -1512,8 +1562,12 @@ function registerImageIpc(): void {
 
       html = buildPosterHtml({
         kind,
-        title: plant.nickname,
-        subtitle: [plant.species?.commonName, plant.envName].filter(Boolean).join(' · ') || null,
+        theme: request.theme,
+        title: request.title?.trim() || plant.nickname,
+        subtitle:
+          request.subtitle?.trim() ||
+          [plant.species?.commonName, plant.envName].filter(Boolean).join(' · ') ||
+          null,
         hero,
         stats: [
           { label: '状态', value: `${PLANT_STATUS_LABELS[plant.status] ?? plant.status}${days ? ` ${days} 天` : ''}` },
@@ -1555,7 +1609,8 @@ function registerImageIpc(): void {
 
       html = buildPosterHtml({
         kind,
-        title: `${year} 年 ${month} 月养护计划`,
+        theme: request.theme,
+        title: request.title?.trim() || `${year} 年 ${month} 月养护计划`,
         subtitle: plantId ? (tasks[0]?.plantName ?? null) : '全部植株',
         hero: null,
         stats: [
@@ -1568,6 +1623,72 @@ function registerImageIpc(): void {
         footer: posterFooter()
       })
       defaultName = `sproutbook-${year}-${String(month).padStart(2, '0')}-养护计划.png`
+    } else if (kind === 'growth' || kind === 'collage') {
+      const plantId = Number(request.plantId)
+      const plant = getPlant(db, plantId)
+      if (!plant) throw new Error('植株不存在')
+
+      const timeline = plantPhotoTimeline(db, plantId, request.from, request.to)
+      const max = Math.min(Math.max(Number(request.maxPhotos) || (kind === 'growth' ? 6 : 4), 1), 9)
+      // 照片多的时候取最近的（人最想看的是最近的状态）
+      const picked = timeline.slice(-max)
+
+      const photos = picked
+        .map((row) => ({
+          url: posterImage(row.thumb ?? row.path, 900),
+          caption: row.date.slice(5)
+        }))
+        .filter((p): p is { url: string; caption: string } => Boolean(p.url))
+
+      if (photos.length === 0) {
+        throw new Error('这段时间里这株还没有照片，先上传几张再试')
+      }
+
+      const spanDays =
+        picked.length > 1
+          ? Math.max(
+              1,
+              Math.round(
+                (new Date(picked[picked.length - 1].date).getTime() - new Date(picked[0].date).getTime()) /
+                  86400000
+              )
+            )
+          : 1
+
+      const rangeText =
+        request.from || request.to
+          ? `${request.from ?? '最早'} ~ ${request.to ?? '今天'}`
+          : `${picked[0].date} ~ ${picked[picked.length - 1].date}`
+
+      html = buildPosterHtml({
+        kind,
+        theme: request.theme,
+        layout: kind === 'growth' ? request.layout ?? 'timeline' : request.layout ?? 'grid',
+        title: request.title?.trim() || (kind === 'growth' ? `${plant.nickname} 的成长记录` : `${plant.nickname} 的照片`),
+        subtitle:
+          request.subtitle?.trim() ||
+          [plant.species?.commonName, rangeText].filter(Boolean).join(' · '),
+        hero: null,
+        stats: [
+          { label: '照片', value: `${picked.length} 张` },
+          { label: '时间跨度', value: `${spanDays} 天` },
+          { label: '位置', value: plant.envName ?? '未设置' }
+        ],
+        sections: [
+          {
+            title: '记录',
+            lines: picked.map((row) =>
+              [row.date.slice(5), row.kind ? actionLabel(row.kind) : '', row.content ?? '']
+                .filter(Boolean)
+                .join(' ')
+            )
+          }
+        ],
+        photos,
+        thumbs: [],
+        footer: posterFooter()
+      })
+      defaultName = `sproutbook-${kind === 'growth' ? '成长记录' : '照片'}-${plant.nickname.replace(/[\\/:*?"<>|]/g, '_')}.png`
     } else {
       const limit = Math.min(Math.max(Number(request.limit) || 5, 1), 8)
       const logs = listCareLogs(db, { limit })
@@ -1581,7 +1702,8 @@ function registerImageIpc(): void {
 
       html = buildPosterHtml({
         kind,
-        title: '最近养护记录',
+        theme: request.theme,
+        title: request.title?.trim() || '最近养护记录',
         subtitle: logs.length > 0 ? `${logs[logs.length - 1].logDate} ~ ${logs[0].logDate}` : null,
         hero: logs.length > 0 ? posterImage((logs[0].images ?? [])[0]?.path ?? null) : null,
         stats: [

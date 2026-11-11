@@ -27,7 +27,7 @@ import {
 import { DynamicForm } from '../components/DynamicForm'
 import type { FieldContext, FormValues } from '../components/DynamicForm'
 import { ImageStrip } from '../components/ImageStrip'
-import { PosterPreviewModal } from '../components/PosterPreviewModal'
+import { PosterStudioModal } from '../components/PosterStudioModal'
 
 export interface PlantEditorModalProps {
   plant: PlantListItem | null
@@ -563,10 +563,7 @@ export function PlantEditorModal({
       ) : null}
 
       {posterOpen && plant ? (
-        <PosterPreviewModal
-          request={{ kind: 'plant', plantId: plant.id }}
-          onClose={() => setPosterOpen(false)}
-        />
+        <PosterStudioModal defaults={{ kind: 'plant', plantId: plant.id }} onClose={() => setPosterOpen(false)} />
       ) : null}
     </Modal>
   )

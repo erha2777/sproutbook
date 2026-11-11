@@ -3405,6 +3405,47 @@ export async function runSmoke(outFile: string): Promise<number> {
       check('海报：换行折成空格', clampText('第一行\n第二行', 20) === '第一行 第二行')
 
       check('海报：动作类型转中文', actionLabel('water') === '浇水' && actionLabel('repot') === '翻盆换土')
+
+      /* 版式与配色 */
+      const grid = buildPosterHtml({
+        kind: 'collage',
+        theme: 'night',
+        layout: 'grid',
+        title: '照片',
+        subtitle: null,
+        hero: null,
+        stats: [],
+        sections: [],
+        photos: [
+          { url: 'data:image/png;base64,A', caption: '04-12' },
+          { url: 'data:image/png;base64,B', caption: '04-20' },
+          { url: 'data:image/png;base64,C', caption: '05-02' },
+          { url: 'data:image/png;base64,D', caption: '05-18' },
+          { url: 'data:image/png;base64,E', caption: '06-01' }
+        ],
+        footer: 'x'
+      })
+      check('海报：拼贴版式带网格', grid.includes('class="grid n3"'))
+      check('海报：拼贴保留日期角标', grid.includes('class="cap">04-12'))
+      check('海报：夜蓝配色', grid.includes('--paper: #1d2738'))
+      check('海报：拼贴不渲染大图区', !grid.includes('class="hero"'))
+
+      const timeline = buildPosterHtml({
+        kind: 'growth',
+        layout: 'timeline',
+        title: '成长记录',
+        subtitle: '绣球 · 2026-04-01 ~ 2026-06-01',
+        hero: null,
+        stats: [{ label: '照片', value: '2 张' }],
+        sections: [{ title: '记录', lines: ['04-12 浇水', '05-02 施肥'] }],
+        photos: [
+          { url: 'data:image/png;base64,A', caption: '04-12' },
+          { url: 'data:image/png;base64,B', caption: '05-02' }
+        ],
+        footer: 'x'
+      })
+      check('海报：时间轴有行', timeline.includes('class="tl-row"') && timeline.includes('04-12'))
+      check('海报：时间轴摘要来自 sections', timeline.includes('浇水'))
       check('海报：未知类型原样返回', actionLabel('custom-thing') === 'custom-thing')
     }
 

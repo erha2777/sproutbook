@@ -29,7 +29,7 @@ import {
 } from '@core/care'
 import { Badge, Button, EmptyState, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
-import { PosterPreviewModal } from '../components/PosterPreviewModal'
+import { PosterStudioModal } from '../components/PosterStudioModal'
 import type { PlantOption } from '../components/CareTaskDialog'
 import { CareRuleManager } from '../components/CareRuleManager'
 import { CareCalendar } from '../components/CareCalendar'
@@ -673,8 +673,13 @@ export function CarePage({
       )}
 
       {posterOpen ? (
-        <PosterPreviewModal
-          request={{ kind: 'plan', year, month, plantId: plantFilter ? Number(plantFilter) : undefined }}
+        <PosterStudioModal
+          defaults={{
+            kind: 'plan',
+            year,
+            month,
+            plantId: plantFilter ? Number(plantFilter) : undefined
+          }}
           onClose={() => setPosterOpen(false)}
         />
       ) : null}
