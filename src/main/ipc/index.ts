@@ -23,6 +23,7 @@ import { getWeatherKey, setWeatherKey } from '../services/secrets'
 import { qweatherLookupDetailed, readWeatherConfig, saveWeatherConfig } from '../services/weather-providers'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, join, normalize, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import type { Db } from '../db/connection'
 import { backupsDir, dataDir, dbFilePath, getDb, imagesDir, makeManualBackup } from '../db'
 import { listBackups } from '../db/backup'
@@ -1455,7 +1456,39 @@ function registerImageIpc(): void {
     return `生成于 ${new Date().toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
   }
 
-  handle('poster:export', async (request: { kind: 'plant' | 'plan' | 'log'; plantId?: number; year?: number; month?: number; limit?: number }) => {
+  /*
+   * 海报分两步：**先预览，再保存**。
+   *
+   * 直接弹保存框的问题是——用户看不到自己导出了什么（可能是一株没填信息的植物、
+   * 或者这个月根本没有任务），存完打开才发现是张空图。所以先生成 PNG 放在内存里，
+   * 渲染层拿 data URL 显示预览，用户点「保存」才弹保存框。
+   *
+   * token 只是内存里的键，不落盘；进程重启就没了（这时保存会提示重新生成）。
+   */
+  const pendingPosters = new Map<string, { png: Buffer; defaultName: string; at: number }>()
+
+  function rememberPoster(png: Buffer, defaultName: string): string {
+    const token = randomUUID()
+    pendingPosters.set(token, { png, defaultName, at: Date.now() })
+    // 只留最近几份，避免反复点预览把内存堆起来
+    const stale = [...pendingPosters.entries()].filter(([, v]) => Date.now() - v.at > 10 * 60 * 1000)
+    for (const [key] of stale) pendingPosters.delete(key)
+    if (pendingPosters.size > 5) {
+      const oldest = [...pendingPosters.entries()].sort((a, b) => a[1].at - b[1].at)[0]
+      if (oldest) pendingPosters.delete(oldest[0])
+    }
+    return token
+  }
+
+  type PosterRequestInput = {
+    kind: 'plant' | 'plan' | 'log'
+    plantId?: number
+    year?: number
+    month?: number
+    limit?: number
+  }
+
+  function assemblePoster(request: PosterRequestInput): { html: string; defaultName: string } {
     const db = getDb()
     const kind = request.kind
 
@@ -1570,15 +1603,35 @@ function registerImageIpc(): void {
       defaultName = 'sproutbook-最近养护记录.png'
     }
 
+    return { html, defaultName }
+  }
+
+  /** 生成海报并返回预览用的 data URL（此时还什么都没写盘） */
+  handle('poster:preview', async (request: PosterRequestInput) => {
+    const { html, defaultName } = assemblePoster(request)
     const png = await renderHtmlToPng(html, { width: POSTER_WIDTH, height: POSTER_HEIGHT })
+    const token = rememberPoster(png, defaultName)
+    return {
+      token,
+      defaultName,
+      bytes: png.length,
+      dataUrl: `data:image/png;base64,${png.toString('base64')}`
+    }
+  })
+
+  /** 用户确认预览后，才弹保存框写文件 */
+  handle('poster:save', async (token: string) => {
+    const entry = pendingPosters.get(token)
+    if (!entry) throw new Error('预览已经失效，请重新生成一次')
     const result = await dialog.showSaveDialog({
-      title: '导出海报',
-      defaultPath: join(app.getPath('pictures'), defaultName),
+      title: '保存海报',
+      defaultPath: join(app.getPath('pictures'), entry.defaultName),
       filters: [{ name: 'PNG 图片', extensions: ['png'] }]
     })
-    if (result.canceled || !result.filePath) return { canceled: true, path: null }
-    writeFileSync(result.filePath, png)
-    return { canceled: false, path: result.filePath }
+    if (result.canceled || !result.filePath) return { canceled: true as const, path: null }
+    writeFileSync(result.filePath, entry.png)
+    pendingPosters.delete(token)
+    return { canceled: false as const, path: result.filePath }
   })
 
   handle('care:plan.exportHtml', async (plantId: number, year: number) => {

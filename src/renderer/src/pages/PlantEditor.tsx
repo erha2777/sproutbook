@@ -27,6 +27,7 @@ import {
 import { DynamicForm } from '../components/DynamicForm'
 import type { FieldContext, FormValues } from '../components/DynamicForm'
 import { ImageStrip } from '../components/ImageStrip'
+import { PosterPreviewModal } from '../components/PosterPreviewModal'
 
 export interface PlantEditorModalProps {
   plant: PlantListItem | null
@@ -62,6 +63,8 @@ export function PlantEditorModal({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [speciesQuery, setSpeciesQuery] = useState('')
   const [saving, setSaving] = useState(false)
+  /** 海报预览弹窗 */
+  const [posterOpen, setPosterOpen] = useState(false)
   /** 封面选哪张（null = 默认：最早导入的那张）；保存时一起提交 */
   const [coverId, setCoverId] = useState<number | null>(plant?.coverImageId ?? null)
 
@@ -344,19 +347,7 @@ export function PlantEditorModal({
            * 只在已有植株时出现（新建还没有 id）。
            */}
           {plant ? (
-            <Button
-              onClick={() => {
-                void window.api.poster
-                  .export({ kind: 'plant', plantId: plant.id })
-                  .then((r) => {
-                    if (!r.canceled) toast.push(`海报已保存：${r.path ?? ''}`, 'success')
-                  })
-                  .catch((error) => {
-                    toast.push(error instanceof Error ? error.message : '导出海报失败', 'error')
-                  })
-              }}
-              title="把这一株的现状导出成一张图，用来分享"
-            >
+            <Button onClick={() => setPosterOpen(true)} title="把这一株的现状导出成一张图，用来分享">
               分享海报
             </Button>
           ) : null}
@@ -569,6 +560,13 @@ export function PlantEditorModal({
             )}
           </div>
         </Modal>
+      ) : null}
+
+      {posterOpen && plant ? (
+        <PosterPreviewModal
+          request={{ kind: 'plant', plantId: plant.id }}
+          onClose={() => setPosterOpen(false)}
+        />
       ) : null}
     </Modal>
   )

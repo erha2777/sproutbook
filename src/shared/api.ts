@@ -408,7 +408,13 @@ export interface SproutbookApi {
   }
   /** 分享海报：把植株 / 某月计划 / 最近日志导出成一张 PNG */
   poster: {
-    export(request: PosterRequest): Promise<{ canceled: boolean; path: string | null }>
+    preview(request: PosterRequest): Promise<{
+      token: string
+      defaultName: string
+      bytes: number
+      dataUrl: string
+    }>
+    save(token: string): Promise<{ canceled: boolean; path: string | null }>
   }
   /** 种草清单：想买、还没买的植物 */
   wishlist: {

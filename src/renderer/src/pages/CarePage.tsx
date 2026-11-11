@@ -29,6 +29,7 @@ import {
 } from '@core/care'
 import { Badge, Button, EmptyState, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
+import { PosterPreviewModal } from '../components/PosterPreviewModal'
 import type { PlantOption } from '../components/CareTaskDialog'
 import { CareRuleManager } from '../components/CareRuleManager'
 import { CareCalendar } from '../components/CareCalendar'
@@ -74,6 +75,8 @@ export function CarePage({
   const today = todayIso()
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
+  /** 海报预览弹窗 */
+  const [posterOpen, setPosterOpen] = useState(false)
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [plantFilter, setPlantFilter] = useState('')
   /** 当月任务：月历和「当天计划」都用这一份 */
@@ -462,21 +465,8 @@ export function CarePage({
         >
           导出计划
         </Button>
-        {/* 分享海报：当月任务的图片版，发给家人 / 发朋友圈都不用截图拼图 */}
-        <Button
-          size="small"
-          title="把这个月的养护计划导出成一张图"
-          onClick={() => {
-            void window.api.poster
-              .export({ kind: 'plan', year, month, plantId: plantFilter ? Number(plantFilter) : undefined })
-              .then((r) => {
-                if (!r.canceled) toast.push(`海报已保存：${r.path ?? ''}`, 'success')
-              })
-              .catch((error) => {
-                toast.push(error instanceof Error ? error.message : '导出海报失败', 'error')
-              })
-          }}
-        >
+        {/* 分享海报：先预览再保存，免得存下来才发现这个月没有任务 */}
+        <Button size="small" title="把这个月的养护计划导出成一张图" onClick={() => setPosterOpen(true)}>
           分享海报
         </Button>
         <Button variant="primary" onClick={() => setEditing('new')}>
@@ -682,8 +672,15 @@ export function CarePage({
         </div>
       )}
 
+      {posterOpen ? (
+        <PosterPreviewModal
+          request={{ kind: 'plan', year, month, plantId: plantFilter ? Number(plantFilter) : undefined }}
+          onClose={() => setPosterOpen(false)}
+        />
+      ) : null}
+
       {editing ? (
-        <CareTaskDialog
+      <CareTaskDialog
           task={editing === 'new' ? null : editing}
           plants={plants}
           defaultDate={draftDate ?? `${year}-${String(month).padStart(2, '0')}-01`}

@@ -16,6 +16,7 @@ import type { CareLog, CareLogImage, ImageRecord } from '@core/types'
 import { CARE_ACTION_OPTIONS, logKindLabel } from '@core/care'
 import { Badge, Button, EmptyState, Panel, SearchSelect, SectionTitle, SelectInput, Spinner, TextInput, useToast } from '../components/ui'
 import { ImageViewer } from '../components/ImageViewer'
+import { PosterPreviewModal } from '../components/PosterPreviewModal'
 import type { PlantOption } from '../components/CareTaskDialog'
 
 /**
@@ -42,6 +43,8 @@ export function LogsPage(): ReactNode {
   const [preview, setPreview] = useState<{ images: CareLogImage[]; index: number } | null>(null)
   /** 多选删除：勾中的日志 id */
   const [selected, setSelected] = useState<number[]>([])
+  /** 海报预览 */
+  const [posterOpen, setPosterOpen] = useState(false)
   /** 正在编辑的日志 id（null = 没有在编辑） */
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editKind, setEditKind] = useState('note')
@@ -247,20 +250,7 @@ export function LogsPage(): ReactNode {
           right={
             <span className="row tight" style={{ alignItems: 'center' }}>
               <span className="small muted">{plantId ? `已完成 ${logs.length} 条` : `最近 ${logs.length} 条`}</span>
-              <Button
-                size="small"
-                title="把最近几条记录导出成一张图"
-                onClick={() => {
-                  void window.api.poster
-                    .export({ kind: 'log', limit: 5 })
-                    .then((r) => {
-                      if (!r.canceled) toast.push(`海报已保存：${r.path ?? ''}`, 'success')
-                    })
-                    .catch((error) => {
-                      toast.push(error instanceof Error ? error.message : '导出海报失败', 'error')
-                    })
-                }}
-              >
+              <Button size="small" title="把最近几条记录导出成一张图" onClick={() => setPosterOpen(true)}>
                 分享海报
               </Button>
             </span>
@@ -512,6 +502,10 @@ export function LogsPage(): ReactNode {
           </div>
         )}
       </Panel>
+
+      {posterOpen ? (
+        <PosterPreviewModal request={{ kind: 'log', limit: 5 }} onClose={() => setPosterOpen(false)} />
+      ) : null}
 
       {/* 大图预览：缩略图看细节不够，点开看原图 */}
       {preview ? (

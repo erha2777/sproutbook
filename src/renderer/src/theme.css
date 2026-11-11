@@ -4557,3 +4557,21 @@ html.tex-button .home-gear.sound-ctl:hover {
   background: rgba(255, 255, 255, 0.35);
   border: 2px dashed rgba(107, 74, 42, 0.45);
 }
+
+/* ---- 海报预览 ---- */
+.poster-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  max-height: 62vh;
+  overflow: auto;
+  padding: 4px;
+}
+.poster-preview img {
+  max-width: 100%;
+  max-height: 62vh;
+  border: 4px solid var(--wood-outline, #6b4a2a);
+  box-shadow: 0 6px 0 rgba(107, 74, 42, 0.22);
+  background: #f7e7c6;
+}
