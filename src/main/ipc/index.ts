@@ -1496,6 +1496,8 @@ function registerImageIpc(): void {
     to?: string
     /** 最多放几张（拼贴 2×2 / 3×3，时间轴 6 行） */
     maxPhotos?: number
+    /** 手动挑的照片 id（按这里给出的顺序排）；为空才退回按日期自动取 */
+    imageIds?: number[]
   }
 
   /**
@@ -1509,16 +1511,26 @@ function registerImageIpc(): void {
     plantId: number,
     from?: string,
     to?: string
-  ): Array<{ path: string; thumb: string | null; date: string; kind: string | null; content: string | null }> {
+  ): Array<{
+    id: number
+    path: string
+    thumb: string | null
+    date: string
+    kind: string | null
+    content: string | null
+    logId: number | null
+  }> {
     const rows = db.all<{
+      id: number
       path: string
       thumb_path: string | null
       created_at: string
+      log_id: number | null
       log_date: string | null
       log_kind: string | null
       content: string | null
     }>(
-      `SELECT i.path, i.thumb_path, i.created_at,
+      `SELECT i.id, i.path, i.thumb_path, i.created_at, i.log_id,
               l.log_date AS log_date, l.kind AS log_kind, l.content AS content
          FROM images i
          LEFT JOIN care_logs l ON l.id = i.log_id
@@ -1528,11 +1540,13 @@ function registerImageIpc(): void {
     )
     return rows
       .map((row) => ({
+        id: row.id,
         path: row.path,
         thumb: row.thumb_path,
         date: (row.log_date ?? row.created_at ?? '').slice(0, 10),
         kind: row.log_kind,
-        content: row.content
+        content: row.content,
+        logId: row.log_id ?? null
       }))
       .filter((row) => row.date !== '')
       .filter((row) => (!from || row.date >= from) && (!to || row.date <= to))
@@ -1630,8 +1644,17 @@ function registerImageIpc(): void {
 
       const timeline = plantPhotoTimeline(db, plantId, request.from, request.to)
       const max = Math.min(Math.max(Number(request.maxPhotos) || (kind === 'growth' ? 6 : 4), 1), 9)
-      // 照片多的时候取最近的（人最想看的是最近的状态）
-      const picked = timeline.slice(-max)
+
+      /*
+       * 手动挑的照片优先：按用户勾选的顺序排（时间轴用它当叙事顺序）。
+       * 没挑就把这批里最近的 N 张放上去 —— 两种入口都通向同一份数据。
+       */
+      const wanted = (request.imageIds ?? []).filter((id) => Number.isFinite(id))
+      const byId = new Map(timeline.map((row) => [row.id, row]))
+      const manuallyPicked = wanted
+        .map((id) => byId.get(Number(id)))
+        .filter((row): row is (typeof timeline)[number] => Boolean(row))
+      const picked = manuallyPicked.length > 0 ? manuallyPicked.slice(0, 9) : timeline.slice(-max)
 
       const photos = picked
         .map((row) => ({
@@ -1691,7 +1714,10 @@ function registerImageIpc(): void {
       defaultName = `sproutbook-${kind === 'growth' ? '成长记录' : '照片'}-${plant.nickname.replace(/[\\/:*?"<>|]/g, '_')}.png`
     } else {
       const limit = Math.min(Math.max(Number(request.limit) || 5, 1), 8)
-      const logs = listCareLogs(db, { limit })
+      const logs = listCareLogs(db, {
+        limit,
+        plantId: request.plantId ? Number(request.plantId) : undefined
+      })
       const plants = new Set(logs.map((l) => l.plantId))
       const withPhotos = logs.filter((l) => (l.images?.length ?? 0) > 0)
       const photos = logs
@@ -1729,6 +1755,22 @@ function registerImageIpc(): void {
   }
 
   /** 生成海报并返回预览用的 data URL（此时还什么都没写盘） */
+  /**
+   * 工作室挑图用：这一株所有照片（含养护记录里的），带小缩略图。
+   * 缩到 260px 宽再内联 —— 一株几十张图，原图转 base64 会很慢。
+   */
+  handle('poster:photos', (plantId: number, options?: { from?: string; to?: string }) => {
+    const rows = plantPhotoTimeline(getDb(), Number(plantId), options?.from, options?.to)
+    return rows.map((row) => ({
+      id: row.id,
+      date: row.date,
+      source: row.logId ? ('log' as const) : ('plant' as const),
+      kind: row.kind,
+      content: row.content ? row.content.slice(0, 40) : null,
+      thumb: posterImage(row.thumb ?? row.path, 260) ?? ''
+    }))
+  })
+
   handle('poster:preview', async (request: PosterRequestInput) => {
     const { html, defaultName } = assemblePoster(request)
     const png = await renderHtmlToPng(html, { width: POSTER_WIDTH, height: POSTER_HEIGHT })

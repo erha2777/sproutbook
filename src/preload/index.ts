@@ -129,6 +129,7 @@ const api: SproutbookApi = {
   },
   poster: {
     preview: (request) => call('poster:preview', request),
+    photos: (plantId, options) => call('poster:photos', plantId, options),
     save: (token) => call('poster:save', token)
   },
   wishlist: {

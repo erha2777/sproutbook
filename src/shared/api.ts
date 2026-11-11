@@ -415,6 +415,8 @@ export interface SproutbookApi {
       dataUrl: string
     }>
     save(token: string): Promise<{ canceled: boolean; path: string | null }>
+    /** 挑图用：这一株的照片（养护记录里的 + 单独上传的），带小缩略图 */
+    photos(plantId: number, options?: { from?: string; to?: string }): Promise<PosterPhotoOption[]>
   }
   /** 种草清单：想买、还没买的植物 */
   wishlist: {
@@ -558,6 +560,16 @@ export interface CareLogPatch {
 // 养护计划（跨进程契约）
 // ---------------------------------------------------------------------------
 
+/** 挑图列表里的一张：来源（养护记录 / 单独上传）+ 日期 + 小缩略图 */
+export interface PosterPhotoOption {
+  id: number
+  date: string
+  source: 'log' | 'plant'
+  kind: string | null
+  content: string | null
+  thumb: string
+}
+
 /** 海报导出的请求：多种海报共用一条通道，都可以覆盖标题 / 配色 / 版式 */
 export interface PosterCommonOptions {
   /** 自定义标题 / 副标题（留空用默认） */
@@ -571,7 +583,7 @@ export type PosterRequest = PosterCommonOptions &
   (
     | { kind: 'plant'; plantId: number }
     | { kind: 'plan'; year: number; month: number; plantId?: number }
-    | { kind: 'log'; limit?: number }
+    | { kind: 'log'; limit?: number; plantId?: number }
     | {
         kind: 'growth' | 'collage'
         plantId: number
@@ -581,6 +593,8 @@ export type PosterRequest = PosterCommonOptions &
         /** 最多几张（1~9） */
         maxPhotos?: number
         layout?: 'hero' | 'grid' | 'timeline'
+        /** 手动挑的照片 id，按给定顺序排；为空才按日期自动取 */
+        imageIds?: number[]
       }
   )
 

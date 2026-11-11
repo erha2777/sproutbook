@@ -563,7 +563,7 @@ export function PlantEditorModal({
       ) : null}
 
       {posterOpen && plant ? (
-        <PosterStudioModal defaults={{ kind: 'plant', plantId: plant.id }} onClose={() => setPosterOpen(false)} />
+        <PosterStudioModal plantId={plant.id} onClose={() => setPosterOpen(false)} />
       ) : null}
     </Modal>
   )

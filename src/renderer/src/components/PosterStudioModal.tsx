@@ -1,16 +1,14 @@
 /**
- * 海报工作室：选内容、选版式、选配色，先生成预览再决定保存。
+ * 海报工作室：选内容、配文字、**自己挑照片**，先生成预览再保存。
  *
- * 为什么不做成一键导出：「分享海报」原来固定只出「这一株的档案」，
- * 但想分享的东西不一样 —— 有人想看整段成长过程（时间轴），
- * 有人只想把开花那几天的照片拼成一张（拼贴），有人要换深色背景。
- * 所以入口统一收到这里：默认值跟着点进来的位置走，改不改由你。
+ * 只有「某一株」这一个入口 —— 海报讲的是这株植物的故事，所以不需要再选植株。
+ * 照片可以按日期缩范围，也可以在缩略图里一张张勾：时间轴按日期排，
+ * 拼贴只放勾选的这几张。
  */
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { PosterRequest } from '@shared/api'
-import type { PlantListItem } from '@shared/api'
+import type { PosterPhotoOption, PosterRequest } from '@shared/api'
 import { Button, Modal, Notice, SelectInput, Spinner, TextInput, useToast } from './ui'
 
 type Kind = 'plant' | 'growth' | 'collage' | 'plan' | 'log'
@@ -18,9 +16,9 @@ type Kind = 'plant' | 'growth' | 'collage' | 'plan' | 'log'
 const KIND_OPTIONS: Array<{ value: Kind; label: string }> = [
   { value: 'plant', label: '整株档案（封面 + 最近养护）' },
   { value: 'growth', label: '成长时间轴（照片按日期排）' },
-  { value: 'collage', label: '图片拼贴（挑一段时间的照片）' },
-  { value: 'plan', label: '本月养护计划' },
-  { value: 'log', label: '最近养护记录' }
+  { value: 'collage', label: '图片拼贴（自己挑照片）' },
+  { value: 'plan', label: '这一株的本月计划' },
+  { value: 'log', label: '这一株的最近记录' }
 ]
 
 const THEME_OPTIONS = [
@@ -34,88 +32,109 @@ const LAYOUT_OPTIONS = [
   { value: 'timeline', label: '时间轴（左图右文）' }
 ]
 
-export interface PosterStudioDefaults {
-  kind: Kind
-  plantId?: number
-  year?: number
-  month?: number
-  limit?: number
-}
+const MAX_PHOTOS = 9
 
 export function PosterStudioModal({
-  defaults,
+  plantId,
+  year,
+  month,
   onClose
 }: {
-  defaults: PosterStudioDefaults
+  plantId: number
+  year?: number
+  month?: number
   onClose: () => void
 }): ReactNode {
   const toast = useToast()
-  const [kind, setKind] = useState<Kind>(defaults.kind)
-  const [plants, setPlants] = useState<PlantListItem[]>([])
-  const [plantId, setPlantId] = useState<string>(defaults.plantId ? String(defaults.plantId) : '')
+  const [kind, setKind] = useState<Kind>('plant')
   const [theme, setTheme] = useState<'paper' | 'night' | 'garden'>('paper')
   const [layout, setLayout] = useState<'grid' | 'timeline'>('grid')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const [maxPhotos, setMaxPhotos] = useState('6')
   const [title, setTitle] = useState('')
   const [subtitle, setSubtitle] = useState('')
+
+  const [photos, setPhotos] = useState<PosterPhotoOption[]>([])
+  const [photosLoading, setPhotosLoading] = useState(false)
+  /** 勾选的照片 id，**选择顺序**就是时间轴/拼贴的排序 */
+  const [selected, setSelected] = useState<number[]>([])
 
   const [preview, setPreview] = useState<{ token: string; dataUrl: string; bytes: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    void window.api.plants
-      .list()
-      .then((result) => {
-        const rows = result.items
-        setPlants(rows)
-        // 从某一株点进来的已经带了 id；没有就默认第一株
-        setPlantId((current) => current || (rows[0] ? String(rows[0].id) : ''))
-      })
-      .catch(() => setPlants([]))
-  }, [])
+  const usesPhotos = kind === 'growth' || kind === 'collage'
 
-  /** 日期范围 / 张数只对「照片类」海报有意义 */
-  const showsRange = kind === 'growth' || kind === 'collage'
-  const photoCount = kind === 'growth' ? '6' : layout === 'grid' ? maxPhotos : '6'
+  // 照片列表：日期范围只是缩小候选，勾选才是真正的选择
+  useEffect(() => {
+    if (!usesPhotos) return
+    let alive = true
+    setPhotosLoading(true)
+    void window.api.poster
+      .photos(plantId, { from: from || undefined, to: to || undefined })
+      .then((rows) => {
+        if (!alive) return
+        setPhotos(rows)
+        // 换了范围后，原来勾的不在新列表里就去掉
+        setSelected((prev) => prev.filter((id) => rows.some((row) => row.id === id)))
+      })
+      .catch(() => {
+        if (alive) setPhotos([])
+      })
+      .finally(() => {
+        if (alive) setPhotosLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [usesPhotos, plantId, from, to])
+
+  const byId = useMemo(() => new Map(photos.map((p) => [p.id, p])), [photos])
+  const chosen = selected.map((id) => byId.get(id)).filter((p): p is PosterPhotoOption => Boolean(p))
+
+  const toggle = (id: number): void => {
+    setPreview(null)
+    setSelected((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id)
+      if (prev.length >= MAX_PHOTOS) {
+        toast.push(`最多选 ${MAX_PHOTOS} 张`, 'error')
+        return prev
+      }
+      return [...prev, id]
+    })
+  }
 
   const request = useMemo<PosterRequest | null>(() => {
     const base = { theme, title: title.trim() || undefined, subtitle: subtitle.trim() || undefined }
-    if (kind === 'plant') {
-      return plantId ? { ...base, kind, plantId: Number(plantId) } : null
-    }
-    if (kind === 'growth' || kind === 'collage') {
-      if (!plantId) return null
+    if (kind === 'plant') return { ...base, kind, plantId }
+    if (usesPhotos) {
       return {
         ...base,
-        kind,
-        plantId: Number(plantId),
+        kind: kind as 'growth' | 'collage',
+        plantId,
         from: from || undefined,
         to: to || undefined,
-        maxPhotos: Number(photoCount) || undefined,
-        layout: kind === 'collage' ? layout : 'timeline'
+        maxPhotos: chosen.length || undefined,
+        layout: kind === 'collage' ? layout : 'timeline',
+        // 勾了就按勾的顺序；没勾就让主进程按日期取最近的
+        imageIds: chosen.length > 0 ? chosen.map((p) => p.id) : undefined
       }
     }
     if (kind === 'plan') {
       return {
         ...base,
         kind,
-        year: defaults.year ?? new Date().getFullYear(),
-        month: defaults.month ?? new Date().getMonth() + 1,
-        plantId: plantId ? Number(plantId) : undefined
+        year: year ?? new Date().getFullYear(),
+        month: month ?? new Date().getMonth() + 1,
+        plantId
       }
     }
-    return { ...base, kind: 'log', limit: defaults.limit ?? 5 }
-  }, [kind, plantId, theme, layout, from, to, photoCount, title, subtitle, defaults])
+    return { ...base, kind: 'log', limit: 5, plantId }
+  }, [kind, plantId, theme, layout, from, to, chosen, title, subtitle, year, month, usesPhotos])
 
   const generate = async (): Promise<void> => {
-    if (!request) {
-      toast.push('先选一株植物', 'error')
-      return
-    }
+    if (!request) return
     setBusy(true)
     setError(null)
     setPreview(null)
@@ -151,7 +170,7 @@ export function PosterStudioModal({
       footer={
         <>
           <span className="small muted">
-            {preview ? `PNG · ${Math.round(preview.bytes / 1024)} KB · 1080 宽` : '调整选项后先生成预览'}
+            {preview ? `PNG · ${Math.round(preview.bytes / 1024)} KB · 1080 宽` : '选好照片后先生成预览'}
           </span>
           <span className="spacer" />
           <Button onClick={onClose}>关闭</Button>
@@ -177,64 +196,86 @@ export function PosterStudioModal({
               options={KIND_OPTIONS}
             />
           </label>
-          {kind !== 'log' ? (
-            <label className="field" style={{ minWidth: 200, flex: '1 1 200px' }}>
-              <span className="field-label">植株{kind === 'plan' ? '（空 = 全部）' : ''}</span>
-              <SelectInput
-                value={plantId}
-                onChange={(v) => {
-                  setPlantId(v)
-                  setPreview(null)
-                }}
-                options={[
-                  ...(kind === 'plan' ? [{ value: '', label: '全部植株' }] : []),
-                  ...plants.map((pl) => ({ value: String(pl.id), label: pl.nickname }))
-                ]}
-              />
-            </label>
-          ) : null}
           <label className="field" style={{ minWidth: 150, flex: '0 1 160px' }}>
             <span className="field-label">配色</span>
             <SelectInput value={theme} onChange={(v) => setTheme(v as typeof theme)} options={THEME_OPTIONS} />
           </label>
+          {kind === 'collage' ? (
+            <label className="field" style={{ width: 180 }}>
+              <span className="field-label">版式</span>
+              <SelectInput value={layout} onChange={(v) => setLayout(v as typeof layout)} options={LAYOUT_OPTIONS} />
+            </label>
+          ) : null}
         </div>
 
-        {showsRange ? (
-          <div className="row tight" style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <label className="field">
-              <span className="field-label">起始日期（可空）</span>
-              <TextInput value={from} onChange={setFrom} placeholder="2026-04-01" />
-            </label>
-            <label className="field">
-              <span className="field-label">结束日期（可空）</span>
-              <TextInput value={to} onChange={setTo} placeholder="2026-06-30" />
-            </label>
-            <label className="field" style={{ width: 130 }}>
-              <span className="field-label">照片数量</span>
-                <SelectInput
-                  value={photoCount}
-                  onChange={(v) => {
-                    setMaxPhotos(v)
-                    setPreview(null)
-                  }}
-                  options={[
-                    { value: '4', label: '4 张' },
-                    { value: '6', label: '6 张' },
-                    { value: '9', label: '9 张' }
-                  ]}
-              />
-            </label>
-            {kind === 'collage' ? (
-              <label className="field" style={{ width: 180 }}>
-                <span className="field-label">版式</span>
-                <SelectInput
-                  value={layout}
-                  onChange={(v) => setLayout(v as typeof layout)}
-                  options={LAYOUT_OPTIONS}
-                />
+        {usesPhotos ? (
+          <>
+            <div className="row tight" style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <label className="field">
+                <span className="field-label">筛选起始日期（可空）</span>
+                <TextInput value={from} onChange={setFrom} placeholder="2026-04-01" />
               </label>
-            ) : null}
-          </div>
+              <label className="field">
+                <span className="field-label">筛选结束日期（可空）</span>
+                <TextInput value={to} onChange={setTo} placeholder="2026-06-30" />
+              </label>
+              <span className="small muted" style={{ paddingBottom: 6 }}>
+                日期只是缩小下面的候选；勾选才算数
+              </span>
+            </div>
+
+            <div className="row tight" style={{ alignItems: 'center' }}>
+              <span className="small muted">
+                已选 {chosen.length} 张{chosen.length === 0 ? '（不勾就自动取最近几张）' : ''}
+              </span>
+              <span className="spacer" />
+              <Button
+                size="small"
+                onClick={() => {
+                  setPreview(null)
+                  setSelected(photos.slice(-MAX_PHOTOS).map((p) => p.id))
+                }}
+                disabled={photos.length === 0}
+              >
+                选最近 {MAX_PHOTOS} 张
+              </Button>
+              <Button
+                size="small"
+                onClick={() => {
+                  setPreview(null)
+                  setSelected([])
+                }}
+                disabled={chosen.length === 0}
+              >
+                清空
+              </Button>
+            </div>
+
+            {photosLoading ? (
+              <Spinner label="读取照片…" />
+            ) : photos.length === 0 ? (
+              <Notice tone="info">这一株在这段时间里还没有照片，换个日期范围或者先去上传几张。</Notice>
+            ) : (
+              <div className="poster-pick">
+                {photos.map((p) => {
+                  const order = selected.indexOf(p.id)
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`poster-pick-item${order >= 0 ? ' picked' : ''}`}
+                      title={`${p.date}${p.content ? ` · ${p.content}` : ''}`}
+                      onClick={() => toggle(p.id)}
+                    >
+                      <img src={p.thumb} alt="" />
+                      <span className="poster-pick-date">{p.date.slice(5)}</span>
+                      {order >= 0 ? <span className="poster-pick-order">{order + 1}</span> : null}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </>
         ) : null}
 
         <div className="row tight" style={{ flexWrap: 'wrap' }}>
@@ -247,10 +288,6 @@ export function PosterStudioModal({
             <TextInput value={subtitle} onChange={setSubtitle} placeholder="留空用默认副标题" />
           </label>
         </div>
-
-        <p className="small muted" style={{ margin: 0 }}>
-          时间轴按养护记录日期排序；拼贴只放这段时间里的照片。日期留空 = 全部。
-        </p>
 
         {error ? <Notice tone="danger">{error}</Notice> : null}
         {busy ? <Spinner label="正在生成海报…（几秒）" /> : null}

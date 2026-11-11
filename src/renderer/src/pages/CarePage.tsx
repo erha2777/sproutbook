@@ -29,7 +29,6 @@ import {
 } from '@core/care'
 import { Badge, Button, EmptyState, Modal, Notice, Panel, SectionTitle, SelectInput, Spinner, useToast } from '../components/ui'
 import { CareTaskDialog } from '../components/CareTaskDialog'
-import { PosterStudioModal } from '../components/PosterStudioModal'
 import type { PlantOption } from '../components/CareTaskDialog'
 import { CareRuleManager } from '../components/CareRuleManager'
 import { CareCalendar } from '../components/CareCalendar'
@@ -75,8 +74,6 @@ export function CarePage({
   const today = todayIso()
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
-  /** 海报预览弹窗 */
-  const [posterOpen, setPosterOpen] = useState(false)
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [plantFilter, setPlantFilter] = useState('')
   /** 当月任务：月历和「当天计划」都用这一份 */
@@ -465,10 +462,6 @@ export function CarePage({
         >
           导出计划
         </Button>
-        {/* 分享海报：先预览再保存，免得存下来才发现这个月没有任务 */}
-        <Button size="small" title="把这个月的养护计划导出成一张图" onClick={() => setPosterOpen(true)}>
-          分享海报
-        </Button>
         <Button variant="primary" onClick={() => setEditing('new')}>
           ＋ 新增任务
         </Button>
@@ -671,18 +664,6 @@ export function CarePage({
           </Panel>
         </div>
       )}
-
-      {posterOpen ? (
-        <PosterStudioModal
-          defaults={{
-            kind: 'plan',
-            year,
-            month,
-            plantId: plantFilter ? Number(plantFilter) : undefined
-          }}
-          onClose={() => setPosterOpen(false)}
-        />
-      ) : null}
 
       {editing ? (
       <CareTaskDialog
