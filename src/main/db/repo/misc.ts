@@ -178,7 +178,18 @@ export function listImages(
   }
   if (typeof owner.plantId === 'number') {
     return db
-      .all<ImageRow>('SELECT i.*, l.log_date AS log_date FROM images i LEFT JOIN care_logs l ON l.id = i.log_id WHERE i.plant_id = ? ORDER BY i.sort_order DESC, i.id DESC', owner.plantId)
+      .all<ImageRow>(
+        `SELECT i.*, l.log_date AS log_date FROM images i LEFT JOIN care_logs l ON l.id = i.log_id
+          WHERE i.plant_id = ?
+          /*
+           * 按**记录日期**排，不是按上传顺序。
+           * 补录/改过日期的养护记录，图片是在之后才传的 —— 只按 sort_order 排会把
+           * "刚传的"顶到最前面，看起来和日期完全对不上。
+           * 同一天内也是后传的在前 —— 和整个应用「新 → 旧」的约定一致。
+           */
+          ORDER BY COALESCE(l.log_date, substr(i.created_at, 1, 10)) DESC, i.sort_order DESC, i.id DESC`,
+        owner.plantId
+      )
       .map(mapImage)
   }
   if (typeof owner.speciesId === 'number') {

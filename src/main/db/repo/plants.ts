@@ -51,7 +51,10 @@ const SELECT_BASE = `
      */
     COALESCE(
       (SELECT thumb_path FROM images WHERE id = p.cover_image_id),
-      (SELECT thumb_path FROM images WHERE plant_id = p.id ORDER BY sort_order DESC, id DESC LIMIT 1),
+      (SELECT i.thumb_path FROM images i LEFT JOIN care_logs l ON l.id = i.log_id
+        WHERE i.plant_id = p.id
+        ORDER BY COALESCE(l.log_date, substr(i.created_at, 1, 10)) DESC, i.sort_order DESC, i.id DESC
+        LIMIT 1),
       (SELECT thumb_path FROM images WHERE species_id = p.species_id ORDER BY sort_order DESC, id DESC LIMIT 1)
     ) AS cover_thumb
   FROM plants p
