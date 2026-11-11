@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ImageRecord } from '@core/types'
 import { imageUrl } from '../lib/util'
-import { Button, Spinner, cx, useToast } from './ui'
+import { Button, Modal, Spinner, cx, useToast } from './ui'
 import { ImageSearchModal } from './ImageSearchModal'
 import { ImageViewer } from './ImageViewer'
 
@@ -35,6 +35,11 @@ export interface ImageStripProps {
    * 点一张 = 借它当这株的封面（存 cover_image_id，不复制文件）。
    */
   speciesId?: number | null
+  /**
+   * 先展开几张。一株养久了动辄四五十张，全铺开会把编辑器拉得很长
+   * （封面挑起来要一直往下翻）。默认只显示 8 张，封面那张永远排在最前面。
+   */
+  maxVisible?: number
 }
 
 export function ImageStrip({
@@ -44,7 +49,8 @@ export function ImageStrip({
   coverId,
   onSetCover,
   searchHint,
-  speciesId
+  speciesId,
+  maxVisible = 8
 }: ImageStripProps): ReactNode {
   const toast = useToast()
   const [images, setImages] = useState<ImageRecord[]>([])
@@ -55,6 +61,10 @@ export function ImageStrip({
   const [speciesImages, setSpeciesImages] = useState<ImageRecord[]>([])
   /** 大图查看：看哪一组的第几张 */
   const [viewer, setViewer] = useState<{ images: ImageRecord[]; index: number } | null>(null)
+  /** 图片太多时先折叠，点「展开全部」才铺开 */
+  const [expanded, setExpanded] = useState(false)
+  /** 单独一个「选封面」弹窗：图多的时候比在大图里一张张翻快 */
+  const [coverPickerOpen, setCoverPickerOpen] = useState(false)
 
   useEffect(() => {
     if (!speciesId) {
@@ -188,9 +198,23 @@ export function ImageStrip({
     }
   }
 
+  /*
+   * 封面那张永远排第一，其余按上传顺序。
+   * 折叠时只显示前 maxVisible 张 —— 翻封面时不用在几十张里找。
+   */
+  const orderedImages = (() => {
+    if (onSetCover === undefined || !coverId) return images
+    const cover = images.find((img) => img.id === coverId)
+    if (!cover) return images
+    return [cover, ...images.filter((img) => img.id !== coverId)]
+  })()
+  const collapsible = orderedImages.length > maxVisible
+  const visibleImages = collapsible && !expanded ? orderedImages.slice(0, maxVisible) : orderedImages
+  const hiddenCount = orderedImages.length - visibleImages.length
+
   return (
     <div className="image-strip">
-      {images.map((image) => {
+      {visibleImages.map((image) => {
         const url = imageUrl(image.thumbPath ?? image.path)
         const isCover = onSetCover !== undefined && coverId === image.id
         return (
@@ -210,6 +234,17 @@ export function ImageStrip({
           </div>
         )
       })}
+
+      {collapsible ? (
+        <button
+          className={cx('image-add')}
+          onClick={() => setExpanded((v) => !v)}
+          title={expanded ? '只显示前几张' : `还有 ${hiddenCount} 张没显示`}
+        >
+          <span style={{ fontSize: 18 }}>{expanded ? '▴' : '▾'}</span>
+          <span>{expanded ? '收起' : `还有 ${hiddenCount} 张`}</span>
+        </button>
+      ) : null}
 
       {!disabled ? (
         <button className={cx('image-add')} onClick={() => void pick()} disabled={busy}>
@@ -233,14 +268,21 @@ export function ImageStrip({
       ) : null}
 
       {onSetCover && (images.length > 0 || speciesImages.length > 0) ? (
-        <div className="small muted" style={{ flexBasis: '100%' }}>
-          封面：{coverId ? '已选一张照片' : '默认（自己的图优先，没有就借物种的第一张）'}
+        <div className="small muted row tight" style={{ flexBasis: '100%', alignItems: 'center' }}>
+          <span>
+            封面：{coverId ? '已选一张照片' : '默认（自己的图优先，没有就借物种的第一张）'}
+          </span>
+          {images.length > 0 ? (
+            <Button size="small" onClick={() => setCoverPickerOpen(true)}>
+              选择封面…
+            </Button>
+          ) : null}
           {coverId ? (
             <Button size="small" variant="ghost" onClick={() => onSetCover(null)}>
               恢复默认
             </Button>
           ) : (
-            <span> · 点照片看大图，大图里可以设为封面</span>
+            <span>· 也可以点照片看大图，在大图里设封面</span>
           )}
         </div>
       ) : null}
@@ -275,6 +317,53 @@ export function ImageStrip({
             })}
           </div>
         </div>
+      ) : null}
+
+      {/*
+        选封面弹窗：只列这一株自己的照片，紧凑网格，点一下就定。
+        比"点开大图 → 翻到某张 → 设为封面"少两步，图多的时候差别明显。
+      */}
+      {coverPickerOpen && onSetCover ? (
+        <Modal
+          title="选择封面"
+          onClose={() => setCoverPickerOpen(false)}
+          footer={
+            <>
+              <span className="small muted">点一张就设为封面；共 {images.length} 张</span>
+              <span className="spacer" />
+              <Button
+                onClick={() => {
+                  onSetCover(null)
+                  setCoverPickerOpen(false)
+                }}
+              >
+                恢复默认
+              </Button>
+              <Button variant="primary" onClick={() => setCoverPickerOpen(false)}>
+                完成
+              </Button>
+            </>
+          }
+        >
+          <div className="poster-pick" style={{ maxHeight: '52vh' }}>
+            {images.map((image) => {
+              const url = imageUrl(image.thumbPath ?? image.path)
+              const picked = coverId === image.id
+              return (
+                <button
+                  key={image.id}
+                  type="button"
+                  className={`poster-pick-item${picked ? ' picked' : ''}`}
+                  onClick={() => onSetCover(image.id)}
+                  title={image.caption ?? '设为封面'}
+                >
+                  {url ? <img src={url} alt="" /> : null}
+                  {picked ? <span className="poster-pick-order">✓</span> : null}
+                </button>
+              )
+            })}
+          </div>
+        </Modal>
       ) : null}
 
       {viewer ? (
