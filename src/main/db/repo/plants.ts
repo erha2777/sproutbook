@@ -51,8 +51,8 @@ const SELECT_BASE = `
      */
     COALESCE(
       (SELECT thumb_path FROM images WHERE id = p.cover_image_id),
-      (SELECT thumb_path FROM images WHERE plant_id = p.id ORDER BY sort_order, id LIMIT 1),
-      (SELECT thumb_path FROM images WHERE species_id = p.species_id ORDER BY sort_order, id LIMIT 1)
+      (SELECT thumb_path FROM images WHERE plant_id = p.id ORDER BY sort_order DESC, id DESC LIMIT 1),
+      (SELECT thumb_path FROM images WHERE species_id = p.species_id ORDER BY sort_order DESC, id DESC LIMIT 1)
     ) AS cover_thumb
   FROM plants p
   LEFT JOIN species s      ON s.id = p.species_id

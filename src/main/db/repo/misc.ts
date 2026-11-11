@@ -169,27 +169,27 @@ export function listImages(
 ): ImageRecord[] {
   if (typeof owner.wishlistId === 'number') {
     return db
-      .all<ImageRow>('SELECT * FROM images WHERE wishlist_id = ? ORDER BY sort_order, id', owner.wishlistId)
+      .all<ImageRow>('SELECT * FROM images WHERE wishlist_id = ? ORDER BY sort_order DESC, id DESC', owner.wishlistId)
       .map(mapImage)
   }
   if (typeof owner.plantId === 'number') {
     return db
-      .all<ImageRow>('SELECT * FROM images WHERE plant_id = ? ORDER BY sort_order, id', owner.plantId)
+      .all<ImageRow>('SELECT * FROM images WHERE plant_id = ? ORDER BY sort_order DESC, id DESC', owner.plantId)
       .map(mapImage)
   }
   if (typeof owner.speciesId === 'number') {
     return db
-      .all<ImageRow>('SELECT * FROM images WHERE species_id = ? ORDER BY sort_order, id', owner.speciesId)
+      .all<ImageRow>('SELECT * FROM images WHERE species_id = ? ORDER BY sort_order DESC, id DESC', owner.speciesId)
       .map(mapImage)
   }
   if (typeof owner.materialId === 'number') {
     return db
-      .all<ImageRow>('SELECT * FROM images WHERE material_id = ? ORDER BY sort_order, id', owner.materialId)
+      .all<ImageRow>('SELECT * FROM images WHERE material_id = ? ORDER BY sort_order DESC, id DESC', owner.materialId)
       .map(mapImage)
   }
   if (typeof owner.environmentId === 'number') {
     return db
-      .all<ImageRow>('SELECT * FROM images WHERE environment_id = ? ORDER BY sort_order, id', owner.environmentId)
+      .all<ImageRow>('SELECT * FROM images WHERE environment_id = ? ORDER BY sort_order DESC, id DESC', owner.environmentId)
       .map(mapImage)
   }
   return []

@@ -233,7 +233,8 @@ export function PosterStudioModal({
                 size="small"
                 onClick={() => {
                   setPreview(null)
-                  setSelected(photos.slice(-MAX_PHOTOS).map((p) => p.id))
+                  // 列表是「新 → 旧」，最近几张就是开头这几张
+                  setSelected(photos.slice(0, MAX_PHOTOS).map((p) => p.id))
                 }}
                 disabled={photos.length === 0}
               >

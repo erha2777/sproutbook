@@ -1510,7 +1510,9 @@ function registerImageIpc(): void {
     db: ReturnType<typeof getDb>,
     plantId: number,
     from?: string,
-    to?: string
+    to?: string,
+    /** true = 新的在前（挑图列表用）；默认按时间正序（时间轴海报用） */
+    desc = false
   ): Array<{
     id: number
     path: string
@@ -1535,7 +1537,7 @@ function registerImageIpc(): void {
          FROM images i
          LEFT JOIN care_logs l ON l.id = i.log_id
         WHERE i.plant_id = ?
-        ORDER BY COALESCE(l.log_date, substr(i.created_at, 1, 10)) ASC, i.id ASC`,
+        ORDER BY COALESCE(l.log_date, substr(i.created_at, 1, 10)) ${desc ? 'DESC' : 'ASC'}, i.id ${desc ? 'DESC' : 'ASC'}`,
       plantId
     )
     return rows
@@ -1576,7 +1578,8 @@ function registerImageIpc(): void {
        * 另外主图优先用封面那张的**原图**：coverImagePath 给的是缩略图（640px），
        * 铺到 950px 宽会发虚。
        */
-      const newestPhotos = [...photos].reverse()
+      // listImages 现在就是「新 → 旧」，直接按顺序用
+      const newestPhotos = photos
       const coverPhoto = plant.coverImageId
         ? photos.find((img) => img.id === plant.coverImageId)
         : undefined
@@ -1790,7 +1793,8 @@ function registerImageIpc(): void {
    * 缩到 260px 宽再内联 —— 一株几十张图，原图转 base64 会很慢。
    */
   handle('poster:photos', (plantId: number, options?: { from?: string; to?: string }) => {
-    const rows = plantPhotoTimeline(getDb(), Number(plantId), options?.from, options?.to)
+    // 挑图时先看最近拍的：列表给「新 → 旧」
+    const rows = plantPhotoTimeline(getDb(), Number(plantId), options?.from, options?.to, true)
     return rows.map((row) => ({
       id: row.id,
       date: row.date,

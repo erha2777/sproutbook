@@ -1176,7 +1176,8 @@ export async function runSmoke(outFile: string): Promise<number> {
       const first = addImage(db, { plantId, path: 'cover-1.jpg', thumbPath: 'cover-1-thumb.jpg' })
       addImage(db, { plantId, path: 'cover-2.jpg', thumbPath: 'cover-2-thumb.jpg' })
       const beforePick = listPlants(db, {}).items.find((p) => p.id === plantId)
-      check('没指定封面时用最早导入的那张', beforePick?.coverThumb === 'cover-1-thumb.jpg', String(beforePick?.coverThumb))
+      // 默认封面改成「最新一张」：新图通常更能代表现在的样子
+      check('没指定封面时用最新导入的那张', beforePick?.coverThumb === 'cover-2-thumb.jpg', String(beforePick?.coverThumb))
 
       const second = listImages(db, { plantId }).find((img) => img.path === 'cover-2.jpg')
       check('指定封面成功', setPlantCover(db, plantId, second?.id ?? 0) === true)
@@ -1185,7 +1186,7 @@ export async function runSmoke(outFile: string): Promise<number> {
 
       setPlantCover(db, plantId, null)
       const afterReset = listPlants(db, {}).items.find((p) => p.id === plantId)
-      check('恢复默认后又回到最早那张', afterReset?.coverThumb === 'cover-1-thumb.jpg', String(afterReset?.coverThumb))
+      check('恢复默认后又回到最新那张', afterReset?.coverThumb === 'cover-2-thumb.jpg', String(afterReset?.coverThumb))
 
       const foreign = addImage(db, { path: 'cover-foreign.jpg', thumbPath: 'cover-foreign-thumb.jpg' })
       let rejected = false

@@ -29,7 +29,7 @@ const SELECT_WISH = `
   FROM wishlist w
   LEFT JOIN images i
     ON i.wishlist_id = w.id
-   AND i.id = (SELECT MIN(id) FROM images WHERE wishlist_id = w.id)
+   AND i.id = (SELECT MAX(id) FROM images WHERE wishlist_id = w.id)
 `
 
 /** 分析结果整存 JSON；读不出来就当没有，不让一条坏数据把整页列表打挂 */

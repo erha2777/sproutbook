@@ -32,8 +32,8 @@ export interface SpeciesRow {
 
 const SELECT_BASE = `
   SELECT s.*,
-    (SELECT thumb_path FROM images WHERE species_id = s.id ORDER BY sort_order, id LIMIT 1) AS cover_thumb,
-    (SELECT path       FROM images WHERE species_id = s.id ORDER BY sort_order, id LIMIT 1) AS cover_path
+    (SELECT thumb_path FROM images WHERE species_id = s.id ORDER BY sort_order DESC, id DESC LIMIT 1) AS cover_thumb,
+    (SELECT path       FROM images WHERE species_id = s.id ORDER BY sort_order DESC, id DESC LIMIT 1) AS cover_path
   FROM species s
 `
 
