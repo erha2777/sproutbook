@@ -225,6 +225,15 @@ export function ImageStrip({
             title="点开看大图"
           >
             {url ? <img src={url} alt={image.caption ?? '植物图片'} /> : null}
+            {/*
+              区分来源：挂在养护记录上的图打「记录」角标（悬停显示是哪天），
+              没有角标的就是直接上传到这里的图。
+            */}
+            {image.logId ? (
+              <span className="image-src-badge" title={image.logDate ? `来自 ${image.logDate} 的养护记录` : '来自养护记录'}>
+                记录
+              </span>
+            ) : null}
             {isCover ? <span className="image-cover-badge">封面</span> : null}
             {!disabled ? (
               <button className="del" onClick={(event) => { event.stopPropagation(); void remove(image) }} disabled={busy} title="删除这张图片">
@@ -244,6 +253,15 @@ export function ImageStrip({
           <span style={{ fontSize: 18 }}>{expanded ? '▴' : '▾'}</span>
           <span>{expanded ? '收起' : `还有 ${hiddenCount} 张`}</span>
         </button>
+      ) : null}
+
+      {images.length > 0 ? (
+        <div className="small muted" style={{ flexBasis: '100%' }}>
+          共 {images.length} 张
+          {images.filter((img) => img.logId).length > 0
+            ? ` · 其中 ${images.filter((img) => img.logId).length} 张来自养护记录（带「记录」角标）`
+            : ''}
+        </div>
       ) : null}
 
       {!disabled ? (
@@ -358,6 +376,14 @@ export function ImageStrip({
                   title={image.caption ?? '设为封面'}
                 >
                   {url ? <img src={url} alt="" /> : null}
+                  {image.logId ? (
+                    <span
+                      className="image-src-badge"
+                      title={image.logDate ? `来自 ${image.logDate} 的养护记录` : '来自养护记录'}
+                    >
+                      记录
+                    </span>
+                  ) : null}
                   {picked ? <span className="poster-pick-order">✓</span> : null}
                 </button>
               )

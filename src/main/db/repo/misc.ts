@@ -128,6 +128,8 @@ export function archiveEnvironment(db: Db, id: number): boolean {
 interface ImageRow {
   id: number
   plant_id: number | null
+  log_id: number | null
+  log_date: string | null
   wishlist_id: number | null
   species_id: number | null
   environment_id: number | null
@@ -148,6 +150,8 @@ function mapImage(row: ImageRow): ImageRecord {
     speciesId: row.species_id,
     environmentId: row.environment_id,
     materialId: row.material_id,
+    logId: row.log_id ?? null,
+    logDate: row.log_date ?? null,
     path: row.path,
     thumbPath: row.thumb_path,
     caption: row.caption,
@@ -169,27 +173,27 @@ export function listImages(
 ): ImageRecord[] {
   if (typeof owner.wishlistId === 'number') {
     return db
-      .all<ImageRow>('SELECT * FROM images WHERE wishlist_id = ? ORDER BY sort_order DESC, id DESC', owner.wishlistId)
+      .all<ImageRow>('SELECT i.*, l.log_date AS log_date FROM images i LEFT JOIN care_logs l ON l.id = i.log_id WHERE i.wishlist_id = ? ORDER BY i.sort_order DESC, i.id DESC', owner.wishlistId)
       .map(mapImage)
   }
   if (typeof owner.plantId === 'number') {
     return db
-      .all<ImageRow>('SELECT * FROM images WHERE plant_id = ? ORDER BY sort_order DESC, id DESC', owner.plantId)
+      .all<ImageRow>('SELECT i.*, l.log_date AS log_date FROM images i LEFT JOIN care_logs l ON l.id = i.log_id WHERE i.plant_id = ? ORDER BY i.sort_order DESC, i.id DESC', owner.plantId)
       .map(mapImage)
   }
   if (typeof owner.speciesId === 'number') {
     return db
-      .all<ImageRow>('SELECT * FROM images WHERE species_id = ? ORDER BY sort_order DESC, id DESC', owner.speciesId)
+      .all<ImageRow>('SELECT i.*, l.log_date AS log_date FROM images i LEFT JOIN care_logs l ON l.id = i.log_id WHERE i.species_id = ? ORDER BY i.sort_order DESC, i.id DESC', owner.speciesId)
       .map(mapImage)
   }
   if (typeof owner.materialId === 'number') {
     return db
-      .all<ImageRow>('SELECT * FROM images WHERE material_id = ? ORDER BY sort_order DESC, id DESC', owner.materialId)
+      .all<ImageRow>('SELECT i.*, l.log_date AS log_date FROM images i LEFT JOIN care_logs l ON l.id = i.log_id WHERE i.material_id = ? ORDER BY i.sort_order DESC, i.id DESC', owner.materialId)
       .map(mapImage)
   }
   if (typeof owner.environmentId === 'number') {
     return db
-      .all<ImageRow>('SELECT * FROM images WHERE environment_id = ? ORDER BY sort_order DESC, id DESC', owner.environmentId)
+      .all<ImageRow>('SELECT i.*, l.log_date AS log_date FROM images i LEFT JOIN care_logs l ON l.id = i.log_id WHERE i.environment_id = ? ORDER BY i.sort_order DESC, i.id DESC', owner.environmentId)
       .map(mapImage)
   }
   return []

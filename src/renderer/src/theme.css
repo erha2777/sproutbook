@@ -4639,3 +4639,19 @@ html.tex-button .home-gear.sound-ctl:hover {
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
 }
+
+/* 图片来源角标：养护记录里的图 */
+.image-src-badge {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  z-index: 2;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 15px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(60, 90, 140, 0.88);
+  border-radius: 2px;
+  pointer-events: none;
+}

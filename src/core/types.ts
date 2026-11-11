@@ -597,6 +597,13 @@ export interface ImageRecord {
   environmentId: number | null
   /** 物品的照片（买的袋装土、肥料长什么样） */
   materialId: number | null
+  /**
+   * 这张图是挂在**养护记录**上的（log_id 非空）。
+   * 植株图片区里两种图混在一起，界面需要区分「记录里的图」和「自己直接传的图」。
+   */
+  logId: number | null
+  /** 所属养护记录的日期（YYYY-MM-DD），没有记录就是 null */
+  logDate: string | null
   path: string
   thumbPath: string | null
   caption: string | null
